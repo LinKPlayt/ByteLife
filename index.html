@@ -449,7 +449,7 @@ function freshState(name){
       hairStyle: Math.floor(Math.random()*3)
     },
     log:[], alive:true,
-    money:0, edu:{level:'None', school:null, gpa:60, endAge:0},
+    money:0, edu:{level:'None', school:null, gpa:60, endAge:0, degrees:[], program:null, clubs:0, internships:0},
     job:null, done:{}, panel:null, boost:false,
     market: buildMarket(), portfolio:{}, tradeQty:{}, invSort:'default', basis:{}, realized:0, orders:[], orderSeq:0,
     ticket:{key:null, side:'buy', unit:'usd', amount:'', order:'market', trigger:'', all:false},
@@ -465,7 +465,8 @@ function freshState(name){
     generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null,
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
-    health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}}
+    health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
+    housing:{idx:1, trend:0}, listings:[], listingSeq:0
   };
 }
 function startLife(heir){
@@ -522,6 +523,7 @@ function resumeGame(){
   if(!saved || typeof saved.name !== "string" || !saved.stats || !Array.isArray(saved.relationships)) return false;
   try{
     state = upgradeSave(saved);
+    migrateEdu();
     if(state.panel === 'hob') state.panel = 'act';
     syncIpos();
     document.getElementById('nameTag').textContent = state.name + (state.generation > 1 ? ' · generation ' + state.generation : '');
@@ -829,7 +831,7 @@ function fill(t){
 }
 const hasRel = (...types) => state.relationships.some(r => types.includes(r.type));
 const COND = {
-  job:()=>!!state.job, school:()=>!!state.edu.school, college:()=>state.edu.school === 'College',
+  job:()=>!!state.job, school:()=>!!state.edu.school, college:()=>!!state.edu.program && ['college','community'].includes(state.edu.program.kind),
   poor:()=>state.money < 0, rich:()=>state.money > 20000, saver:()=>state.savings >= 5000,
   afford:()=>state.money + state.savings >= 2500, indebted:()=>totalDebt() > 5000,
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
@@ -1426,11 +1428,13 @@ function ageUpYear(){
   socialMediaYear(a);
   updateMarket(a);
   payDividends(a);
+  housingYear(a);
   assetsYear(a);
   const relPrompted = relationshipsYear(a, prompted);
   const legalPrompted = !prompted && !relPrompted && legalYear(a);
   const bizPrompted = !prompted && !relPrompted && !legalPrompted && bizEventYear(a);
-  if(prompted || relPrompted || legalPrompted || bizPrompted){ render(); return; }
+  const propPrompted = !prompted && !relPrompted && !legalPrompted && !bizPrompted && propertyEventYear(a);
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -1480,7 +1484,7 @@ function presentChoice(ev){
 }
 
 const fmt = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
-const EDU_RANK = {'None':0, 'High School':1, 'Bachelor':2, 'Master':3};
+const EDU_RANK = {'None':0, 'High School':1, 'Associate':2, 'Bachelor':3, 'Master':4, 'Doctorate':5};
 // extra rules for some tracks: clean records, danger on the job, short careers, elections
 const TRACK_INFO = {
   Military:{risk:0.04, blurb:'Deployments, danger and a steady climb'},
@@ -1493,11 +1497,22 @@ const TRACK_INFO = {
   Music:{star:true, blurb:'A long shot with a huge payoff'},
   Sports:{star:true, maxAge:38, risk:0.05, blurb:'Over by your late thirties'},
 };
+// some rungs need a specific degree; a relevant major can be replaced by three years in the field
+const DEGREE_RULES = {
+  Medicine:{1:{major:['Nursing','Pre-Med'], noExp:true}, 2:{degree:'MD'}, 3:{degree:'MD'}, 4:{degree:'MD'}, 5:{degree:'MD'}},
+  Law:{1:{degree:'JD'}, 2:{degree:'JD'}, 3:{degree:'JD'}, 4:{degree:'JD'}, 5:{degree:'JD'}},
+  Technology:{2:{major:['Computer Science','Engineering']}},
+  Finance:{1:{major:['Finance','Business']}},
+  Science:{4:{degree:'PhD'}, 5:{degree:'PhD'}},
+};
+const expIn = track => state.job && state.job.track === track ? state.job.years : 0;
 // whether you meet one rung of a career ladder; returns the first thing missing, or ''
-function rankGap(rank){
+function rankGap(rank, track){
   const s = state.stats;
+  if(rank.degree && !hasDegree(rank.degree)) return (rank.degree === 'MD' ? 'a medical degree (MD)' : rank.degree === 'JD' ? 'a law degree (JD)' : 'a ' + rank.degree);
+  if(rank.major && !degrees().some(d => rank.major.includes(d.major)) && (rank.noExp || expIn(track) < 3)) return 'a ' + rank.major.join(' or ') + ' degree' + (rank.noExp ? '' : ' or 3 years in the field');
   if(state.age < rank.minAge) return 'age ' + rank.minAge;
-  if(EDU_RANK[state.edu.level] < EDU_RANK[rank.edu]) return rank.edu === 'Master' ? "a Master's" : rank.edu;
+  if(EDU_RANK[state.edu.level] < EDU_RANK[rank.edu]) return rank.edu === 'Master' ? "a Master's" : rank.edu === 'Bachelor' ? "a Bachelor's" : rank.edu.toLowerCase() + ' diploma';
   if(s.smarts < rank.minSmarts) return rank.minSmarts + ' smarts';
   if(rank.minLooks && s.looks < rank.minLooks) return rank.minLooks + ' looks';
   if(rank.minHealth && s.health < rank.minHealth) return rank.minHealth + ' health';
@@ -1660,6 +1675,7 @@ const CAREERS = {
     {title:'Superstar', minAge:26, edu:'None', minSmarts:0, minHealth:82, salary:12000000, hours:45, stress:70, promo:0},
   ],
 };
+for(const t in DEGREE_RULES) for(const i in DEGREE_RULES[t]) Object.assign(CAREERS[t][i], DEGREE_RULES[t][i]);
 
 const ACTIVITIES = [
   {key:'read', label:'Read a book', min:6, cost:0, delta:{smarts:4}, text:n=>`${n} loses an afternoon in a good book.`},
@@ -2083,10 +2099,15 @@ const ASSET_CATALOG = {
     {key:'wine', name:'Wine Cellar Collection', price:4000, appreciation:0.050, vol:0.20},
   ],
   'Real Estate': [
-    {key:'condo-rental', name:'Rental Condo', price:200000, appreciation:0.030, vol:0.05, upkeepPct:0.013, rentalYield:0.065},
-    {key:'duplex', name:'Rental Duplex', price:320000, appreciation:0.030, vol:0.05, upkeepPct:0.015, rentalYield:0.07},
-    {key:'apt4', name:'4-Unit Apartment Building', price:650000, appreciation:0.035, vol:0.06, upkeepPct:0.018, rentalYield:0.08},
-    {key:'commercial', name:'Commercial Storefront', price:450000, appreciation:0.025, vol:0.08, upkeepPct:0.014, rentalYield:0.09},
+    {key:'condo-rental', name:'Rental Condo', price:200000, appreciation:0.030, vol:0.05, upkeepPct:0.013, rentalYield:0.075, units:1},
+    {key:'sfr', name:'Single-Family Rental', price:260000, appreciation:0.035, vol:0.05, upkeepPct:0.012, rentalYield:0.075, units:1},
+    {key:'duplex', name:'Rental Duplex', price:320000, appreciation:0.030, vol:0.05, upkeepPct:0.015, rentalYield:0.08, units:2},
+    {key:'vacation', name:'Vacation Rental', price:420000, appreciation:0.035, vol:0.07, upkeepPct:0.016, rentalYield:0.11, units:1, shortTerm:true},
+    {key:'commercial', name:'Commercial Storefront', price:450000, appreciation:0.025, vol:0.08, upkeepPct:0.014, rentalYield:0.1, units:1, commercial:true},
+    {key:'apt4', name:'4-Unit Apartment Building', price:650000, appreciation:0.035, vol:0.06, upkeepPct:0.018, rentalYield:0.09, units:4},
+    {key:'student', name:'Student Housing', price:900000, appreciation:0.030, vol:0.06, upkeepPct:0.020, rentalYield:0.105, units:8},
+    {key:'apt12', name:'12-Unit Apartment Complex', price:1800000, appreciation:0.035, vol:0.06, upkeepPct:0.017, rentalYield:0.085, units:12},
+    {key:'stripmall', name:'Strip Mall', price:2600000, appreciation:0.025, vol:0.09, upkeepPct:0.014, rentalYield:0.105, units:6, commercial:true},
   ],
 };
 const CAT_MIN = {Homes:18, Cars:18, Jewelry:14, Collectibles:12, 'Real Estate':21};
@@ -2135,11 +2156,231 @@ function renovate(id){
   if(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) return;
   const cost = renoCost(x); if(!ensureCash(cost)) return;
   state.money -= cost; x.renovatedAge = state.age;
-  const added = Math.round(x.value * (0.07 + Math.random() * 0.08));
+  const added = Math.round(x.value * (0.07 + Math.random() * 0.08 + (x.rental ? Math.max(0, 70 - x.rental.cond) * 0.003 : 0)));
+  if(x.rental) x.rental.cond = 100;
   x.value += added;
   pushEntry(state.age, `${state.name} spends ${fmt(cost)} renovating the ${x.name}, adding about ${fmt(added)} in value.`, {happy: x.category === 'Homes' ? 5 : 1});
   render();
 }
+// ---------- Real estate: listings, rentals, tenants and the housing market ----------
+const LOCATIONS = [
+  {key:'downtown', name:'Downtown', price:1.25, growth:0.01, yield:-0.008, vacancy:-0.02, wear:0},
+  {key:'suburbs', name:'Suburban', price:1, growth:0, yield:0, vacancy:0, wear:0},
+  {key:'college', name:'College-town', price:0.9, growth:0, yield:0.012, vacancy:0.02, wear:2},
+  {key:'beach', name:'Beachfront', price:1.35, growth:0.008, yield:0.005, vacancy:0.05, wear:1, storms:true},
+  {key:'rural', name:'Rural', price:0.6, growth:-0.01, yield:0.015, vacancy:0.05, wear:0},
+];
+const locOf = k => LOCATIONS.find(l => l.key === k) || LOCATIONS[1];
+const RENT_MULT = {low:0.9, market:1, high:1.15};
+const rentals = () => state.assets.filter(x => x.rental);
+function housingLabel(){ const t = state.housing.trend; return t <= -0.08 ? 'crashing' : t < -0.02 ? 'cooling' : t > 0.06 ? 'red hot' : t > 0.02 ? 'heating up' : 'steady'; }
+function housingYear(a){
+  const H = state.housing, was = housingLabel();
+  const r = Math.random();
+  if(r < 0.04){ H.trend = -0.1 - Math.random() * 0.08; pushEntry(a, 'The housing market crashes. Property values are falling fast.', state.assets.some(x => x.category === 'Homes' || x.rental) ? {happy:-3} : {}); }
+  else if(r < 0.09){ H.trend = 0.06 + Math.random() * 0.05; if(state.assets.some(x => x.category === 'Homes' || x.rental)) pushEntry(a, 'The housing market is booming, and property values are climbing.', {happy:2}); }
+  else H.trend = H.trend * 0.55 + (Math.random() * 0.04 - 0.02);
+  H.idx = Math.max(0.4, H.idx * (1 + H.trend));
+  makeListings();
+}
+function makeListings(){
+  const cum = state.econ.cumInflation, types = ASSET_CATALOG['Real Estate'];
+  state.listingSeq = state.listingSeq || 0;
+  state.listings = [];
+  for(let i = 0, n = rint(4, 6); i < n; i++){
+    const t = Math.random() < 0.55 ? pick(types.filter(x => x.price <= 450000)) : pick(types), loc = pick(LOCATIONS);
+    const cond = Math.random() < 0.25 ? rint(22, 50) : rint(60, 95);
+    const fair = Math.round(t.price * cum * state.housing.idx * loc.price * (0.6 + cond / 250) / 1000) * 1000;
+    const price = Math.round(fair * (0.85 + Math.random() * 0.3) / 1000) * 1000;
+    state.listingSeq++;
+    state.listings.push({id:'L' + state.listingSeq, key:t.key, loc:loc.key, cond, fair, price, units:t.units || 1});
+  }
+}
+function listingRent(l){ const t = findCatalog(l.key); return Math.round(l.fair * ((t.rentalYield || 0.05) + locOf(l.loc).yield)); }
+function buyListing(id, financed){
+  const l = (state.listings || []).find(x => x.id === id); if(!l || state.age < 21) return;
+  const t = findCatalog(l.key), loc = locOf(l.loc);
+  if(financed){
+    if(state.bankrupt || state.creditScore < 620) return;
+    const down = Math.round(l.price * 0.25);
+    if(!ensureCash(down)) return;
+    state.money -= down;
+  } else if(!ensureCash(l.price)) return;
+  else state.money -= l.price;
+  state.assetSeq++;
+  const id2 = 'a' + state.assetSeq;
+  state.assets.push({id:id2, key:t.key, name:loc.name + ' ' + t.name, category:'Real Estate', value:l.fair, boughtPrice:l.price, boughtAge:state.age,
+    rental:{units:l.units, occupied:0, rent:'market', cond:l.cond, manager:false, loc:l.loc, lastRent:0, lastNet:null}});
+  if(financed){
+    const apr = Math.max(0.035, Math.min(0.15, state.econ.rate + 0.01 + Math.max(0.005, (700 - state.creditScore) / 5000)));
+    takeLoan('Mortgage', l.price - Math.round(l.price * 0.25), 30, apr, {assetId:id2});
+  }
+  state.listings = state.listings.filter(x => x.id !== id);
+  const gap = l.fair - l.price;
+  pushEntry(state.age, `${state.name} buys a ${l.units > 1 ? l.units + '-unit ' : ''}${t.name.toLowerCase()} in a ${loc.name.toLowerCase()} area for ${fmt(l.price)}${financed ? ' with a mortgage' : ' in cash'}${gap > l.fair * 0.05 ? ', well below what it is worth' : gap < -l.fair * 0.05 ? ', paying over the odds' : ''}.`, {happy:4});
+  render();
+}
+function rentalNormalize(x){
+  if(x.rental) return x.rental;
+  const t = findCatalog(x.key) || {};
+  return {units:t.units || 1, occupied:t.units || 1, rent:'market', cond:75, manager:false, loc:'suburbs', lastRent:0, lastNet:null};
+}
+// yearly: tenants, rent, costs, wear. Returns the net rental income.
+function rentalsYear(a){
+  let net = 0;
+  state.assets.forEach(x => {
+    if(x.category === 'Real Estate' && !x.rental) x.rental = rentalNormalize(x);
+    const r = x.rental; if(!r) return;
+    const t = findCatalog(x.key) || {}, loc = locOf(r.loc);
+    const vac = Math.max(0.01, Math.min(0.8, 0.05 + (r.rent === 'high' ? 0.1 : r.rent === 'low' ? -0.03 : 0) + Math.max(0, (55 - r.cond) / 150) + loc.vacancy +
+      (state.econ.recession ? 0.05 : 0) - (r.manager ? 0.03 : 0) - (r.lease ? 0.04 : 0) + (t.shortTerm ? 0.08 : 0) + (t.commercial ? 0.04 : 0)));
+    let occ = 0; for(let i = 0; i < r.units; i++) if(Math.random() > vac) occ++;
+    const gross = x.value * ((t.rentalYield || 0.05) + loc.yield) * RENT_MULT[r.rent];
+    const collected = Math.round(gross * occ / r.units * (t.shortTerm ? 0.7 + Math.random() * 0.6 : 1));
+    const fee = r.manager ? Math.round(collected * (t.shortTerm ? 0.2 : 0.1)) : 0;
+    const tax = Math.round(x.value * 0.011);
+    const upkeep = Math.round(x.value * (t.upkeepPct || 0.011) * (r.cond < 40 ? 1.8 : 1));
+    r.occupied = occ; r.lastRent = collected; r.lastNet = collected - fee - tax - upkeep;
+    net += r.lastNet;
+    r.cond = clamp(r.cond - rint(2, 5) - loc.wear + (r.manager ? 1 : 0));
+    if(r.lease) r.lease--;
+  });
+  state.lastRentalNet = net;
+  return net;
+}
+const repairCost = x => Math.round(x.value * 0.015 / 100) * 100;
+function setRent(id, lvl){ const x = state.assets.find(y => y.id === id); if(!x || !x.rental) return; x.rental.rent = lvl; renderPanel(); }
+function togglePropManager(id){ const x = state.assets.find(y => y.id === id); if(!x || !x.rental) return; x.rental.manager = !x.rental.manager; renderPanel(); }
+function repairRental(id){
+  const x = state.assets.find(y => y.id === id); if(!x || !x.rental || state.done['repair_' + id]) return;
+  const c = repairCost(x); if(!ensureCash(c)) return;
+  state.money -= c; state.done['repair_' + id] = true; x.rental.cond = Math.min(100, x.rental.cond + 25);
+  pushEntry(state.age, `${state.name} spends ${fmt(c)} fixing up the ${x.name}.`, {});
+  render();
+}
+function rentOutHome(id){
+  const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Homes' || x.rental) return;
+  x.rental = {units:1, occupied:0, rent:'market', cond:80, manager:false, loc:'suburbs', lastRent:0, lastNet:null, home:true};
+  pushEntry(state.age, `${state.name} puts the ${x.name} up for rent.`, {});
+  render();
+}
+function moveIntoHome(id){
+  const x = state.assets.find(y => y.id === id); if(!x || !x.rental || !x.rental.home) return;
+  delete x.rental;
+  pushEntry(state.age, `${state.name} moves back into the ${x.name}.`, {});
+  render();
+}
+function sellAssetFor(id, price){
+  const i = state.assets.findIndex(x => x.id === id); if(i < 0) return 0;
+  let proceeds = price * 0.95;
+  const li = state.loans.findIndex(l => l.assetId === id);
+  if(li >= 0){ proceeds -= state.loans[li].balance; state.loans.splice(li, 1); }
+  state.assets.splice(i, 1);
+  state.money += proceeds;
+  return Math.round(proceeds);
+}
+// tenant trouble and offers; a property manager handles most of it for you
+function propertyEventYear(a){
+  const owned = rentals().filter(x => x.rental.occupied > 0 || x.rental.home);
+  if(!owned.length || state.crime.prison || Math.random() > 0.35) return false;
+  const x = pick(owned), r = x.rental, n = state.name, cum = state.econ.cumInflation, loc = locOf(r.loc);
+  const kinds = ['nopay', 'repair', 'repair', 'renewal', 'offer'];
+  if(Math.random() < (loc.storms ? 0.12 : 0.04)) kinds.splice(0, kinds.length, 'disaster');
+  if(r.cond < 35) kinds.push('lawsuit');
+  const kind = pick(kinds);
+  if(kind === 'disaster'){
+    const dmg = Math.round(x.value * (0.1 + Math.random() * 0.2)), cover = state.insurance.home ? 0.8 : 0;
+    x.value = Math.round(x.value - dmg * 0.4); r.cond = Math.max(10, r.cond - 30);
+    pushEntry(a, `${loc.storms ? 'A storm' : pick(['A fire', 'A flood'])} badly damages the ${x.name}${cover ? '. Insurance covers most of the repairs' : ', and there is no insurance to cover it'}.`, {money:-Math.round(dmg * (1 - cover)), happy:-5});
+    return false;
+  }
+  if(kind === 'nopay'){
+    const owed = Math.round(r.lastRent / Math.max(1, r.units)), legal = inflR(2500, 100);
+    if(r.manager){ pushEntry(a, `A tenant at the ${x.name} stops paying; the property manager handles the eviction.`, {money:-legal}); return false; }
+    presentCustom(`A tenant at the ${x.name} has stopped paying rent, about ${fmt(owed)} so far.`, [
+      {label:`Evict them (${fmt(legal)} in legal costs)`, run:() => { r.occupied = Math.max(0, r.occupied - 1); pushEntry(state.age, `${n} evicts the non-paying tenant.`, {money:-legal, happy:-2}); }},
+      {label:'Give them time to catch up', run:() => Math.random() < 0.5 ? pushEntry(state.age, `The tenant catches up on rent eventually.`, {happy:1}) : pushEntry(state.age, `The tenant never pays and moves out, leaving ${n} ${fmt(owed)} short.`, {money:-owed, happy:-3})},
+    ]);
+    return true;
+  }
+  if(kind === 'repair'){
+    const what = pick(['The roof starts leaking', 'A pipe bursts', 'The heating system dies', 'The electrical wiring fails an inspection']);
+    const cost = Math.round(x.value * (0.01 + Math.random() * 0.02) / 100) * 100;
+    if(r.manager){ r.cond = Math.min(100, r.cond + 5); pushEntry(a, `${what} at the ${x.name}; the property manager gets it fixed.`, {money:-cost}); return false; }
+    presentCustom(`${what} at the ${x.name}.`, [
+      {label:`Fix it properly (${fmt(cost)})`, run:() => { r.cond = Math.min(100, r.cond + 5); pushEntry(state.age, `${n} gets the repair done properly.`, {money:-cost}); }},
+      {label:`Patch it cheaply (${fmt(Math.round(cost * 0.3))})`, run:() => { r.cond = Math.max(0, r.cond - 10); pushEntry(state.age, `${n} patches the problem on the cheap.`, {money:-Math.round(cost * 0.3)}); }},
+    ]);
+    return true;
+  }
+  if(kind === 'renewal'){
+    if(r.manager){ r.lease = 2; return false; }
+    presentCustom(`A good tenant at the ${x.name} wants a two-year lease if the rent stays where it is.`, [
+      {label:'Sign the lease', run:() => { r.lease = 2; if(r.rent === 'high') r.rent = 'market'; pushEntry(state.age, `${n} signs a two-year lease with a reliable tenant.`, {happy:1}); }},
+      {label:'Raise the rent instead', run:() => { r.rent = 'high'; pushEntry(state.age, `${n} raises the rent at the ${x.name}.`, {}); }},
+    ]);
+    return true;
+  }
+  if(kind === 'offer'){
+    if(r.home) return false;
+    const offer = Math.round(x.value * (1.05 + Math.random() * 0.25) / 1000) * 1000;
+    presentCustom(`An investor offers ${fmt(offer)} for the ${x.name}, worth about ${fmt(x.value)}.`, [
+      {label:`Sell for ${fmt(offer)}`, run:() => { const got = sellAssetFor(x.id, offer); pushEntry(state.age, `${n} sells the ${x.name}, clearing ${fmt(got)} after fees and the mortgage.`, {happy:5}); }},
+      {label:'Keep it', run:() => pushEntry(state.age, `${n} holds on to the ${x.name}.`, {})},
+    ]);
+    return true;
+  }
+  if(kind === 'lawsuit'){
+    const claim = inflR(rint(10, 60) * 1000, 100);
+    presentCustom(`A tenant sues ${n} over unsafe conditions at the ${x.name}, claiming ${fmt(claim)}.`, [
+      {label:`Settle and fix the place (${fmt(Math.round(claim / 2) + repairCost(x))})`, run:() => { r.cond = Math.min(100, r.cond + 25); pushEntry(state.age, `${n} settles with the tenant and repairs the building.`, {money:-(Math.round(claim / 2) + repairCost(x)), happy:-2}); }},
+      {label:'Fight it in court', run:() => Math.random() < 0.4 ? pushEntry(state.age, `${n} wins the tenant's lawsuit.`, {money:-inflR(5000, 100), happy:2}) : pushEntry(state.age, `${n} loses the tenant's lawsuit.`, {money:-(claim + inflR(5000, 100)), happy:-5})},
+    ]);
+    return true;
+  }
+  return false;
+}
+function rentalCardHtml(x){
+  const r = x.rental, t = findCatalog(x.key) || {}, loan = state.loans.find(l => l.assetId === x.id);
+  const equity = x.value - (loan ? loan.balance : 0), pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  const flow = r.lastNet === null || r.lastNet === undefined ? null : r.lastNet - (loan ? loan.yearlyPayment : 0);
+  const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
+  return `<div class="invrow">
+    <div class="itop"><span><b>${x.name}</b>${r.home ? ' <span class="tick">YOUR HOME</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
+    <div class="owned">${r.units > 1 ? r.occupied + ' of ' + r.units + ' units rented' : r.occupied ? 'Rented' : 'Vacant'}${t.commercial ? ' · commercial' : t.shortTerm ? ' · short-term rental' : ''} · equity ${fmt(equity)}${loan ? ' · mortgage ' + fmt(loan.yearlyPayment) + '/yr' : ''}
+    ${r.lastNet !== null && r.lastNet !== undefined ? `<br>Last year: rent ${fmt(r.lastRent)}, after tax, upkeep${r.manager ? ' and management' : ''} <span class="${r.lastNet >= 0 ? 'up' : 'down'}">${fmt(r.lastNet)}</span>${loan ? `, after the mortgage <span class="${flow >= 0 ? 'up' : 'down'}">${fmt(flow)}</span>` : ''}` : '<br>Tenants move in next year.'}</div>
+    <div class="itop"><span class="owned">Condition</span><span class="price ${r.cond < 40 ? 'down' : ''}">${r.cond}/100</span></div>
+    <div class="stat-track"><div class="stat-fill" style="width:${r.cond}%;background:var(--${r.cond < 40 ? 'red' : 'green'})"></div></div>
+    <div class="sortrow">${pill('Low rent', r.rent === 'low', `setRent('${x.id}','low')`)}${pill('Market rent', r.rent === 'market', `setRent('${x.id}','market')`)}${pill('High rent', r.rent === 'high', `setRent('${x.id}','high')`)}</div>
+    <div class="btnrow-social"><button onclick="togglePropManager('${x.id}')">${r.manager ? 'Manager: on (' + (t.shortTerm ? '20' : '10') + '% of rent)' : 'Hire a property manager'}</button>
+      <button onclick="repairRental('${x.id}')" ${state.done['repair_' + x.id] || !canPay(repairCost(x)) || r.cond >= 95 ? 'disabled' : ''}>Repairs (${fmt(repairCost(x))})</button>
+      <button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || !canPay(renoCost(x)) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>
+      ${r.home ? `<button onclick="moveIntoHome('${x.id}')">Move back in</button>` : `<button onclick="sellAsset('${x.id}')">Sell for ${fmt(x.value * 0.95)}</button>`}</div>
+  </div>`;
+}
+function listingHtml(l){
+  const t = findCatalog(l.key), loc = locOf(l.loc), diff = (l.price - l.fair) / l.fair, rent = listingRent(l), down = Math.round(l.price * 0.25);
+  const canFin = state.creditScore >= 620 && !state.bankrupt && canPay(down);
+  return `<div class="invrow">
+    <div class="itop"><span><b>${loc.name} ${t.name}</b>${l.cond < 50 ? ' <span class="tick">FIXER-UPPER</span>' : ''}</span><span class="price">${fmt(l.price)}</span></div>
+    <div class="owned">${l.units > 1 ? l.units + ' units · ' : ''}condition ${l.cond}/100 · estimated value ${fmt(l.fair)} <span class="${diff <= 0 ? 'up' : 'down'}">(${Math.abs(Math.round(diff * 100))}% ${diff <= 0 ? 'below' : 'above'})</span><br>
+    Rent if fully let: about ${fmt(rent)}/yr (${(rent / l.price * 100).toFixed(1)}% of the price)${loc.storms ? ' · storm risk' : loc.growth > 0 ? ' · values tend to rise faster' : loc.growth < 0 ? ' · values grow slowly' : ''}</div>
+    <div class="assetbuy"><button onclick="buyListing('${l.id}')" ${canPay(l.price) ? '' : 'disabled'}>Buy cash</button><button onclick="buyListing('${l.id}',true)" ${canFin ? '' : 'disabled'}>Mortgage (${fmt(down)} down)</button></div>
+  </div>`;
+}
+function realEstateHtml(){
+  const a = state.age, rs = rentals();
+  let h = `<div class="plabel">Real estate</div><div class="status">Housing market: <b>${housingLabel()}</b>${rs.length ? `<br>${rs.length} rental${rs.length > 1 ? 's' : ''} · ${rs.reduce((s, x) => s + x.rental.occupied, 0)} of ${rs.reduce((s, x) => s + x.rental.units, 0)} units let${state.lastRentalNet !== undefined ? ' · last year net ' + fmt(state.lastRentalNet) : ''}` : '<br>Buy properties to rent out: rent comes in every year, and value rises with the market.'}</div>`;
+  rs.forEach(x => h += rentalCardHtml(x));
+  if(a >= 21){
+    if(!state.listings || !state.listings.length) makeListings();
+    h += '<div class="plabel">For sale this year</div>';
+    state.listings.forEach(l => h += listingHtml(l));
+    if(state.creditScore < 620) h += '<div class="owned">Investment mortgages need a credit score of 620.</div>';
+  } else h += '<div class="owned">Property investing opens at 21.</div>';
+  return h;
+}
+
 function sellAsset(id){
   const i = state.assets.findIndex(x => x.id === id);
   if(i < 0) return;
@@ -2159,8 +2400,9 @@ function assetsYear(a){
   state.assets.forEach(x => {
     const t = findCatalog(x.key) || legacyTemplate(x);
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5;
-    x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol));
-    if(t.category === 'Homes' || t.category === 'Real Estate') upkeep += x.value * t.upkeepPct;
+    const property = t.category === 'Homes' || t.category === 'Real Estate';
+    x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
+    if(property && !x.rental) upkeep += x.value * t.upkeepPct;
     if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation;
   });
   if(upkeep <= 0) return;
@@ -2192,7 +2434,7 @@ function ownedAssetRow(x){
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
-    <div class="assetbuy"><button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
+    <div class="assetbuy">${x.category === 'Homes' && state.age >= 21 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -2881,8 +3123,13 @@ function applyHeir(h){
   // schooling: pick up where they were
   const e = state.edu;
   if(age >= 5 && age < 18){ e.school = age < 12 ? "Primary School" : "High School"; e.gpa = clamp(Math.round(40 + state.stats.smarts * 0.3 + rint(0, 14))); }
-  else if(kid.inCollege){ e.level = "High School"; e.school = "College"; e.endAge = kid.collegeEnd; e.financeMethod = kid.collegePaid ? "paid" : "loan"; e.gpa = clamp(Math.round(45 + state.stats.smarts * 0.3 + rint(0, 12))); }
-  else if(kid.edu) e.level = kid.edu;
+  else if(kid.inCollege){
+    e.level = "High School"; e.gpa = clamp(Math.round(45 + state.stats.smarts * 0.3 + rint(0, 12)));
+    const left = Math.max(1, kid.collegeEnd - age);
+    e.program = {kind:'college', key:'state', name:'State University', tier:'state', major: pick(MAJORS.slice(0, -1)), years:4, year:4 - left, award:'Bachelor', aid: kid.collegePaid ? 1 : 0};
+    e.school = 'State University'; e.endAge = kid.collegeEnd; e.financeMethod = kid.collegePaid ? "paid" : "loan";
+  }
+  else if(kid.edu){ e.level = kid.edu; if(kid.edu === 'Bachelor') e.degrees = [{degree:"Bachelor's", major: (kid.job && (TRACK_MAJORS[kid.job.track] || [])[0]) || pick(MAJORS.slice(0, -1)), tier:'state', schoolName:'State University'}]; }
   else if(age >= 18) e.level = (pkg.cash >= 40000 * cum && Math.random() < 0.4 + state.stats.smarts / 300) ? "Bachelor" : "High School";
   // their working life so far
   if(kid.job){
@@ -3220,7 +3467,8 @@ function healthYear(a, canPrompt){
     }
   });
   // a nudge to get checked when it has been a while
-  if(canPrompt && a >= 35 && !state.crime.prison && (H().lastCheckup === null || a - H().lastCheckup >= 4) && Math.random() < 0.35){
+  if(canPrompt && a >= 35 && !state.crime.prison && (H().lastCheckup === null || a - H().lastCheckup >= 4) && !(a - (H().nagged || -9) < 3) && Math.random() < 0.35){
+    H().nagged = a;
     const cost = inflR(150, 5);
     presentCustom(`${n}'s doctor's office calls: it has been ${H().lastCheckup === null ? 'years' : (a - H().lastCheckup) + ' years'} since ${n}'s last checkup.`, [
       {label:`Book a checkup (${fmt(cost)})`, run:() => doCheckup()},
@@ -3430,7 +3678,7 @@ function imprison(years, crime, juvenile){
   k.prison = {left:years, total:years, crime, behavior:0, juvenile:!!juvenile, gang:false};
   k.probation = 0; k.heat = 0; k.wanted = false;
   if(state.job){ convertCoworkersToFriends(); pushEntry(state.age, `${n} loses their job as ${state.job.title}.`, {}); state.job = null; }
-  if(!juvenile && state.edu.school){ pushEntry(state.age, `${n} is forced to leave ${state.edu.school.toLowerCase()}.`, {}); state.edu.school = null; }
+  if(!juvenile && state.edu.school){ pushEntry(state.age, `${n} is forced to leave ${state.edu.school.toLowerCase()}.`, {}); state.edu.school = null; state.edu.program = null; state.edu.endAge = 0; activateStudentLoan(); }
   const p = state.relationships.find(r => LOVE.includes(r.type));
   if(p){
     bump(p, -15);
@@ -3458,7 +3706,7 @@ function prisonYear(a){
   const k = CR(), pr = k.prison, n = state.name;
   healthYear(a, false);
   yearlyFinances(a); loansYear(a); creditCardYear(a); creditScoreYear(a);
-  updateMarket(a); payDividends(a); assetsYear(a);
+  updateMarket(a); payDividends(a); housingYear(a); assetsYear(a);
   relationshipsYear(a, true);
   if(!k.prison) return;                            // a relationship event can't free you, but stay safe
   applyDelta({health: -rint(0, 2), happy: -rint(2, 5)});
@@ -4280,7 +4528,7 @@ function yearlyFinances(a){
     if(contrib > 0){ R.balance += contrib + match; R.contributed += contrib; }
   }
   retirementYear();
-  state.assets.forEach(x => { if(x.category === 'Real Estate'){ const t = findCatalog(x.key); income += Math.round(x.value * (t.rentalYield || 0)); } });
+  income += rentalsYear(a);
   income += businessYear(a);
   if(a >= 65 && !state.job && !state.retired) retire(true);
   if(state.retired && state.pension > 0){
@@ -4304,7 +4552,7 @@ function yearlyFinances(a){
     pushEntry(a, `${state.name} moves out on their own — rent and bills are now their responsibility.`, {});
   }
   if(a >= 18 && independent && !jailed){
-    const ownsHome = state.assets.some(x => x.category === 'Homes');
+    const ownsHome = state.assets.some(x => x.category === 'Homes' && !x.rental);
     if(!ownsHome) expenses += Math.round(10000 * econ.cumInflation);
     if(state.insurance.health) expenses += Math.round(1200 * econ.cumInflation);
     if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) expenses += Math.round(900 * econ.cumInflation);
@@ -4770,43 +5018,311 @@ function bankRow(label, body, actions){
 
 function schoolYear(a){
   const e = state.edu;
+  migrateEdu();
   if(a === 5){ e.school = 'Primary School'; pushEntry(a, `${state.name} starts school.`, {}); }
   if(a === 12 && e.school){ e.school = 'High School'; pushEntry(a, `${state.name} moves up to high school.`, {}); }
-  if(a === 18 && e.school === 'High School'){
-    e.level = 'High School'; e.school = null;
+  if(a === 18 && e.school === 'High School' && !e.program){
+    setLevel('High School'); e.school = null;
     pushEntry(a, `${state.name} graduates high school (GPA ${Math.round(e.gpa)}).`, {happy:6});
-    presentCustom(`${state.name} has graduated. What's next?`, [
-      {label:'Go to college (4 years)', run:()=> presentCustom('How will they pay for college?', [
-        e.gpa >= 85 ? {label:'Accept a full scholarship', run:()=>enrollCollege('paid')}
-          : e.gpa >= 72 ? {label:'Accept a half scholarship and pay the rest', run:()=>enrollCollege('half')} : null,
-        {label:'Pay cash as they go', run:()=>enrollCollege('cash')},
-        {label:'Take out student loans', run:()=>enrollCollege('loan')},
-      ].filter(Boolean))},
-      {label:'Skip college and start working', run:()=>pushEntry(state.age, `${state.name} skips college and heads into the workforce.`, {})},
-    ]);
+    collegeApplications(true);
     return true;
   }
-  if(e.school === 'College' || e.school === 'Graduate School'){
-    const tuition = Math.round((e.school === 'College' ? 9000 : 15000) * state.econ.cumInflation * (e.financeMethod === 'half' ? 0.5 : 1));
-    if(e.financeMethod === 'loan'){
-      let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
-      if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, state.econ.rate - 0.005), {deferred:true});
-      sl.principal += tuition; sl.balance += tuition;
-    } else if(e.financeMethod !== 'paid'){
-      applyDelta({money:-tuition});
-    }
-  }
-  if(e.school && e.endAge && a === e.endAge){
-    const grad = e.school === 'Graduate School';
-    e.level = grad ? 'Master' : 'Bachelor'; e.school = null;
-    activateStudentLoan();
-    pushEntry(a, grad ? `${state.name} earns a Master's degree (GPA ${Math.round(e.gpa)}).` : `${state.name} graduates college with a Bachelor's degree (GPA ${Math.round(e.gpa)}).`, {smarts: grad ? 4 : 3, happy:8});
-  }
+  if(e.program){ programYear(a); return false; }
   if(e.school){
     e.gpa = clamp(e.gpa + (state.stats.smarts - 50) / 10 + (Math.random()*8 - 4));
     applyDelta({smarts:1});
   }
   return false;
+}
+// older saves and heirs: turn the old school fields into the new program and degree records
+function migrateEdu(){
+  const e = state.edu;
+  if(!e.degrees) e.degrees = [];
+  if(e.level === 'Bachelor' && !e.degrees.some(d => d.degree === "Bachelor's")) e.degrees.push({degree:"Bachelor's", major:'Undecided', tier:'state', schoolName:'State University'});
+  if(e.level === 'Master' && !e.degrees.some(d => d.degree === "Master's" || d.degree === 'MBA')){
+    if(!e.degrees.some(d => d.degree === "Bachelor's")) e.degrees.push({degree:"Bachelor's", major:'Undecided', tier:'state', schoolName:'State University'});
+    e.degrees.push({degree:"Master's", major:'Undecided'});
+  }
+  if((e.school === 'College' || e.school === 'Graduate School') && !e.program){
+    const grad = e.school === 'Graduate School', years = grad ? 2 : 4, left = Math.max(1, (e.endAge || state.age + 1) - state.age);
+    e.program = grad ? {kind:'grad', key:'master', name:'Graduate School', years, year:years - left, award:'Master', degree:"Master's", major:'Undecided', tracks:[], tuition:15000, aid:0}
+                     : {kind:'college', key:'state', name:'State University', tier:'state', major:'Undecided', years, year:years - left, award:'Bachelor', aid: e.financeMethod === 'half' ? 0.5 : 0};
+    if(e.financeMethod === 'half') e.financeMethod = 'cash';
+    e.school = e.program.name;
+  }
+}
+// ---------- Education: colleges, majors, graduate school, and what it does for your pay ----------
+const EDU_NAMES = {None:'No diploma', 'High School':'High school diploma', Associate:"Associate degree", Bachelor:"Bachelor's degree", Master:"Master's degree", Doctorate:'Doctorate'};
+const COLLEGES = [
+  {key:'community', name:'Community College', kind:'community', years:2, tuition:4000, prestige:1.0, minGpa:0, award:'Associate'},
+  {key:'state', name:'State University', kind:'college', years:4, tuition:11000, prestige:1.0, minGpa:55, award:'Bachelor'},
+  {key:'private', name:'Private University', kind:'college', years:4, tuition:38000, prestige:1.06, minGpa:70, award:'Bachelor'},
+  {key:'elite', name:'Elite University', kind:'college', years:4, tuition:58000, prestige:1.12, minGpa:84, minSmarts:70, award:'Bachelor'},
+];
+const MAJORS = ['Business', 'Computer Science', 'Engineering', 'Pre-Med', 'Nursing', 'Education', 'Pre-Law', 'Finance', 'Fine Arts', 'Communications', 'Undecided'];
+// majors that count as a relevant degree for each career
+const TRACK_MAJORS = {
+  Retail:['Business'], Business:['Business','Finance','Communications'], Technology:['Computer Science','Engineering'], Medicine:['Pre-Med','Nursing'],
+  Education:['Education'], Law:['Pre-Law','Communications'], Finance:['Finance','Business'], Science:['Pre-Med','Engineering','Computer Science'],
+  Aviation:['Engineering'], Politics:['Pre-Law','Communications','Business'], Military:['Engineering'], 'Law Enforcement':['Pre-Law'],
+  Acting:['Fine Arts','Communications'], Music:['Fine Arts'], Firefighting:[], Culinary:[], Trades:[], Sports:[],
+};
+const GRAD_PROGRAMS = [
+  {key:'master', name:"Master's program", school:'Graduate School', years:2, tuition:15000, award:'Master', degree:"Master's"},
+  {key:'mba', name:'MBA', school:'Business School', years:2, tuition:45000, award:'Master', degree:'MBA', needWork:2, tracks:['Business','Finance','Retail']},
+  {key:'law', name:'Law school', school:'Law School', years:3, tuition:40000, award:'Doctorate', degree:'JD', minGpa:70, minSmarts:60, tracks:['Law','Politics']},
+  {key:'med', name:'Medical school', school:'Medical School', years:4, tuition:50000, award:'Doctorate', degree:'MD', minGpa:80, minSmarts:70, majors:['Pre-Med','Nursing'], tracks:['Medicine']},
+  {key:'phd', name:'PhD program', school:'Doctoral Program', years:5, tuition:0, stipend:25000, award:'Doctorate', degree:'PhD', minGpa:80, minSmarts:72, tracks:['Science','Education']},
+];
+const TRADE_PROGRAMS = [
+  {key:'electric', name:'Electrical trade school', major:'Electrical', tracks:['Trades']},
+  {key:'culinary', name:'Culinary school', major:'Culinary', tracks:['Culinary']},
+];
+const ED = () => state.edu;
+const degrees = () => ED().degrees || (ED().degrees = []);
+const hasDegree = d => degrees().some(x => x.degree === d);
+const relevantDegree = track => degrees().some(x => (TRACK_MAJORS[track] || []).includes(x.major) || (x.tracks || []).includes(track));
+function setLevel(l){ if(EDU_RANK[l] > EDU_RANK[ED().level]) ED().level = l; }
+// how much your schooling raises pay in a career (applied to starting salaries and job offers)
+function eduPayMult(track){
+  const e = ED(), L = {None:0.85, 'High School':1, Associate:1.05, Bachelor:1.1, Master:1.17, Doctorate:1.22}[e.level] || 1;
+  let m = L;
+  if(relevantDegree(track)) m += 0.08;
+  const best = degrees().filter(x => x.tier).map(x => COLLEGES.find(c => c.key === x.tier)).filter(Boolean).reduce((p, c) => Math.max(p, c.prestige), 1);
+  m *= best;
+  if(degrees().some(x => x.honors)) m += 0.03;
+  m += Math.min(2, e.internships || 0) * 0.04;
+  if(hasDegree('MBA') && ['Business','Finance'].includes(track)) m += 0.12;
+  if(['Odd Jobs'].includes(track)) m = 1;
+  return Math.min(1.45, m);
+}
+const eduPromoBonus = track => Math.max(0, EDU_RANK[ED().level] - 1) * 0.012 + (relevantDegree(track) ? 0.03 : 0);
+// graduates don't start at the bottom: the highest of the first three rungs that your degree and certificates qualify you for
+function startRankFor(track){
+  const ladder = CAREERS[track];
+  let best = 0;
+  for(let i = 1; i < Math.min(3, ladder.length); i++){
+    const r = ladder[i], degreeEntry = EDU_RANK[r.edu] >= EDU_RANK.Associate || r.degree || r.major;
+    const cert = degrees().some(d => d.degree === 'Certificate' && (d.tracks || []).includes(track)) && i === 1;
+    if((degreeEntry || cert) && !rankGap(r, track)) best = i;
+  }
+  return best;
+}
+function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track), 100); }
+function eduSummary(){
+  const e = ED();
+  if(e.program) return e.program.name + ' · year ' + (e.program.year + 1) + ' of ' + e.program.years + (e.program.major && e.program.major !== 'Undecided' ? ' · ' + e.program.major : '');
+  const top = degrees().slice(-1)[0];
+  return top ? (top.degree + (top.major && top.major !== 'Undecided' ? ' in ' + top.major : '') + (top.schoolName ? ', ' + top.schoolName : '')) : EDU_NAMES[e.level];
+}
+// ---- getting in ----
+function admitChance(c){
+  const e = ED(), s = state.stats;
+  if(!c.minGpa) return 1;
+  if(c.minSmarts && s.smarts < c.minSmarts - 10) return 0.02;
+  const extra = Math.min(0.15, (e.clubs || 0) * 0.05) + (e.testPrep ? 0.08 : 0) + (Object.keys(state.hobbies).some(k => state.hobbies[k].level >= 50) ? 0.05 : 0);
+  const p = 0.5 + (e.gpa - c.minGpa) / 22 + (s.smarts - 60) / 200 + extra;
+  return Math.max(0.03, Math.min(c.key === 'elite' ? 0.75 : 0.97, p));
+}
+function aidFor(c){
+  const g = ED().gpa, poor = (state.famEstate || 0) < 120000;
+  if(c.key === 'community') return g >= 85 ? 1 : 0;
+  if(c.key === 'state') return g >= 90 ? 1 : g >= 82 ? 0.5 : g >= 72 ? 0.25 : 0;
+  if(c.key === 'private') return g >= 90 ? 0.6 : g >= 80 ? 0.35 : 0.1;
+  return poor ? 0.75 : g >= 92 ? 0.3 : 0.1;
+}
+function parentsWillPay(){
+  const par = state.relationships.filter(r => r.type === 'Mother' || r.type === 'Father');
+  if(!par.length) return 0;
+  const close = Math.max(...par.map(r => r.closeness)), wealth = state.famEstate || 0;
+  return wealth >= 600000 && close >= 45 ? 1 : wealth >= 200000 && close >= 55 ? 0.5 : 0;
+}
+// the big decision at 18 (and any time later): apply, see where you got in, pick one
+function collegeApplications(fromGraduation){
+  const n = state.name, e = ED();
+  e.applied = state.age;
+  const results = COLLEGES.map(c => ({c, in: Math.random() < admitChance(c)}));
+  const accepted = results.filter(r => r.in).map(r => r.c);
+  const rejected = results.filter(r => !r.in).map(r => r.c.name);
+  if(rejected.length) pushEntry(state.age, `${n} is turned down by ${rejected.join(', ').replace(/, ([^,]*)$/, ' and $1')}.`, {happy:-2});
+  const opts = accepted.slice().reverse().map(c => ({label:`${c.name} (${c.years} years, ${fmt(inflR(c.tuition, 100))}/yr${aidFor(c) ? ', ' + Math.round(aidFor(c) * 100) + '% scholarship' : ''})`, run:() => chooseMajor(c)}));
+  opts.push({label:'Trade school (1 year certificate)', run:() => presentCustom('Which trade?', TRADE_PROGRAMS.map(t => ({label:t.name + ' (' + fmt(inflR(8000, 100)) + ')', run:() => startTrade(t)})))});
+  opts.push({label: fromGraduation ? 'Skip school and start working' : 'Not now', run:() => pushEntry(state.age, fromGraduation ? `${n} skips college and heads into the workforce.` : `${n} decides not to go back to school yet.`, {})});
+  presentCustom(accepted.length > 1 ? `${n} gets into ${accepted.length} schools. Where do they go?` : `${n} only gets into ${accepted[0].name}. What now?`, opts);
+}
+function chooseMajor(c){
+  if(c.kind === 'community') return choosePayment(c, 'Undecided');
+  presentCustom(`What will ${state.name} study at ${c.name}?`, MAJORS.map(m => ({label:m, run:() => choosePayment(c, m)})));
+}
+function choosePayment(c, major){
+  const aid = aidFor(c), cost = Math.round(inflR(c.tuition, 100) * (1 - aid)), par = parentsWillPay();
+  const opts = [];
+  if(cost === 0) opts.push({label:'Full scholarship, no tuition', run:() => enrollProgram(c, major, 'paid', aid)});
+  else {
+    if(par === 1) opts.push({label:'Parents cover the rest', run:() => enrollProgram(c, major, 'paid', aid, 'parents')});
+    if(par === 0.5) opts.push({label:`Parents pay half, you pay ${fmt(cost / 2)}/yr`, run:() => enrollProgram(c, major, 'cash', 1 - (1 - aid) / 2, 'parents')});
+    opts.push({label:`Pay ${fmt(cost)}/yr as you go`, run:() => enrollProgram(c, major, 'cash', aid)});
+    opts.push({label:`Student loans for ${fmt(cost)}/yr`, run:() => enrollProgram(c, major, 'loan', aid)});
+  }
+  presentCustom(`${c.name} costs ${fmt(inflR(c.tuition, 100))} a year${aid ? `, minus a ${Math.round(aid * 100)}% scholarship` : ''}. How will ${state.name} pay?`, opts);
+}
+function enrollProgram(c, major, method, aid, who){
+  const e = ED();
+  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  e.program = {kind:c.kind, key:c.key, name:c.name, tier:c.key, major, years:c.years, year:0, award:c.award, aid:aid || 0, changedMajor:false};
+  e.school = c.name; e.financeMethod = method; e.gpa = Math.max(55, Math.min(80, e.gpa || 60)); e.endAge = state.age + c.years;
+  pushEntry(state.age, `${state.name} starts at ${c.name}${major !== 'Undecided' && c.kind !== 'community' ? ' studying ' + major : ''}${who === 'parents' ? ', with help from their parents' : method === 'loan' ? ' on student loans' : aid >= 1 ? ' on a full scholarship' : ''}.`, {happy:6});
+}
+function startTrade(t){
+  const e = ED(), cost = inflR(8000, 100);
+  if(!ensureCash(cost)){ pushEntry(state.age, `${state.name} can't afford trade school right now.`, {}); return; }
+  state.money -= cost;
+  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  e.program = {kind:'trade', key:t.key, name:t.name, major:t.major, tracks:t.tracks, years:1, year:0, award:null, aid:0};
+  e.school = t.name; e.financeMethod = 'paid'; e.endAge = state.age + 1;
+  pushEntry(state.age, `${state.name} enrolls in ${t.name.toLowerCase()}.`, {happy:3});
+}
+function applyGrad(key){
+  const g = GRAD_PROGRAMS.find(x => x.key === key), e = ED(), n = state.name;
+  if(!g || e.program || EDU_RANK[e.level] < EDU_RANK.Bachelor || state.done['gradapp_' + key]) return;
+  state.done['gradapp_' + key] = true;
+  const gap = gradGap(g); if(gap){ render(); return; }
+  const p = g.minGpa ? Math.max(0.1, Math.min(0.9, 0.5 + (e.gpa - g.minGpa) / 25 + (state.stats.smarts - (g.minSmarts || 60)) / 150 + (e.internships || 0) * 0.04)) : 0.9;
+  if(Math.random() > p){ pushEntry(state.age, `${n} applies to ${g.name.toLowerCase()} but isn't accepted this year.`, {happy:-3}); render(); return; }
+  const cost = inflR(g.tuition, 100), opts = [];
+  if(g.stipend) opts.push({label:`Accept (tuition waived, ${fmt(inflR(g.stipend, 100))} a year stipend)`, run:() => enrollGrad(g, 'paid')});
+  else {
+    opts.push({label:`Pay ${fmt(cost)}/yr`, run:() => enrollGrad(g, 'cash')});
+    opts.push({label:`Student loans`, run:() => enrollGrad(g, 'loan')});
+  }
+  opts.push({label:'Decline the offer', run:() => pushEntry(state.age, `${n} turns down ${g.name.toLowerCase()}.`, {})});
+  presentCustom(`${n} is accepted into ${g.name.toLowerCase()} (${g.years} years). ${g.stipend ? '' : 'Tuition is ' + fmt(cost) + ' a year.'}`, opts);
+  render();
+}
+function gradGap(g){
+  const e = ED();
+  if(g.needWork && (state.workYears || 0) < g.needWork) return g.needWork + ' years of work experience';
+  if(g.majors && !degrees().some(d => g.majors.includes(d.major))) return 'a ' + g.majors.join(' or ') + ' degree';
+  if(g.minGpa && e.gpa < g.minGpa - 12) return 'a GPA near ' + g.minGpa;
+  if(degrees().some(d => d.degree === g.degree)) return 'already earned';
+  return '';
+}
+function enrollGrad(g, method){
+  const e = ED(), last = degrees().filter(d => d.major).slice(-1)[0];
+  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  e.program = {kind:'grad', key:g.key, name:g.school, years:g.years, year:0, award:g.award, degree:g.degree, major: g.key === 'master' || g.key === 'phd' ? (last ? last.major : 'Undecided') : null, tracks:g.tracks || [], stipend:g.stipend || 0, aid:0, tuition:g.tuition};
+  e.school = g.school; e.financeMethod = method; e.gpa = Math.max(65, e.gpa); e.endAge = state.age + g.years;
+  pushEntry(state.age, `${state.name} starts ${g.name.toLowerCase()}${method === 'loan' ? ' on student loans' : ''}.`, {happy:5});
+}
+// ---- the school year ----
+function programYear(a){
+  const e = ED(), p = e.program, n = state.name;
+  if(!p) return;
+  const base = p.kind === 'grad' ? p.tuition : p.kind === 'trade' ? 0 : (COLLEGES.find(c => c.key === p.key) || COLLEGES[1]).tuition;
+  const tuition = Math.round(inflR(base, 100) * (1 - (p.aid || 0)));
+  if(tuition > 0){
+    if(e.financeMethod === 'loan'){
+      let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
+      if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, state.econ.rate - 0.005), {deferred:true});
+      sl.principal += tuition; sl.balance += tuition;
+    } else if(e.financeMethod === 'cash') applyDelta({money:-tuition});
+  }
+  if(p.stipend) applyDelta({money: inflR(p.stipend, 100)});
+  e.gpa = clamp(e.gpa + (state.stats.smarts - 55) / 12 + (Math.random() * 8 - 4));
+  applyDelta({smarts:1});
+  p.year++;
+  if(p.year >= p.years) graduate(a);
+}
+function graduate(a){
+  const e = ED(), p = e.program, n = state.name, g = Math.round(e.gpa);
+  const honors = p.kind === 'college' ? (g >= 92 ? 'summa cum laude' : g >= 86 ? 'magna cum laude' : g >= 80 ? 'cum laude' : null) : null;
+  const deg = p.kind === 'trade' ? 'Certificate' : p.kind === 'grad' ? p.degree : p.award === 'Associate' ? 'Associate' : "Bachelor's";
+  degrees().push({degree:deg, major:p.major, tier:p.kind === 'college' || p.kind === 'community' ? p.key : null, schoolName:p.name, honors, tracks:p.tracks || [], age:a, gpa:g});
+  if(p.award) setLevel(p.award);
+  e.program = null; e.school = null; e.endAge = 0;
+  activateStudentLoan();
+  const what = p.kind === 'trade' ? `${n} finishes ${p.name.toLowerCase()} with a certificate`
+            : p.kind === 'grad' ? `${n} earns ${p.degree === 'MD' ? 'a medical degree' : p.degree === 'JD' ? 'a law degree' : p.degree === 'PhD' ? 'a PhD' : p.degree === 'MBA' ? 'an MBA' : "a Master's degree"}`
+            : `${n} graduates from ${p.name} with ${p.award === 'Associate' ? 'an Associate degree' : "a Bachelor's in " + p.major}${honors ? ', ' + honors : ''}`;
+  pushEntry(a, `${what} (GPA ${g}).`, {smarts: p.kind === 'grad' ? 4 : 3, happy:8});
+}
+// campus actions
+function campusAct(key){
+  const e = ED(), p = e.program, n = state.name; if(state.done['campus_' + key]) return;
+  if(key === 'prep'){ const c = inflR(600, 50); if(e.testPrep || !ensureCash(c)) return; state.money -= c; e.testPrep = true; state.done.campus_prep = true; pushEntry(state.age, `${n} takes a test prep course before applying to college.`, {smarts:2}); render(); return; }
+  if(key === 'club'){ state.done.campus_club = true; e.clubs = (e.clubs || 0) + 1; if(Math.random() < 0.4 && state.relationships.length < 60){ const f = newRel('Friend', {closeness:rint(35, 50), origin: p ? 'in a campus club' : 'in a school club'}); pushEntry(state.age, `${n} joins a club and becomes friends with ${f.name}.`, {happy:3, smarts:1}); } else pushEntry(state.age, `${n} joins a club and throws themselves into it.`, {happy:3, smarts:1}); render(); return; }
+  if(!p) return;
+  state.done['campus_' + key] = true;
+  if(key === 'party'){
+    e.gpa = clamp(e.gpa - 4);
+    if(Math.random() < 0.25 && !hasRel('Partner','Spouse') && state.relationships.length < 60){ const r = newRel('Partner', {closeness:rint(40, 55), origin:'at a campus party'}); pushEntry(state.age, `${n} goes to a wild party and hits it off with ${r.name}.`, {happy:7}); }
+    else pushEntry(state.age, `${n} parties a little too hard this semester.`, {happy:5, health:-1});
+  } else if(key === 'intern'){
+    if(Math.random() < 0.35 + e.gpa / 250 + state.stats.smarts / 400){ e.internships = (e.internships || 0) + 1; pushEntry(state.age, `${n} lands a summer internship. It will look great to employers.`, {money:inflR(5000, 100), smarts:2, happy:4}); }
+    else pushEntry(state.age, `${n} applies for internships but comes up empty this summer.`, {happy:-2});
+  } else if(key === 'work'){
+    e.gpa = clamp(e.gpa - 3);
+    pushEntry(state.age, `${n} works a part-time job alongside classes.`, {money:inflR(8000, 100), happy:-1});
+  }
+  render();
+}
+function changeMajor(){
+  const e = ED(), p = e.program; if(!p || p.kind !== 'college' || p.changedMajor) return;
+  presentCustom(`Switch ${state.name}'s major from ${p.major}?${p.year >= 2 ? ' It adds a year.' : ''}`, MAJORS.filter(m => m !== p.major).map(m => ({label:m, run:() => {
+    p.major = m; p.changedMajor = true; if(p.year >= 2){ p.years++; e.endAge++; }
+    pushEntry(state.age, `${state.name} switches their major to ${m}.`, {happy:2});
+  }})));
+}
+function eduPanelHtml(){
+  const e = ED(), p = e.program, a = state.age, s = state.stats;
+  const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
+  let h = '';
+  if(a < 5) return '<div class="status">Too young for school.</div>';
+  if(p){
+    h += `<div class="status"><b>${p.name}</b>${p.major && p.major !== 'Undecided' ? ' · ' + p.major : ''}<br>Year ${p.year + 1} of ${p.years} · GPA <b>${Math.round(e.gpa)}</b>${e.internships ? ' · ' + e.internships + ' internship' + (e.internships > 1 ? 's' : '') : ''}<br>Paying by ${e.financeMethod === 'loan' ? 'student loans' : e.financeMethod === 'paid' ? (p.stipend ? 'stipend' : 'scholarship or family') : 'cash'}${p.aid && p.aid < 1 ? ', ' + Math.round(p.aid * 100) + '% scholarship' : ''}.</div>`;
+    h += opt('Study hard', '+GPA, +smarts', 'study()', state.done.study);
+    h += opt('Skip class', '−GPA, +happy', 'skipClass()', state.done.skip);
+    if(p.kind !== 'trade'){
+      h += opt('Party', '+happy, −GPA', "campusAct('party')", state.done.campus_party);
+      h += opt('Join a club', 'friends, looks good on applications', "campusAct('club')", state.done.campus_club);
+      h += opt('Summer internship', p.year >= 1 || p.kind === 'grad' ? 'raises starting pay' : 'from year 2', "campusAct('intern')", state.done.campus_intern || (p.year < 1 && p.kind !== 'grad'));
+      h += opt('Part-time job', '+money, −GPA', "campusAct('work')", state.done.campus_work);
+      if(p.kind === 'college') h += opt('Change major', p.changedMajor ? 'already changed once' : p.year >= 2 ? 'adds a year' : 'free in the first two years', 'changeMajor()', p.changedMajor);
+    }
+    h += opt('Drop out', '', 'dropOut()', false);
+    return h;
+  }
+  if(e.school){                                          // primary and high school
+    h += `<div class="status">Enrolled: <b>${e.school}</b> · GPA <b>${Math.round(e.gpa)}</b>${e.school === 'High School' ? '<br>Grades, clubs and test prep decide which colleges accept you and what scholarships you get.' : ''}</div>`;
+    h += opt('Study hard', '+GPA, +smarts', 'study()', state.done.study);
+    h += opt('Skip class', '−GPA', 'skipClass()', state.done.skip);
+    if(a >= 10) h += opt('Join a club', 'friends, college applications', "campusAct('club')", state.done.campus_club);
+    if(e.school === 'High School' && a >= 15) h += opt('Test prep course', e.testPrep ? 'done ✓' : fmt(inflR(600, 50)), "campusAct('prep')", e.testPrep || state.done.campus_prep);
+    h += opt('Drop out', '', 'dropOut()', false);
+    return h;
+  }
+  h += `<div class="status">Education: <b>${eduSummary()}</b>${degrees().length > 1 ? '<br>Also: ' + degrees().slice(0, -1).map(d => d.degree + (d.major && d.major !== 'Undecided' ? ' in ' + d.major : '')).join(', ') : ''}</div>`;
+  // what schooling is worth, in the career you are in or your best fit
+  const track = state.job ? state.job.track : 'Business';
+  h += '<div class="plabel">What education pays</div><div class="invrow"><div class="owned">Starting pay as ' + CAREERS[track][Math.min(1, CAREERS[track].length - 1)].title.toLowerCase() + ' in ' + track.toLowerCase() + ' with your education: <b>' + fmt(startingSalary(track, Math.min(1, CAREERS[track].length - 1))) + '</b> (' + (eduPayMult(track) >= 1 ? '+' : '') + Math.round((eduPayMult(track) - 1) * 100) + '%). ' +
+       'A degree adds 6-30% depending on level, a relevant major another 10%, a top university up to 12%, honors and internships a little more. Doctors need an MD and attorneys a JD.</div></div>';
+  if(a >= 16 && EDU_RANK[e.level] < EDU_RANK['High School']) h += opt('Get a high school equivalency diploma', fmt(inflR(300, 10)), 'getGED()', false);
+  if(a >= 17 && EDU_RANK[e.level] >= 1 && EDU_RANK[e.level] < EDU_RANK.Bachelor && a < 60) h += opt('Apply to college', e.applied === a ? 'applied this year' : 'community college to elite', 'collegeApplications(false);render()', e.applied === a);
+  if(a >= 17 && EDU_RANK[e.level] >= 1 && a < 60 && !degrees().some(d => d.degree === 'Certificate')) h += opt('Trade school', '1 year · start a rung higher in the trades', "presentCustom('Which trade?', TRADE_PROGRAMS.map(t => ({label:t.name + ' (' + fmt(inflR(8000, 100)) + ')', run:() => startTrade(t)})));render()", false);
+  if(EDU_RANK[e.level] >= EDU_RANK.Bachelor && a < 60){
+    h += '<div class="plabel">Graduate school</div>';
+    GRAD_PROGRAMS.forEach(g => {
+      const gap = gradGap(g);
+      h += opt(g.name + ' <span class="sub-meta">' + g.years + ' years · ' + (g.stipend ? 'paid stipend' : fmt(inflR(g.tuition, 100)) + '/yr') + (g.tracks ? ' · for ' + g.tracks.join(', ').toLowerCase() : '') + '</span>', gap ? 'needs ' + gap : state.done['gradapp_' + g.key] ? 'applied this year' : 'apply', `applyGrad('${g.key}')`, !!gap || state.done['gradapp_' + g.key]);
+    });
+  }
+  return h;
+}
+function getGED(){
+  const c = inflR(300, 10); if(EDU_RANK[ED().level] >= 1 || !ensureCash(c)) return;
+  state.money -= c; setLevel('High School');
+  pushEntry(state.age, `${state.name} earns a high school equivalency diploma.`, {smarts:2, happy:4});
+  render();
 }
 
 function convertCoworkersToFriends(){
@@ -4871,11 +5387,11 @@ function workYear(a){
 
   if(j.rank < track.length - 1){
     const next = track[j.rank + 1];
-    const eligible = !rankGap(next);
-    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + (state.edu.level === 'Master' ? 0.05 : 0)) * (state.econ.recession ? 0.5 : 1);
+    const eligible = !rankGap(next, j.track);
+    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
       j.rank++; j.title = next.title;
-      j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, inflR(next.salary, 100));
+      j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, j.rank));
       pushEntry(a, (TRACK_INFO[j.track] || {}).elect ? `${state.name} wins the election and becomes ${next.title} — salary now ${fmt(j.salary)}.` : `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.`, {happy: (TRACK_INFO[j.track] || {}).star ? 12 : 6});
       return;
     }
@@ -4896,7 +5412,7 @@ function mePanelHtml(){
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
   let h = '<div class="status"><b>' + state.name + "</b>, " + state.age + (state.generation > 1 ? " · generation " + state.generation : "") +
     (traits ? "<br>Personality: " + traits : "") +
-    "<br>" + (e.school ? "Studying at " + e.school.toLowerCase() : "Education: " + (e.level === "None" ? "no diploma" : e.level === "Master" ? "Master's degree" : e.level === "Bachelor" ? "Bachelor's degree" : "high school")) +
+    "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value : 0], ["Trust fund", state.trustFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
@@ -5016,8 +5532,9 @@ function activateStudentLoan(){
   const sl = state.loans.find(l => l.type === 'Student' && l.deferred);
   if(!sl) return;
   if(sl.balance > 0){
-    sl.deferred = false; sl.term = 10; sl.yearsLeft = 10;
-    sl.yearlyPayment = Math.round(sl.balance * sl.apr / (1 - Math.pow(1+sl.apr, -10)));
+    const term = sl.balance > 100000 * state.econ.cumInflation ? 20 : 10;     // big balances get a longer repayment plan
+    sl.deferred = false; sl.term = term; sl.yearsLeft = term;
+    sl.yearlyPayment = Math.round(sl.balance * sl.apr / (1 - Math.pow(1+sl.apr, -term)));
   } else {
     state.loans = state.loans.filter(l => l.id !== sl.id);
   }
@@ -5025,23 +5542,9 @@ function activateStudentLoan(){
 function dropOut(ok){
   const was = state.edu.school; if(!was) return;
   if(ok !== true) return askConfirm(`Drop out of ${was.toLowerCase()}?`, "Drop out", () => dropOut(true));
-  state.edu.school = null; state.edu.endAge = 0;
+  state.edu.school = null; state.edu.endAge = 0; state.edu.program = null;
   activateStudentLoan();
   pushEntry(state.age, `${state.name} drops out of ${was}${state.loans.some(l=>l.type==='Student') ? ' — the student loan payments start regardless' : ''}.`, {happy:-4});
-  render();
-}
-function enrollCollege(method){
-  const e = state.edu;
-  e.school = 'College'; e.gpa = 60; e.endAge = state.age + 4; e.financeMethod = method || 'cash';
-  const how = {loan:', financed with student loans', paid:' on a full scholarship', half:' on a half scholarship'}[method] || ', paying tuition out of pocket';
-  pushEntry(state.age, `${state.name} enrolls in college${how}.`, {happy: method === 'paid' ? 6 : 3});
-}
-function enrollGrad(method){
-  const e = state.edu;
-  if(e.school || e.level !== 'Bachelor' || state.age < 21) return;
-  if(state.job){ convertCoworkersToFriends(); state.job = null; }
-  e.school = 'Graduate School'; e.gpa = Math.max(60, e.gpa); e.endAge = state.age + 2; e.financeMethod = method;
-  pushEntry(state.age, `${state.name} starts a two-year Master's program${method === 'loan' ? ' on student loans' : ''}.`, {happy:3});
   render();
 }
 const RECORD_BARRED = ['Law', 'Medicine', 'Education'];
@@ -5052,19 +5555,20 @@ function applyJob(trackName){
   if(!track || (state.job && state.job.track === trackName) || state.done['app_'+trackName]) return;
   const rank0 = track[0];
   if(state.retired || state.age > 66) return;
-  if(rankGap(rank0)) return;
+  if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(90, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     if(state.job){
       convertCoworkersToFriends();
       pushEntry(state.age, `${state.name} leaves their job as ${state.job.title} for a new career.`, {});
     }
-    state.job = {track:trackName, rank:0, title:rank0.title, salary:inflR(rank0.salary * (state.edu.level === 'Master' ? 1.1 : 1), 100), years:0};
+    const start = startRankFor(trackName);
+    state.job = {track:trackName, rank:start, title:track[start].title, salary:startingSalary(trackName, start), years:0};
     if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(0, state.age+rint(-8,8)), closeness:35+rint(0,20), origin:'through work'});
-    pushEntry(state.age, `${state.name} lands an entry-level role as ${rank0.title} in ${trackName}.`, {happy:6});
+    pushEntry(state.age, `${state.name} lands a role as ${state.job.title} in ${trackName}, starting at ${fmt(state.job.salary)}.`, {happy:6});
   } else {
-    pushEntry(state.age, `${state.name} applies for ${rank0.title} in ${trackName} but doesn't get it.`, {happy:-3});
+    pushEntry(state.age, `${state.name} applies for a job in ${trackName.toLowerCase()} but doesn't get it.`, {happy:-3});
   }
   render();
 }
@@ -5079,7 +5583,7 @@ function quitJob(ok){
 function jobHunt(){
   const j = state.job; if(!j || state.done.hunt || j.years < 1) return;
   state.done.hunt = true;
-  if(Math.random() < (state.econ.recession ? 0.2 : 0.4) + state.stats.smarts / 400 + (state.edu.level === 'Master' ? 0.08 : 0)){
+  if(Math.random() < (state.econ.recession ? 0.2 : 0.4) + state.stats.smarts / 400 + eduPromoBonus(j.track) * 2){
     const raise = Math.round(j.salary * (0.08 + Math.random() * 0.14) / 100) * 100;
     convertCoworkersToFriends();
     j.salary += raise; j.years = 0;
@@ -5145,23 +5649,7 @@ function renderPanel(){
     });
     h += hobbiesHtml();
   } else if(state.panel === 'edu'){
-    if(e.school){
-      h += `<div class="status">Enrolled: <b>${e.school}</b> · GPA <b>${Math.round(e.gpa)}</b></div>`;
-      h += opt('Study hard', '+smarts', 'study()', state.done.study);
-      h += opt('Skip class', '−GPA', 'skipClass()', state.done.skip);
-      h += opt('Drop out', '', 'dropOut()', false);
-    } else {
-      h += `<div class="status">${a < 5 ? 'Too young for school.' : 'Education: <b>' + (e.level === 'None' ? 'no diploma' : e.level) + '</b>. Not currently enrolled.'}</div>`;
-      if(a >= 18 && a < 45 && EDU_RANK[e.level] === 1){
-        h += opt('Enroll in college (pay cash)', fmt(Math.round(9000*state.econ.cumInflation))+'/yr', `enrollCollege('cash');render()`, false);
-        h += opt('Enroll in college (student loans)', 'repay after graduating', `enrollCollege('loan');render()`, false);
-      }
-      if(a >= 21 && a < 55 && e.level === 'Bachelor'){
-        h += opt("Master's degree (pay cash)", fmt(Math.round(15000*state.econ.cumInflation))+'/yr · 2 years, leaves your job', `enrollGrad('cash')`, false);
-        h += opt("Master's degree (student loans)", '2 years, leaves your job', `enrollGrad('loan')`, false);
-      }
-      if(e.level === 'Master') h += '<div class="status">A Master\'s degree raises starting salaries by 10% and helps with every promotion.</div>';
-    }
+    h += eduPanelHtml();
   } else if(state.panel === 'inv'){
     if(a < 16){ h = '<div class="status">Too young to invest yet — come back at 16.</div>'; }
     else {
@@ -5195,11 +5683,14 @@ function renderPanel(){
   } else if(state.panel === 'ast'){
     const av = assetsValue();
     h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Assets <b>${fmt(av)}</b> &nbsp;·&nbsp; Debt <b>${fmt(totalDebt())}</b><br>Net worth <b>${fmt(netWorth())}</b></div>`;
-    if(state.assets.length){
-      h += '<div class="plabel">YOUR ASSETS</div>';
-      state.assets.forEach(x => h += ownedAssetRow(x));
+    h += realEstateHtml();
+    const mine = state.assets.filter(x => !x.rental);
+    if(mine.length){
+      h += '<div class="plabel">YOUR THINGS</div>';
+      mine.forEach(x => h += ownedAssetRow(x));
     }
     for(const cat in ASSET_CATALOG){
+      if(cat === 'Real Estate') continue;
       h += `<div class="plabel">${cat.toUpperCase()}${a < CAT_MIN[cat] ? ' · unlocks at ' + CAT_MIN[cat] : ''}</div>`;
       ASSET_CATALOG[cat].forEach(t => h += assetCatalogRow(t, cat));
     }
@@ -5262,7 +5753,9 @@ function renderPanel(){
         const coworkers = state.relationships.filter(r => r.type === 'Coworker');
         h += `<div class="status"><b>${rank.title}</b> · ${j.track}<br>${fmt(j.salary)}/yr · ${rank.hours}hrs/wk · Stress ${rank.stress}/100 · ${j.years}yr on the job${coworkers.length ? `<br>Coworkers: ${coworkers.map(c=>c.name).join(', ')}` : ''}</div>`;
         h += '<div class="plabel">CAREER LADDER</div>';
-        h += `<div class="invrow"><div class="owned">${track.map((r,i) => i === j.rank ? `<b>→ ${r.title}</b>` : (i < j.rank ? `✓ ${r.title}` : r.title)).join(' &nbsp;→&nbsp; ')}</div></div>`;
+        h += `<div class="invrow"><div class="owned">${track.map((r,i) => i === j.rank ? `<b>${r.title}</b>` : (i < j.rank ? `✓ ${r.title}` : r.title)).join(' &nbsp;→&nbsp; ')}</div></div>`;
+        const nx = track[j.rank + 1], nxGap = nx ? rankGap(nx, j.track) : '';
+        if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">needs ' + nxGap + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
         h += opt('Work extra hard', '−2 health', 'workHarder()', state.done.work);
         h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
         h += opt('Look for a better offer', j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1);
@@ -5277,10 +5770,10 @@ function renderPanel(){
       for(const trackName in CAREERS){
         const rank0 = CAREERS[trackName][0];
         const already = j && j.track === trackName;
-        const barred = recordBlocks(trackName), gap = rankGap(rank0), info = TRACK_INFO[trackName] || {};
+        const barred = recordBlocks(trackName), gap = rankGap(rank0, trackName), info = TRACK_INFO[trackName] || {};
         const tooOld = info.maxAge && a >= info.maxAge - 4;
         const ineligible = barred || tooOld || state.retired || a > 66 || !!gap;
-        const meta = barred ? 'needs a clean record' : tooOld ? 'too old to start' : (state.retired || a > 66) ? 'hiring is closed at your age' : gap ? 'needs ' + gap : fmt(inflR(rank0.salary, 100)) + '/yr to start';
+        const meta = barred ? 'needs a clean record' : tooOld ? 'too old to start' : (state.retired || a > 66) ? 'hiring is closed at your age' : gap ? 'needs ' + gap : (startRankFor(trackName) ? 'as ' + CAREERS[trackName][startRankFor(trackName)].title + ' · ' : '') + fmt(startingSalary(trackName, startRankFor(trackName))) + '/yr';
         h += opt(`${trackName} <span class="sub-meta">${rank0.title} → ${CAREERS[trackName][CAREERS[trackName].length - 1].title}${info.blurb ? ' · ' + info.blurb : ''}</span>`, meta, `applyJob('${trackName}')`, already || state.done['app_'+trackName] || ineligible);
       }
     }
@@ -5596,7 +6089,7 @@ function render(){
   const ed = state.edu;
   const partner = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse');
   const nw = netWorth(), pr = state.crime.prison;
-  const bits = [pr ? '<span class="down">in prison</span>' : state.job ? state.job.title : state.retired ? 'retired' : ed.school || (ed.level === 'None' ? (state.age < 5 ? '' : 'no diploma') : ed.level === 'Master' ? "Master's" : ed.level),
+  const bits = [pr ? '<span class="down">in prison</span>' : state.job ? state.job.title : state.retired ? 'retired' : ed.school || (ed.level === 'None' ? (state.age < 5 ? '' : 'no diploma') : ((ed.degrees || []).slice(-1)[0] || {}).degree || EDU_NAMES[ed.level]),
                 partner ? (partner.type === 'Spouse' ? 'married to ' : 'dating ') + partner.name : '', state.crime.wanted ? '<span class="down">wanted</span>' : ''].filter(Boolean);
   document.getElementById('tags').innerHTML =
     `<span class="money${state.money < 0 ? ' neg' : ''}">${fmt(state.money)}</span>${state.age >= 16 && Math.abs(nw - state.money) >= 1 ? `<span class="networth">net worth ${fmt(nw)}</span>` : ''}` +
