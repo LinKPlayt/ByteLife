@@ -477,7 +477,7 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
-    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0,
+    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -998,6 +998,16 @@ const CHOICE_EVENTS = [
   [20,90,n=>`A director offers ${n} a cameo in a blockbuster.`,
     {label:'Take the cameo', risk:0.6, win:{fame:8,happy:6,money:10000}, lose:{fame:3,image:-4}, winText:'The scene becomes a fan favorite.', loseText:'Critics call it a distracting stunt.'},
     {label:'Pass', delta:{}},'famous'],
+  // ---- vehicles and travel ----
+  [16,20,n=>`${n} is ready for a first car.`,
+    {label:'Buy a cheap used sedan ($6,000)', delta:{money:-6000,happy:6}, effect:()=>{ state.assetSeq++; state.assets.push({id:'a' + state.assetSeq, key:'used', name:'Used Sedan', category:'Cars', value:inflR(6000, 100), boughtPrice:inflR(6000, 100), boughtAge:state.age, cond:rint(45, 70)}); }},
+    {label:'Stick with the bus for now', delta:{money:300}},'afford&nocar'],
+  [18,80,n=>`${n}'s car is making a grinding noise.`,
+    {label:'Get it checked right away ($400)', delta:{money:-400}, effect:()=>{ roadVehicles().forEach(x => x.cond = Math.min(100, (x.cond || 70) + 20)); }},
+    {label:'Turn the radio up', risk:0.5, win:{happy:1}, lose:{money:-2500,happy:-3}, winText:'The noise mysteriously stops.', loseText:'The transmission fails on the highway.'},'car'],
+  [18,80,n=>`A last-minute deal pops up: a week in {c} for half price.`,
+    {label:'Book it ($1,200)', delta:{money:-1200,happy:9}, effect:()=>{ TV().trips++; }},
+    {label:'Not this time', delta:{}},'afford'],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
@@ -1022,7 +1032,7 @@ const COND = {
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
   kids:()=>hasRel('Child'), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
   friends:()=>hasRel('Friend'),
-  home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>state.assets.some(x => x.category === 'Cars'),
+  home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>roadVehicles().length > 0, nocar:()=>!roadVehicles().length, traveler:()=>!!state.travel && state.travel.trips >= 3,
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
   renter:()=>state.age >= 20 && !state.assets.some(x => x.category === 'Homes'),
   biz:()=>!!state.business, invested:()=>portfolioValue() > 500,
@@ -1445,6 +1455,12 @@ const BANK = [
   E(18,99,"A fan tattoos {n}'s face on their arm",[['which is flattering and deeply strange',{happy:2}]],'famous'),
   E(6,17,'Classmates find out {n} comes from a famous family',[['and everyone suddenly wants to be friends',{happy:3,friends:3}],['and it is hard to know who to trust',{happy:-2}]],'nepo'),
   E(16,99,'A wax figure of {n} is unveiled at a museum',[['and the likeness is uncanny',{happy:6,fame:2}],['and it looks nothing like them',{happy:-1}]],'famous'),
+  E(16,90,'{n} gets stuck behind a tractor on a country road',[['and decides to enjoy the scenery',{happy:2}]],'car'),
+  E(17,90,'{n} washes and waxes their ride on a sunny afternoon',[['and it gleams like new',{happy:3}]],'car'),
+  E(17,90,'{n} gets a speeding ticket',[['and pays the fine',{money:-200,happy:-2}],['and talks their way out of it',{happy:2}]],'car'),
+  E(18,90,'{n} picks up a hitchhiker',[['who turns out to be fascinating company',{happy:4,smarts:1}],['and spends an uneasy hour',{happy:-2}]],'car'),
+  E(18,95,'{n} flips through photos from past trips',[['and starts planning the next one',{happy:4}]],'traveler'),
+  E(18,95,'{n} gets a postcard from a friend made while traveling',[['and smiles all day',{happy:4,friends:2}]],'traveler'),
 ];
 
 // more two-option decisions
@@ -1685,11 +1701,12 @@ function ageUpYear(){
   const legalPrompted = !prompted && !relPrompted && legalYear(a);
   const bizPrompted = !prompted && !relPrompted && !legalPrompted && bizEventYear(a);
   const propPrompted = !prompted && !relPrompted && !legalPrompted && !bizPrompted && propertyEventYear(a);
-  const famePrompted = fameYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted));
-  const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || famePrompted));
+  const vehPrompted = vehiclesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted));
+  const famePrompted = fameYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted));
+  const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted));
   if(pets.cost) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || famePrompted || pets.asked){ render(); return; }
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -2340,11 +2357,22 @@ const ASSET_CATALOG = {
     {key:'mansion', name:'Hillside Mansion', price:2200000, appreciation:0.050, vol:0.09, upkeepPct:0.015},
   ],
   Cars: [
-    {key:'used', name:'Used Sedan', price:8000, appreciation:-0.15, vol:0.08, upkeepFlat:900},
-    {key:'newsed', name:'New Sedan', price:28000, appreciation:-0.18, vol:0.06, upkeepFlat:1200},
-    {key:'suv', name:'SUV', price:42000, appreciation:-0.17, vol:0.07, upkeepFlat:1500},
-    {key:'sports', name:'Sports Car', price:75000, appreciation:-0.16, vol:0.10, upkeepFlat:2200},
-    {key:'luxcar', name:'Luxury Sedan', price:95000, appreciation:-0.19, vol:0.09, upkeepFlat:2800},
+    {key:'scooter', name:'Moped', kind:'bike', price:2500, appreciation:-0.12, vol:0.06, upkeepFlat:300, minAge:16},
+    {key:'used', name:'Used Sedan', kind:'car', price:8000, appreciation:-0.15, vol:0.08, upkeepFlat:900},
+    {key:'motorcycle', name:'Motorcycle', kind:'bike', price:12000, appreciation:-0.12, vol:0.08, upkeepFlat:700, speed:true},
+    {key:'newsed', name:'New Sedan', kind:'car', price:28000, appreciation:-0.18, vol:0.06, upkeepFlat:1200},
+    {key:'minivan', name:'Minivan', kind:'car', price:38000, appreciation:-0.17, vol:0.05, upkeepFlat:1300},
+    {key:'suv', name:'SUV', kind:'car', price:42000, appreciation:-0.17, vol:0.07, upkeepFlat:1500},
+    {key:'ev', name:'Electric Car', kind:'car', price:45000, appreciation:-0.15, vol:0.06, upkeepFlat:500},
+    {key:'pickup', name:'Pickup Truck', kind:'car', price:48000, appreciation:-0.14, vol:0.06, upkeepFlat:1600},
+    {key:'classic', name:'Classic Convertible', kind:'car', price:65000, appreciation:0.02, vol:0.12, upkeepFlat:2500, classic:true},
+    {key:'sports', name:'Sports Car', kind:'car', price:75000, appreciation:-0.16, vol:0.10, upkeepFlat:2200, speed:true},
+    {key:'luxcar', name:'Luxury Sedan', kind:'car', price:95000, appreciation:-0.19, vol:0.09, upkeepFlat:2800},
+    {key:'rv', name:'Motorhome', kind:'rv', price:120000, appreciation:-0.10, vol:0.06, upkeepFlat:4000},
+    {key:'supercar', name:'Supercar', kind:'car', price:320000, appreciation:-0.10, vol:0.12, upkeepFlat:12000, speed:true},
+    {key:'speedboat', name:'Speedboat', kind:'boat', price:60000, appreciation:-0.10, vol:0.08, upkeepFlat:4000},
+    {key:'yacht', name:'Yacht', kind:'boat', price:2500000, appreciation:-0.06, vol:0.10, upkeepFlat:200000},
+    {key:'jet', name:'Private Jet', kind:'plane', price:8000000, appreciation:-0.08, vol:0.10, upkeepFlat:900000},
   ],
   Jewelry: [
     {key:'watch', name:'Designer Watch', price:5000, appreciation:0.020, vol:0.10},
@@ -2386,7 +2414,7 @@ function assetsValue(){
 }
 function buyAsset(key, financed){
   const t = findCatalog(key);
-  if(!t || state.age < CAT_MIN[t.category]) return;
+  if(!t || state.age < (t.minAge || CAT_MIN[t.category])) return;
   const price = inflR(t.price, 100);
   if(financed && FINANCEABLE.includes(t.category)){
     if(state.bankrupt || state.creditScore < 580) return;
@@ -2396,7 +2424,7 @@ function buyAsset(key, financed){
     state.assetSeq++;
     const id = 'a' + state.assetSeq;
     state.assets.push({id, key:t.key, name:t.name, category:t.category, value:price, boughtPrice:price, boughtAge:state.age});
-    const term = t.category === 'Cars' ? 5 : 30;
+    const term = t.category === 'Cars' ? (t.price >= 200000 ? 15 : 5) : 30;
     const spread = Math.max(0.005, (700 - state.creditScore) / 5000);
     const apr = Math.max(0.03, Math.min(0.15, state.econ.rate + spread));
     takeLoan(t.category === 'Cars' ? 'Car' : 'Mortgage', price - down, term, apr, {assetId:id});
@@ -2408,6 +2436,7 @@ function buyAsset(key, financed){
     state.assets.push({id:'a'+state.assetSeq, key:t.key, name:t.name, category:t.category, value:price, boughtPrice:price, boughtAge:state.age});
     pushEntry(state.age, `${state.name} buys ${t.name} in cash.`, CAT_BUY_DELTA[t.category]);
   }
+  if(t.category === 'Cars') state.assets[state.assets.length - 1].cond = 100;
   render();
 }
 const renoCost = x => Math.round(x.value * 0.06 / 100) * 100;
@@ -2671,7 +2700,7 @@ function assetsYear(a){
 }
 
 function assetCatalogRow(t, cat){
-  const locked = state.age < CAT_MIN[cat];
+  const minA = t.minAge || CAT_MIN[cat], locked = state.age < minA;
   const price = inflR(t.price, 100);
   const afford = state.money >= price;
   const financeable = FINANCEABLE.includes(cat);
@@ -2679,14 +2708,16 @@ function assetCatalogRow(t, cat){
   const canFinance = financeable && state.money >= down && state.creditScore >= 580 && !state.bankrupt;
   return `<div class="invrow">
     <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
-    <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}</div>
+    <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
-      <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Locked · age ${CAT_MIN[cat]}` : 'Buy Cash'}</button>
+      <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Locked · age ${minA}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
+      ${cat === 'Cars' && t.price <= 400000 ? `<button onclick="buyUsedVehicle('${t.key}')" ${locked || state.done['used_' + t.key] || !canPay(Math.round(price * 0.65)) ? 'disabled' : ''}>Used (~${fmt(Math.round(price * 0.58 / 100) * 100)})</button>` : ''}
       ${financeable ? `<button onclick="buyAsset('${t.key}',true)" ${(locked || !canFinance) ? 'disabled' : ''}>Finance (${fmt(down)} down)</button>` : ''}
     </div>
   </div>`;
 }
 function ownedAssetRow(x){
+  if(x.category === 'Cars') return vehicleRowHtml(x);
   const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
   const dir = gp >= 0 ? 'up' : 'down';
   const fee = (x.category === 'Homes' || x.category === 'Cars') ? 0.05 : 0;
@@ -2791,6 +2822,199 @@ function relationshipsYear(a, prompted){
   moments.forEach(m => { if(m !== shown && m.fallback) m.fallback(); });
   if(shown){ presentCustom(shown.prompt, shown.opts); return true; }
   return false;
+}
+
+// ---------- Vehicles: condition, breakdowns, accidents and fun ----------
+const ROAD_KINDS = ['car', 'bike', 'rv'];
+const vehOf = x => findCatalog(x.key) || {};
+const vehKind = x => vehOf(x).kind || 'car';
+const roadVehicles = () => state.assets.filter(x => x.category === 'Cars' && ROAD_KINDS.includes(vehKind(x)));
+const serviceCost = x => Math.round((vehOf(x).upkeepFlat || 1000) * state.econ.cumInflation * 0.6 / 10) * 10;
+const customCost = x => Math.max(inflR(800, 50), Math.round(x.value * 0.08 / 50) * 50);
+function buyUsedVehicle(key){
+  const t = findCatalog(key); if(!t || t.category !== 'Cars' || state.age < (t.minAge || CAT_MIN.Cars) || state.done['used_' + key]) return;
+  const price = Math.round(inflR(t.price, 100) * (0.5 + Math.random() * 0.15) / 100) * 100;
+  if(!ensureCash(price)) return;
+  state.money -= price; state.done['used_' + key] = true;
+  const lemon = Math.random() < 0.15;
+  state.assetSeq++;
+  state.assets.push({id:'a' + state.assetSeq, key:t.key, name:'Used ' + t.name, category:'Cars', value:price, boughtPrice:price, boughtAge:state.age, cond: lemon ? rint(15, 30) : rint(50, 78)});
+  pushEntry(state.age, lemon ? `${state.name} buys a used ${t.name.toLowerCase()} for ${fmt(price)}. It turns out to be a lemon.` : `${state.name} buys a used ${t.name.toLowerCase()} for ${fmt(price)}.`, {happy: lemon ? 1 : 4});
+  render();
+}
+function vehicleAct(id, key){
+  const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Cars' || state.done['va_' + key + '_' + id] || state.crime.prison) return;
+  const t = vehOf(x), n = state.name, k = vehKind(x);
+  if(x.cond === undefined) x.cond = 80;
+  if(key === 'service'){
+    const c = serviceCost(x); if(!ensureCash(c)) return; state.money -= c;
+    x.cond = Math.min(100, x.cond + 30);
+    pushEntry(state.age, `${n} has the ${x.name.toLowerCase()} serviced.`, {});
+  } else if(key === 'drive'){
+    const big = k === 'boat' || k === 'plane';
+    pushEntry(state.age, k === 'plane' ? `${n} flies the jet to ${pick(CITIES)} for lunch.` : k === 'boat' ? `${n} spends a perfect day out on the water in the ${x.name.toLowerCase()}.` : k === 'bike' ? `${n} takes the ${x.name.toLowerCase()} out for a long ride.` : `${n} takes the ${x.name.toLowerCase()} for a drive with the windows down.`, {happy: big ? 6 : 3});
+  } else if(key === 'track'){
+    if(Math.random() < 0.85) pushEntry(state.age, `${n} takes the ${x.name.toLowerCase()} to the track and sets a personal best.`, {happy:7});
+    else { x.cond = Math.max(5, x.cond - 35); x.value = Math.round(x.value * 0.85); addCondition('bone', state.age); pushEntry(state.age, `${n} spins out at the track and walks away with a broken bone.`, {happy:-5, health:-8}); }
+  } else if(key === 'custom'){
+    const c = customCost(x); if(!ensureCash(c)) return; state.money -= c;
+    x.value = Math.round(x.value + c * (t.classic ? 1.2 : 0.4)); x.custom = true;
+    pushEntry(state.age, `${n} customizes the ${x.name.toLowerCase()} and it turns heads everywhere.`, {happy:4, looks:1});
+  }
+  state.done['va_' + key + '_' + id] = true;
+  render();
+}
+const DUI = {key:'dui', ing:'driving drunk', charge:'drunk driving', label:'Drive drunk', felony:false, years:[1, 2], pay:[0, 0]};
+// yearly: wear and tear, breakdowns, accidents. Returns true if it asked a question.
+function vehiclesYear(a, canPrompt){
+  const n = state.name, cum = state.econ.cumInflation;
+  state.assets.filter(x => x.category === 'Cars').forEach(x => {
+    const t = vehOf(x), k = vehKind(x);
+    if(x.cond === undefined) x.cond = 80;
+    x.cond = Math.max(0, x.cond - rint(3, 7));
+    if(x.cond < 40) x.value = Math.round(x.value * 0.96);
+    if(t.classic) x.value = Math.round(x.value * (x.cond >= 70 ? 1.02 : 0.95));
+    if(Math.random() < Math.max(0, (45 - x.cond) / 100) + 0.02){
+      const bill = Math.round((t.upkeepFlat || 1000) * cum * (0.5 + Math.random()) / 10) * 10;
+      x.cond = Math.min(100, x.cond + 15);
+      pushEntry(a, `The ${x.name.toLowerCase()} ${k === 'boat' ? 'needs engine work' : k === 'plane' ? 'is grounded for repairs' : 'breaks down'}, and the repair costs ${fmt(bill)}.`, {money:-bill, happy:-2});
+    }
+  });
+  const road = roadVehicles();
+  if(!road.length || state.crime.prison) return false;
+  const hb = state.health.habits;
+  if(canPrompt && hb.drink === 2 && Math.random() < 0.05){
+    pushEntry(a, `${n} is pulled over after drinking and fails a breath test.`, {happy:-6});
+    const c = Object.assign({}, DUI, {felony: state.crime.record.some(r => r.crime === 'drunk driving' && !r.expunged)});
+    arrest(c, 0);
+    return true;
+  }
+  const fast = road.some(x => vehOf(x).speed);
+  const risk = 0.02 + (fast ? 0.025 : 0) + (hb.drink === 2 ? 0.04 : 0) + (a < 25 ? 0.02 : 0) + (a > 80 ? 0.03 : 0) + (road.some(x => x.cond < 30) ? 0.02 : 0);
+  if(Math.random() < risk){
+    const x = pick(road), cover = state.insurance.auto ? 0.8 : 0, serious = Math.random() < 0.3;
+    const repair = Math.round(x.value * (serious ? 0.6 : 0.2) + 1500 * cum);
+    if(serious && Math.random() < 0.4){
+      state.assets = state.assets.filter(y => y.id !== x.id);
+      const li = state.loans.findIndex(l => l.assetId === x.id); if(li >= 0) state.loans.splice(li, 1);
+      const payout = Math.round(x.value * cover);
+      pushEntry(a, `${n} is in a serious crash and the ${x.name.toLowerCase()} is totaled.${cover ? ' Insurance pays out ' + fmt(payout) + '.' : ' There is no insurance to cover it.'}`, {money:payout, happy:-8, health:-10});
+      addCondition('bone', a);
+    } else {
+      x.cond = Math.max(5, x.cond - (serious ? 40 : 15));
+      pushEntry(a, serious ? `${n} is hurt in a car accident.${cover ? ' Insurance covers most of the repairs.' : ''}` : `${n} has a fender bender${cover ? '; insurance covers most of it' : ''}.`, {money:-Math.round(repair * (1 - cover)), happy: serious ? -6 : -2, health: serious ? -8 : 0});
+      if(serious) addCondition('bone', a);
+    }
+  }
+  return false;
+}
+function vehicleRowHtml(x){
+  const t = vehOf(x), k = vehKind(x), cond = x.cond === undefined ? 80 : x.cond, done = key => state.done['va_' + key + '_' + x.id];
+  const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
+  const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
+  return `<div class="invrow">
+    <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
+    <div class="owned">${{car:'Car', bike:'Motorbike', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
+    <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
+    <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
+    <div class="btnrow-social">${btn('drive', k === 'plane' ? 'Fly somewhere' : k === 'boat' ? 'Take it out' : 'Go for a drive')}${btn('service', 'Service (' + fmt(serviceCost(x)) + ')', !canPay(serviceCost(x)) || cond >= 95)}${t.speed ? btn('track', 'Track day') : ''}${btn('custom', 'Customize (' + fmt(customCost(x)) + ')', !canPay(customCost(x)))}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(x.value * 0.95)}</button></div>
+  </div>`;
+}
+// ---------- Travel ----------
+const TRAVEL_DESTS = [
+  {key:'camping', name:'Camping in a national park', place:'a national park', cost:400, happy:6, health:3, minAge:8, domestic:true},
+  {key:'roadtrip', name:'Road trip in your own vehicle', place:'a cross-country road trip', cost:900, happy:8, minAge:17, needs:'road', domestic:true},
+  {key:'beach', name:'Beach resort', places:['Cancún','Bali','the Maldives','Phuket'], cost:3000, happy:10, health:2, minAge:16},
+  {key:'city', name:'City break', places:['Paris','Tokyo','New York','Rome','London','Barcelona','Seoul'], cost:3500, happy:9, smarts:3, minAge:16},
+  {key:'ski', name:'Ski trip', places:['the Alps','the Rockies','Hokkaido'], cost:4500, happy:9, health:2, minAge:16, injury:0.08},
+  {key:'backpack', name:'Backpacking', places:['Southeast Asia','South America','Eastern Europe'], cost:2500, happy:12, smarts:3, minAge:18, rough:true},
+  {key:'safari', name:'Safari', places:['Kenya','Tanzania','Botswana'], cost:8000, happy:14, smarts:2, minAge:16},
+  {key:'cruise', name:'Cruise', places:['the Caribbean','the Norwegian fjords','the Greek islands'], cost:5000, happy:10, minAge:16},
+  {key:'sailing', name:'Sailing on your own boat', place:'the Mediterranean', cost:3000, happy:14, minAge:18, needs:'boat'},
+  {key:'pilgrimage', name:'Walking pilgrimage', places:['the Camino de Santiago','the Kumano Kodo'], cost:2000, happy:10, health:5, minAge:18},
+  {key:'world', name:'Luxury trip around the world', place:'around the world', cost:60000, happy:20, smarts:4, minAge:21},
+  {key:'space', name:'Suborbital space flight', place:'the edge of space', cost:450000, happy:25, fame:5, minAge:21},
+];
+const TRAVEL_CLASS = {budget:{label:'Budget', mult:0.6, happy:0.8, mishap:1.6}, standard:{label:'Standard', mult:1, happy:1, mishap:1}, luxury:{label:'Luxury', mult:3, happy:1.3, mishap:0.4}};
+const TV = () => state.travel || (state.travel = {trips:0, places:[]});
+const ownsJet = () => state.assets.some(x => x.category === 'Cars' && vehKind(x) === 'plane');
+function travelParty(){
+  const w = state.travelWith || 'alone';
+  const partner = state.relationships.find(r => r.type === 'Spouse' || r.type === 'Partner');
+  const kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18);
+  if(w === 'partner' && partner) return {who:[partner], mult:2, label:'with ' + partner.name};
+  if(w === 'family' && (partner || kids.length)) return {who:(partner ? [partner] : []).concat(kids), mult:1 + (partner ? 1 : 0) + kids.length * 0.6, label:'with the family'};
+  if(w === 'friends'){ const f = state.relationships.filter(r => r.type === 'Friend').sort((x, y) => y.closeness - x.closeness).slice(0, 2); if(f.length) return {who:f, mult:1, label:'with ' + f.map(x => x.name).join(' and ')}; }
+  return {who:[], mult:1, label:'solo'};
+}
+function tripCost(d){
+  const cls = TRAVEL_CLASS[state.travelClass || 'standard'];
+  const jet = ownsJet() && !d.domestic && d.key !== 'space' ? 0.4 : 1;
+  return Math.round(inflR(d.cost, 10) * (d.key === 'space' ? 1 : cls.mult) * travelParty().mult * jet / 10) * 10;
+}
+function tripState(d){
+  const a = state.age, limit = state.retired ? 3 : 2;
+  if(state.crime.prison) return {ok:false, why:'not from prison'};
+  if(a < d.minAge) return {ok:false, why:'from age ' + d.minAge};
+  if(d.needs === 'road' && !roadVehicles().length) return {ok:false, why:'needs a vehicle'};
+  if(d.needs === 'boat' && !state.assets.some(x => x.category === 'Cars' && vehKind(x) === 'boat')) return {ok:false, why:'needs a boat'};
+  if(state.done['trip_' + d.key]) return {ok:false, why:'done this year'};
+  if((state.done.trips || 0) >= limit) return {ok:false, why:'no more time off this year'};
+  if(!canPay(tripCost(d))) return {ok:false, why:'costs ' + fmt(tripCost(d))};
+  return {ok:true, why:''};
+}
+function takeTrip(key){
+  const d = TRAVEL_DESTS.find(x => x.key === key); if(!d || !tripState(d).ok) return;
+  const cost = tripCost(d), cls = TRAVEL_CLASS[state.travelClass || 'standard'], party = travelParty(), n = state.name, tv = TV();
+  pay(cost);
+  state.done['trip_' + key] = true; state.done.trips = (state.done.trips || 0) + 1;
+  const place = d.place || pick(d.places);
+  const firstTime = !tv.places.includes(place);
+  if(firstTime) tv.places.push(place);
+  tv.trips++;
+  let happy = Math.round(d.happy * cls.happy * (hasMyTrait('Adventurous') ? 1.25 : 1) * (firstTime ? 1 : 0.8));
+  const delta = {happy, money:0};
+  if(d.health) delta.health = d.health;
+  if(d.smarts) delta.smarts = d.smarts;
+  if(d.fame) delta.fame = d.fame;
+  party.who.forEach(r => bump(r, rint(6, 12)));
+  let text = `${n} travels ${party.label === 'solo' ? 'solo' : party.label} to ${place}${cls.mult > 1 && d.key !== 'space' ? ' in luxury' : cls.mult < 1 ? ' on a shoestring' : ''}${ownsJet() && !d.domestic ? ', flying their own jet' : ''}.`;
+  // things that happen on the road
+  const r = Math.random(), mishap = 0.18 * cls.mishap * (d.rough ? 1.5 : 1);
+  if(d.injury && Math.random() < d.injury){ addCondition('bone', state.age); text += ' A bad fall on the slopes ends in a broken bone.'; delta.health = -6; delta.happy = Math.round(happy / 2); }
+  else if(r < mishap){
+    const m = pick(['lost', 'sick', 'robbed', 'cancel']);
+    if(m === 'lost') text += ' The airline loses their luggage for the whole trip.', delta.happy -= 3;
+    if(m === 'sick') text += ' A bout of food poisoning wipes out two days.', delta.health = (delta.health || 0) - 4, delta.happy -= 3;
+    if(m === 'robbed'){ const lossAmt = inflR(rint(2, 8) * 100, 10); text += ` A pickpocket gets away with ${fmt(lossAmt)}.`; delta.money -= lossAmt; delta.happy -= 2; }
+    if(m === 'cancel'){ const extra = Math.round(cost * 0.2); text += ` A cancelled flight costs an extra ${fmt(extra)}.`; delta.money -= extra; delta.happy -= 2; }
+  } else if(r < mishap + 0.2){
+    const g = pick(['friend', 'romance', 'upgrade', 'inspired']);
+    if(g === 'romance' && !hasRel('Partner', 'Spouse') && state.age >= 18 && party.label === 'solo' && state.relationships.length < 60){ const p = newRel('Partner', {closeness:rint(40, 55), origin:'while traveling in ' + place}); text += ` A holiday romance with ${p.name} turns into something more.`; delta.happy += 5; }
+    else if(g === 'friend' && state.relationships.length < 60){ const f = newRel('Friend', {closeness:rint(35, 50), origin:'while traveling'}); text += ` They make a new friend, ${f.name}, along the way.`; delta.happy += 2; }
+    else if(g === 'upgrade') text += ' A surprise upgrade makes it even better.', delta.happy += 3;
+    else text += ' They come home full of new ideas.', delta.smarts = (delta.smarts || 0) + 2;
+  }
+  if(!delta.money) delete delta.money;
+  pushEntry(state.age, text + ` (${fmt(cost)})`, delta);
+  const milestone = {5:'seasoned traveler', 12:'true globetrotter', 20:'legendary explorer'}[tv.places.length];
+  if(firstTime && milestone) pushEntry(state.age, `${n} has now been to ${tv.places.length} places, a ${milestone}.`, {happy:5});
+  render();
+}
+function travelHtml(){
+  if(state.age < 8) return '';
+  const tv = TV(), party = travelParty(), pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
+  const partner = hasRel('Spouse', 'Partner'), kids = state.relationships.some(r => r.type === 'Child' && r.age < 18), friends = hasRel('Friend');
+  let h = `<div class="plabel">Travel</div><div class="invrow"><div class="owned">${tv.trips ? tv.trips + ' trip' + (tv.trips > 1 ? 's' : '') + ', ' + tv.places.length + ' place' + (tv.places.length > 1 ? 's' : '') + ' visited' + (tv.places.length ? ': ' + tv.places.slice(-6).join(', ') : '') : 'No trips yet. New places lift your mood the most.'} · ${state.retired ? 3 : 2} trips a year${ownsJet() ? ' · your jet makes flights 60% cheaper' : ''}</div>
+    <div class="sortrow">${Object.keys(TRAVEL_CLASS).map(k => pill(TRAVEL_CLASS[k].label, (state.travelClass || 'standard') === k, `state.travelClass='${k}';renderPanel()`)).join('')}</div>
+    <div class="sortrow">${pill('Solo', (state.travelWith || 'alone') === 'alone', "state.travelWith='alone';renderPanel()")}${partner ? pill('With partner', state.travelWith === 'partner', "state.travelWith='partner';renderPanel()") : ''}${partner || kids ? pill('With family', state.travelWith === 'family', "state.travelWith='family';renderPanel()") : ''}${friends ? pill('With friends', state.travelWith === 'friends', "state.travelWith='friends';renderPanel()") : ''}</div></div>`;
+  TRAVEL_DESTS.forEach(d => {
+    if(state.age < d.minAge - 4) return;
+    const st = tripState(d);
+    h += opt(d.name + (d.places ? ' <span class="sub-meta">' + d.places.join(', ') + '</span>' : ''), st.ok ? fmt(tripCost(d)) : st.why, `takeTrip('${d.key}')`, !st.ok);
+  });
+  return h;
 }
 
 // ---------- Fame: where it comes from, what it pays, what it costs ----------
@@ -4312,7 +4536,7 @@ function prisonYear(a){
   updateMarket(a); payDividends(a); housingYear(a); assetsYear(a);
   relationshipsYear(a, true);
   const pc = petsYear(a, false).cost; if(pc) applyDelta({money:-pc});
-  fameYear(a, false);
+  fameYear(a, false); vehiclesYear(a, false);
   if(!k.prison) return;                            // a relationship event can't free you, but stay safe
   applyDelta({health: -rint(0, 2), happy: -rint(2, 5)});
   if(Math.random() < 0.6){
@@ -6084,7 +6308,7 @@ function togglePanel(name){
   state.panel = state.panel === name ? null : name; renderPanel();
   if(state.panel) window.scrollTo({top:0, behavior:"smooth"});
 }
-const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Fame & social media", hob:"Hobbies", crime:"Crime & the law"};
+const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities, travel & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Fame & social media", hob:"Hobbies", crime:"Crime & the law"};
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
@@ -6360,6 +6584,7 @@ function renderPanel(){
       const done = state.done[x.key];
       h += opt(x.label, done ? 'done ✓' : (x.cost ? fmt(actCost(x)) : 'free'), `doActivity(${i})`, done || state.money < actCost(x));
     });
+    h += travelHtml();
     h += hobbiesHtml();
   } else if(state.panel === 'edu'){
     h += eduPanelHtml();
@@ -6404,7 +6629,7 @@ function renderPanel(){
     }
     for(const cat in ASSET_CATALOG){
       if(cat === 'Real Estate') continue;
-      h += `<div class="plabel">${cat.toUpperCase()}${a < CAT_MIN[cat] ? ' · unlocks at ' + CAT_MIN[cat] : ''}</div>`;
+      h += `<div class="plabel">${cat === 'Cars' ? 'VEHICLES' : cat.toUpperCase()}${a < CAT_MIN[cat] ? ' · unlocks at ' + CAT_MIN[cat] : ''}</div>`;
       ASSET_CATALOG[cat].forEach(t => h += assetCatalogRow(t, cat));
     }
   } else if(state.panel === 'soc'){
