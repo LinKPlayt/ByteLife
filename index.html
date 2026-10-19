@@ -532,7 +532,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -1768,7 +1768,8 @@ function ageUpYear(){
   if(pets.cost) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
   const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted){ render(); return; }
+  const netPrompted = networkYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted));
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -2158,7 +2159,8 @@ function updateMarket(a){
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5; // roughly -1..1, centered
     const marketMove = x.hedge ? -bias * 0.35 : bias;                    // gold and bonds hold up when stocks crash
     const wf = wfx(), worldMove = (x.hedge ? -wf.market * 0.5 : wf.market) + (wf.sectors[x.sector] || 0) + wf.inflation * 0.8 + (x.type === 'stock' && !x.hedge ? 0.03 : 0);   // prices of real businesses rise with inflation; stocks pay a premium for living through bad times
-    const change = x.drift + marketMove + worldMove + (swings[x.sector] || 0) + (hit && hit.key === x.key ? hit.move : 0) + noise * x.vol;
+    const change = x.drift + marketMove + worldMove + (swings[x.sector] || 0) + (hit && hit.key === x.key ? hit.move : 0) + noise * x.vol + (m.tip || 0);
+    m.tip = 0;
     m.price = Math.max(0.0001, m.price * (1 + change));
   });
   state.marketNews = news.map(n => ({text:n.text, up:n.up, key:n.key || null, age:a}));
@@ -2819,8 +2821,8 @@ function findRel(id){ return state.relationships.find(r => r.id === id); }
 // ---------- People: personalities, interactions, and inheritance ----------
 const TRAITS = ["Loyal","Funny","Ambitious","Moody","Generous","Flaky","Adventurous","Wise"];
 const TRAIT_BLURB = {Loyal:"bonds fade slowly", Funny:"makes outings happier", Ambitious:"boosts your career", Moody:"has off days", Generous:"gives back", Flaky:"cancels plans", Adventurous:"loves a trip", Wise:"gives great advice"};
-const PEER = ["Friend","Coworker"], KIN = ["Mother","Father","Sibling"], LOVE = ["Partner","Spouse"];
-const EVERYONE = ["Friend","Coworker","Mother","Father","Sibling","Partner","Spouse","Child","Grandchild"];
+const PEER = ["Friend","Coworker","Contact"], KIN = ["Mother","Father","Sibling"], LOVE = ["Partner","Spouse"];
+const EVERYONE = ["Friend","Coworker","Contact","Mother","Father","Sibling","Partner","Spouse","Child","Grandchild"];
 function rollTraits(){ const n = Math.random() < 0.5 ? 1 : 2, t = []; while(t.length < n){ const x = pick(TRAITS); if(!t.includes(x)) t.push(x); } return t; }
 function hasTrait(r, t){ return !!(r.traits && r.traits.includes(t)); }
 function makeRel(type, o){
@@ -2829,6 +2831,7 @@ function makeRel(type, o){
              closeness: o.closeness !== undefined ? o.closeness : 35, traits: o.traits || rollTraits(), origin: o.origin || ""};
   if(o.livingTogether) r.livingTogether = true;
   r.gender = o.gender || (type === 'Mother' ? 'female' : type === 'Father' ? 'male' : rollGender());
+  if(PEER.includes(type) && r.age >= 22 && (type === 'Contact' || Math.random() < 0.3)) r.pro = rollPro(o.proBoost);
   return r;
 }
 const REL_WORDS = {Child:['daughter','son'], Sibling:['sister','brother'], Spouse:['wife','husband'], Partner:['girlfriend','boyfriend'], Grandchild:['granddaughter','grandson']};
@@ -3754,7 +3757,9 @@ const INTERACTIONS = [
   {key:"trip", label:"Trip", who:["Friend"], cost:700, gain:[12,18], happy:[6,9], minAge:16, adv:true, fun:true, texts:["{n} and {r} take a trip neither will forget.", "{n} and {r} escape for a few days of adventure."]},
   {key:"talk", label:"Heart-to-heart", who:PEER.concat(LOVE), gain:[8,14], happy:[2,4], minClose:35, kind:"talk", texts:["{n} and {r} have a long, honest talk.", "{n} opens up to {r} about what has been weighing on them."]},
   {key:"favor", label:"Ask a favor", who:PEER, minClose:45, kind:"favor"},
-  {key:"intro", label:"Get introduced", who:["Friend"], minClose:50, kind:"intro"},
+  {key:"intro", label:"Get introduced", who:["Friend","Contact"], minClose:50, kind:"intro"},
+  {key:"biz", label:"Talk business", who:PEER, minClose:40, minAge:18, needs:r => !!r.pro, kind:"network"},
+  {key:"coffee", label:"Coffee", who:["Contact"], cost:10, gain:[5,8], happy:[1,2], texts:["{n} meets {r} for coffee and talks shop.", "{n} catches up with {r} over coffee."]},
   {key:"lunch", label:"Lunch", who:["Coworker"], cost:25, gain:[6,9], happy:[1,3], texts:["{n} grabs lunch with {r} and trades office stories.", "{n} and {r} take a long lunch away from the desk."]},
   {key:"collab", label:"Team up", who:["Coworker"], gain:[6,10], happy:[1,3], kind:"collab", needs:() => !!state.job},
   {key:"visit", label:"Visit", who:KIN.concat(["Child"]), cost:150, gain:[8,12], happy:[3,5], needs:r => !r.livingTogether && (r.type !== "Child" || r.movedOut), texts:["{n} visits {r} and the hours fly by.", "{n} makes the trip to see {r}."]},
@@ -3795,6 +3800,10 @@ function interact(id, key){
     render(); return;
   }
   if(cost){ ensureCash(cost); state.money -= cost; }
+  if(ix.kind === "network"){
+    if(networkAsk(r)){ render(); return; }
+    bump(r, 2); pushEntry(state.age, `${rn} has nothing for ${n} right now, but promises to keep them in mind.`, {}); render(); return;
+  }
   let gain = ix.gain ? rint(ix.gain[0], ix.gain[1]) : 0, happy = ix.happy ? rint(ix.happy[0], ix.happy[1]) : 0, smarts = ix.smarts ? rint(ix.smarts[0], ix.smarts[1]) : 0;
   const delta = {}; let text = "", extra = "";
   if(hasTrait(r, "Loyal")) gain = Math.round(gain * 1.15);
@@ -3851,6 +3860,9 @@ const VENUES = [
   {key:"neighborhood", label:"In the neighborhood", type:"Friend", cost:0, origin:"in the neighborhood", spread:6, ok:() => state.age >= 8, why:"from age 8"},
   {key:"online", label:"Online", type:"Friend", cost:0, origin:"online", spread:8, ok:() => state.age >= 13, why:"from age 13"},
   {key:"club", label:"At a club or class", type:"Friend", cost:60, origin:"at a class", spread:10, ok:() => state.age >= 14, why:"from age 14"},
+  {key:"party", label:"At a party", type:"Friend", cost:40, origin:"at a party", spread:8, ok:() => state.age >= 18, why:"from age 18", pro:0.6},
+  {key:"mixer", label:"Networking event", type:"Contact", cost:80, origin:"at a networking event", spread:12, ok:() => state.age >= 18, why:"from age 18"},
+  {key:"conference", label:"Industry conference", type:"Contact", cost:900, origin:"at a conference", spread:14, ok:() => !!state.job && state.job.track !== 'Odd Jobs', why:"needs a career", boost:0.8},
 ];
 const vCost = v => v.cost ? inflR(v.cost, 5) : 0;
 function venueState(v){
@@ -3865,8 +3877,9 @@ function meetPeople(key){
   const v = VENUES.find(x => x.key === key); if(!v || !venueState(v).ok) return;
   state.done["meet_" + key] = true; state.done.meets = (state.done.meets || 0) + 1;
   if(vCost(v)){ ensureCash(vCost(v)); state.money -= vCost(v); }
-  const r = newRel(v.type, {age: Math.max(0, state.age + rint(-v.spread, v.spread)), closeness: rint(25,42), origin: v.origin});
-  pushEntry(state.age, `${state.name} meets ${r.name} ${v.origin}. They seem ${r.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:4});
+  const r = newRel(v.type, {age: Math.max(v.pro || v.type === 'Contact' ? 22 : 0, state.age + rint(-v.spread, v.spread)), closeness: rint(25,42), origin: v.origin, proBoost: v.boost});
+  if(v.pro && !r.pro && Math.random() < v.pro) r.pro = rollPro(v.boost);
+  pushEntry(state.age, `${state.name} meets ${r.name}${r.pro ? ', ' + (proTitle(r).match(/^[AEIOU]/) ? 'an ' : 'a ') + proTitle(r).toLowerCase() + ',' : ''} ${v.origin}. They seem ${r.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:4});
   render();
 }
 function meetFriend(){ const v = VENUES.find(x => venueState(x).ok); if(v) meetPeople(v.key); }
@@ -4453,7 +4466,7 @@ function relRow(r){
   }
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
   const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
-  return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b> <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
+  return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b>' + (r.pro ? ' — ' + proTitle(r) : '') + ' <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
     '<div class="stat-track" style="margin:5px 0 2px;"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' +
     '<div class="btnrow-social">' + quick + '<button onclick="toggleRel(\'' + r.id + '\')">' + (open ? "Less" : "More") + "</button></div>" +
@@ -4466,6 +4479,7 @@ function socialPanelHtml(){
   let h = '<div class="status">' + people.length + " people in your life · " + strong + " close bond" + (strong === 1 ? "" : "s") +
           (closest ? "<br>Closest: <b>" + closest.name + "</b> (" + bondLabel(closest).toLowerCase() + ")" : "") +
           "<br>Close bonds lift your mood a little every year." +
+          (myNetwork().length ? "<br>Network: <b>" + myNetwork().length + "</b> professional connection" + (myNetwork().length === 1 ? "" : "s") + " · strength " + networkScore() + ". Close ones bring job offers, deals and introductions." : (a >= 18 ? "<br>Meet people at parties, networking events and conferences to build a professional network." : "")) +
           (state.lineage.length ? "<br>Generation " + state.generation + " of the family line, after " + state.lineage.map(x => x.name).join(" → ") + "." : "") + "</div>";
   if(state.estates.length) h += estatesHtml();
   if(state.crime.prison) h += '<div class="status">From inside, you can only call people and talk things through.</div>';
@@ -4485,7 +4499,7 @@ function socialPanelHtml(){
   }
   }
   if(!people.length) h += '<div class="status">No connections yet. Use "Meet people" to start.</div>';
-  const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child","Grandchild"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"]];
+  const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child","Grandchild"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"], ["Professional network", r => r.type === "Contact"]];
   groups.forEach(([label, test]) => {
     const list = people.filter(test).sort((x, y) => y.closeness - x.closeness);
     if(list.length) h += '<div class="plabel">' + label + " (" + list.length + ")</div>" + list.map(relRow).join("");
@@ -4870,6 +4884,8 @@ function arrest(c, amt){
   opts.push({label:"Go to trial with a public defender", run:() => trial(c, amt, 0)});
   if(canPay(f.priv)) opts.push({label:`Hire a private lawyer (${fmt(f.priv)})`, run:() => { pay(f.priv); trial(c, amt, 0.18); }});
   if(canPay(f.top)) opts.push({label:`Hire a top defense attorney (${fmt(f.top)})`, run:() => { pay(f.top); trial(c, amt, 0.34); }});
+  const lawFriend = myNetwork().find(r => r.pro === 'lawyer' && r.closeness >= 50);
+  if(lawFriend) opts.push({label:`Call ${lawFriend.name}, the attorney you know (free)`, run:() => { bump(lawFriend, -10); trial(c, amt, 0.3); }});
   presentCustom(`${n} is charged with ${c.charge}${c.felony ? ', a felony' : ''}. ${priorCount() ? 'Their record will count against them. ' : ''}How do they plead?`, opts);
 }
 function trial(c, amt, lawyer){
@@ -5406,7 +5422,7 @@ function suggestBizName(typeKey){
   const word = BIZ_WORD[typeKey] || 'Company', first = state.name.split(' ')[0];
   return Math.random() < 0.35 ? `${first}'s ${word}` : `${pick(BIZ_PREFIX)} ${pick(BIZ_PREFIX.concat(['Peak','Fox','Pine','Stone','River']))} ${word}`.replace(/^(\w+) \1 /, '$1 ');
 }
-const bizShare = b => b && b.cofounder ? 0.5 : 1;
+const bizShare = b => b ? (b.cofounder ? 0.5 : 1) * (1 - (b.dilution || 0)) : 1;
 function bizName(b){ return (b && b.name) || (b ? bizType(b.type).name : ''); }
 function fillBizName(){ const el = document.getElementById('bizName'); if(el) el.value = suggestBizName(pick(BUSINESS_TYPES).key); }
 function renameBusiness(){
@@ -6454,7 +6470,7 @@ function admitChance(c){
   const e = ED(), s = state.stats;
   if(!c.minGpa) return 1;
   if(c.minSmarts && s.smarts < c.minSmarts - 10) return 0.02;
-  const extra = Math.min(0.15, (e.clubs || 0) * 0.05) + (e.testPrep ? 0.08 : 0) + (Object.keys(state.hobbies).some(k => state.hobbies[k].level >= 50) ? 0.05 : 0);
+  const extra = Math.min(0.15, (e.clubs || 0) * 0.05) + (e.testPrep ? 0.08 : 0) + (e.rec ? 0.12 : 0) + (Object.keys(state.hobbies).some(k => state.hobbies[k].level >= 50) ? 0.05 : 0);
   const p = 0.5 + (e.gpa - c.minGpa) / 22 + (s.smarts - 60) / 200 + extra;
   return Math.max(0.03, Math.min(c.key === 'elite' ? 0.75 : 0.97, p));
 }
@@ -6930,7 +6946,7 @@ function applyJob(trackName){
   if(state.retired || state.age > 66) return;
   if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     if(state.job){
       convertCoworkersToFriends();
@@ -8001,6 +8017,246 @@ function consequencesHtml(){
   return '<div class="plabel">Chain reactions</div>' + live.map(th => threadHtml(th, false)).join('') + done.map(th => threadHtml(th, true)).join('');
 }
 
+// ---------- Networking: who you know has real economic weight ----------
+// Friends, coworkers and contacts can have a profession. Close connections bring job offers,
+// introductions, investments, deals and favors; some ask things of you in return.
+const PROFESSIONS = [
+  {key:'founder', title:'Tech Entrepreneur', tier:3, w:1.1, track:'Technology'},
+  {key:'vc', title:'Venture Capitalist', tier:3, w:0.5, track:'Finance'},
+  {key:'exec', title:'Corporate Executive', tier:3, w:0.8, track:'Business'},
+  {key:'headhunter', title:'Headhunter', tier:2, w:0.8},
+  {key:'banker', title:'Banker', tier:2, w:0.8, track:'Finance'},
+  {key:'fund', title:'Hedge Fund Manager', tier:3, w:0.5, track:'Finance'},
+  {key:'lawyer', title:'Attorney', tier:2, w:0.9, track:'Law'},
+  {key:'doctor', title:'Doctor', tier:2, w:0.9, track:'Medicine'},
+  {key:'realtor', title:'Real Estate Agent', tier:1, w:1, track:'Business'},
+  {key:'politician', title:'Politician', tier:3, w:0.4, track:'Politics'},
+  {key:'producer', title:'Film Producer', tier:3, w:0.4, track:'Acting'},
+  {key:'journalist', title:'Journalist', tier:2, w:0.7},
+  {key:'professor', title:'Professor', tier:2, w:0.7, track:'Education'},
+  {key:'chef', title:'Restaurant Owner', tier:1, w:0.9, track:'Culinary'},
+  {key:'contractor', title:'Contractor', tier:1, w:0.9, track:'Trades'},
+];
+const proOf = r => r && r.pro ? PROFESSIONS.find(p => p.key === r.pro) : null;
+const proTitle = r => { const p = proOf(r); return p ? p.title : ''; };
+function rollPro(boost){
+  // the higher you rise, the more powerful the people in the room
+  const lift = (boost || 0) + (state.job ? state.job.rank * 0.15 : 0) + Math.min(0.6, state.fame.level / 100) + (netWorth() / state.econ.cumInflation > 1e6 ? 0.4 : 0);
+  const list = PROFESSIONS.map(p => [p, p.w * (p.tier === 3 ? 1 + lift : p.tier === 1 ? Math.max(0.3, 1 - lift / 2) : 1)]);
+  let x = Math.random() * list.reduce((t, l) => t + l[1], 0);
+  for(const [p, w] of list){ x -= w; if(x <= 0) return p.key; }
+  return list[0][0].key;
+}
+const myNetwork = () => state.relationships.filter(r => r.pro && !FAMILY_TYPES.includes(r.type));
+// how much your network opens doors in a given field: close, powerful connections count most
+function networkPull(track){
+  let v = 0;
+  myNetwork().forEach(r => { if(r.closeness < 40) return; const p = proOf(r); v += (p.track === track ? 6 : p.key === 'headhunter' ? 4 : 0) + (p.tier === 3 ? 1 : 0); });
+  return Math.min(18, v);
+}
+function networkScore(){ return Math.round(myNetwork().reduce((t, r) => t + proOf(r).tier * r.closeness / 10, 0)); }
+
+// the best rung of a ladder you qualify for, up to a ceiling set by how much pull your contact has
+function bestRankFor(track, cap){
+  const ladder = CAREERS[track]; let best = -1;
+  for(let i = 0; i < Math.min(ladder.length, cap + 1); i++) if(!rankGap(ladder[i], track)) best = i;
+  return best;
+}
+function offerJob(r, track, why){
+  const p = proOf(r), cur = state.job;
+  if(!trackOpen(track) || recordBlocks(track) || state.retired || state.age > 64) return false;
+  // a connection can open a door a rung or two up, never hand you an elected office or stardom
+  const ceiling = {Politics:1, Acting:2, Music:2, Sports:1}[track];
+  let cap = cur && cur.track === track ? cur.rank + 1 : startRankFor(track) + p.tier - 1;
+  if(ceiling !== undefined) cap = Math.min(cap, ceiling);
+  const rank = bestRankFor(track, cap);
+  if(rank < 0) return false;
+  const salary = startingSalary(track, rank), title = CAREERS[track][rank].title;
+  if(cur && (cur.salary * 1.05 >= salary * 1.1 || (cur.track === track && cur.rank >= rank))) return false;
+  presentCustom(`${r.name}, ${(p.title.match(/^[AEIOU]/) ? 'an ' : 'a ') + p.title.toLowerCase()} you know, ${why || 'has an opening'}: ${title} in ${track.toLowerCase()}, paying ${fmt(Math.round(salary * 1.1))}.`, [
+    {label: 'Take the job', run: () => { const j = threadJob(track, rank); j.salary = Math.round(salary * 1.1 / 100) * 100; bump(r, 8); pushEntry(state.age, `${state.name} lands a job as ${j.title} thanks to ${r.name}, at ${fmt(j.salary)} a year.`, {happy:8}); }},
+    {label: cur ? `Stay as ${cur.title}` : 'Turn it down', run: () => { bump(r, -3); pushEntry(state.age, `${state.name} thanks ${r.name} but passes on the job.`, {}); }},
+  ]);
+  return true;
+}
+function introduce(r, proKey, text){
+  if(state.relationships.length >= 60) return false;
+  const n = newRel('Contact', {age: clampAge(r.age + rint(-8, 8)), closeness: rint(38, 50), origin: 'through ' + r.name});
+  n.pro = proKey || rollPro(1);
+  pushEntry(state.age, (text || `${r.name} introduces ${state.name} to {name}, {who}.`).replace('{name}', n.name).replace('{who}', (proTitle(n).match(/^[AEIOU]/) ? 'an ' : 'a ') + proTitle(n).toLowerCase()), {happy:2});
+  return true;
+}
+// what each kind of connection can do for you, or ask of you; each returns true if it opened a decision
+const NET_OPS = {
+  founder: [
+    {w:1, run: (r, a) => offerJob(r, 'Technology', 'is hiring for their startup')},
+    {w:1, run: (r, a) => introduce(r, 'vc', `${r.name} introduces ${state.name} to {name}, {who} who backed their company.`)},
+    {w:0.5, run: (r, a) => introduce(r, pick(['founder', 'exec', 'fund']))},
+    {w:1, when: () => state.age >= 22 && !hasThread('startup') && canPay(inflR(5000, 100)), run: (r, a) => {
+      const co = r.name + "'s " + pick(['app', 'platform', 'startup', 'AI company']), amt = inflR(rint(5, 25) * 1000, 500), ok = canPay(amt);
+      presentCustom(`${r.name} asks ${state.name} to invest ${fmt(ok ? amt : inflR(5000, 100))} in their company.`, [
+        {label: 'Invest', run: () => { const m = ok ? amt : inflR(5000, 100); pay(m); bump(r, 10); pushEntry(a, `${state.name} invests ${fmt(m)} in ${co}.`, {}); seedThread('startup', {co, amt: m, rel: r.id}, `Invested ${fmt(m)} in ${co}`, rint(2, 3), 'round'); }},
+        {label: 'Politely decline', run: () => { bump(r, -4); seedThread('startup', {co, amt: 0, rel: r.id}, `Passed on investing in ${co}`, rint(3, 5), 'passed'); }},
+      ]);
+      return true;
+    }},
+  ],
+  vc: [
+    {w:2, when: () => state.business && state.business.value > inflR(30000, 100) && (state.business.dilution || 0) < 0.4, run: (r, a) => {
+      const b = state.business, amt = Math.round(b.value * 0.25 / 1000) * 1000;
+      presentCustom(`${r.name}, a venture capitalist, offers ${fmt(amt)} for 20% of ${bizName(b)} to fuel its growth.`, [
+        {label: 'Sell them the stake', run: () => { b.dilution = (b.dilution || 0) + 0.2; state.money += amt; b.growth = Math.min(0.6, b.growth + 0.25); b.reputation = clampRep(b.reputation + 6); bump(r, 8); pushEntry(a, `${r.name}'s fund buys 20% of ${bizName(b)} for ${fmt(amt)} and opens doors that help it grow.`, {happy:8, biz:10}); }},
+        {label: 'Keep full control', run: () => pushEntry(a, `${state.name} turns down ${r.name}'s investment to keep control.`, {})},
+      ]);
+      return true;
+    }},
+    {w:1, when: () => state.age >= 25 && canPay(inflR(20000, 500)) && !hasThread('startup'), run: (r, a) => {
+      const co = pick(STARTUP_NAMES), amt = inflR(20000, 500);
+      presentCustom(`${r.name} offers ${state.name} a rare chance to co-invest ${fmt(amt)} alongside their fund in ${co}.`, [
+        {label: 'Co-invest', run: () => { pay(amt); bump(r, 6); pushEntry(a, `${state.name} co-invests ${fmt(amt)} in ${co} with ${r.name}'s fund.`, {}); seedThread('startup', {co, amt, rel: r.id, mult: 1.4}, `Co-invested ${fmt(amt)} in ${co} with ${r.name}`, rint(2, 3), 'round'); }},
+        {label: 'Pass', run: () => {}},
+      ]);
+      return true;
+    }},
+  ],
+  exec: [
+    {w:2, run: (r, a) => offerJob(r, 'Business', 'wants you on their team')},
+    {w:1, when: () => state.job && state.job.rank >= 3 && state.age >= 40 && !state.boardSeat, run: (r, a) => {
+      const fee = inflR(rint(40, 90) * 1000, 1000);
+      state.boardSeat = {fee, from: r.name};
+      pushEntry(a, `Thanks to ${r.name}, ${state.name} is invited to join a company's board for ${fmt(fee)} a year.`, {happy:6});
+    }},
+  ],
+  headhunter: [
+    {w:3, run: (r, a) => offerJob(r, state.job && state.job.track !== 'Odd Jobs' ? state.job.track : pick(['Business', 'Technology', 'Finance']), 'has a client looking for someone like you')},
+  ],
+  banker: [
+    {w:2, when: () => state.loans.some(l => l.apr > 0.05 && l.type !== 'Student'), run: (r, a) => {
+      let saved = 0;
+      state.loans.forEach(l => { if(l.apr > 0.05 && l.type !== 'Student'){ const old = l.apr; l.apr = Math.max(0.03, l.apr - 0.02); l.yearlyPayment = Math.round(l.balance * l.apr / (1 - Math.pow(1 + l.apr, -Math.max(1, l.yearsLeft)))); saved += l.balance * (old - l.apr); } });
+      pushEntry(a, `${r.name} gets ${state.name} a better rate on their loans, saving about ${fmt(saved)} a year in interest.`, {happy:3});
+    }},
+    {w:1, when: () => state.creditScore < 720, run: (r, a) => { adjustCredit(25); pushEntry(a, `${r.name} walks ${state.name} through fixing their credit report.`, {happy:2}); }},
+  ],
+  fund: [
+    {w:2, when: () => state.money + state.savings > inflR(10000, 100), run: (r, a) => {
+      const stake = Math.round(Math.min(state.money + state.savings, inflR(30000, 500)) / 100) * 100;
+      presentCustom(`Over drinks, ${r.name} lets slip that a company is about to be bought out. "You didn't hear it from me."`, [
+        {label: `Trade on it (${fmt(stake)})`, run: () => {
+          pay(stake);
+          const gain = Math.round(stake * (0.4 + Math.random() * 0.8));
+          state.money += stake + gain;
+          pushEntry(a, `${state.name} buys before the news breaks and makes ${fmt(gain)}.`, {happy:6});
+          if(Math.random() < 0.3){
+            const c = Object.assign({}, CRIMES.find(x => x.key === 'fraud'), {charge:'insider trading', ing:'insider trading'});
+            CR().arrests++; pushEntry(a, `Regulators notice the suspiciously timed trade. ${state.name} is charged with insider trading.`, {happy:-10});
+            arrest(c, gain);
+          }
+        }},
+        {label: 'Stay clean', run: () => { bump(r, -2); pushEntry(a, `${state.name} changes the subject.`, {}); }},
+      ]);
+      return true;
+    }},
+    {w:1, run: (r, a) => { const tip = pick(STOCKS.filter(s => s.sector !== 'IPO' && !s.ipo && state.market[s.key])); if(!tip) return false; pushEntry(a, `${r.name} shares their thinking on markets. They are bullish on ${tip.name} (${tip.key}).`, {smarts:2}); if(state.market[tip.key]) state.market[tip.key].tip = (state.market[tip.key].tip || 0) + 0.12; }},
+  ],
+  lawyer: [
+    {w:1, when: () => canExpunge(), run: (r, a) => { CR().record.forEach(x => { if(!x.juvenile) x.expunged = true; }); bump(r, -5); pushEntry(a, `${r.name} quietly gets ${state.name}'s record expunged, free of charge.`, {happy:8}); }},
+    {w:1, when: () => state.age >= 30 && !state.trust, run: (r, a) => { state.trust = true; pushEntry(a, `${r.name} sets up a family trust for ${state.name} as a favor, cutting future estate taxes.`, {happy:2}); }},
+    {w:1, run: (r, a) => offerJob(r, 'Law', 'needs help at the firm')},
+  ],
+  doctor: [
+    {w:2, when: () => state.age >= 30, run: (r, a) => {
+      pushEntry(a, `${r.name} insists on giving ${state.name} a thorough checkup, free of charge.`, {health:3});
+      const found = checkup(false);
+      const serious = found.find(c => CONDITIONS[c.key].kind === 'cancer') || found.find(c => CONDITIONS[c.key].treat);
+      if(serious){ treatmentPrompt(serious); return true; }
+    }},
+    {w:1, run: (r, a) => offerJob(r, 'Medicine', 'could use you at the hospital')},
+  ],
+  realtor: [
+    {w:2, when: () => state.age >= 22 && canPay(inflR(60000, 1000)), run: (r, a) => {
+      const price = inflR(rint(180, 320) * 1000, 1000) * state.housing.idx, deal = Math.round(price * 0.82 / 1000) * 1000, down = Math.round(deal * 0.2);
+      if(!canPay(down)) return false;
+      presentCustom(`${r.name} has an off-market rental house going for ${fmt(deal)}, well under its ${fmt(Math.round(price))} value. They need an answer today.`, [
+        {label: `Buy it (${fmt(down)} down, mortgage for the rest)`, run: () => {
+          if(state.bankrupt || state.creditScore < 580){ pushEntry(a, `${state.name} can't get a mortgage, and the deal goes to someone else.`, {happy:-3}); return; }
+          pay(down); takeLoan('Mortgage', deal - down, 30, Math.max(0.03, state.econ.rate + 0.02));
+          state.assetSeq++;
+          state.assets.push({id:'a' + state.assetSeq, key:'sfr', name:'Off-Market House', category:'Real Estate', value: Math.round(price), boughtPrice: deal, boughtAge: a, cond: 75,
+            rental:{units:1, occupied:0, rent:'market', cond:75, manager:false, loc:'suburbs', lastRent:0, lastNet:null}});
+          bump(r, 6); pushEntry(a, `${state.name} buys the off-market house through ${r.name} for ${fmt(deal)}.`, {happy:6});
+        }},
+        {label: 'Pass', run: () => {}},
+      ]);
+      return true;
+    }},
+  ],
+  politician: [
+    {w:1, when: () => !!state.business, run: (r, a) => { const b = state.business; b.reputation = clampRep(b.reputation + 10); pushEntry(a, `${r.name} cuts through red tape for ${bizName(b)}, and a big city contract follows.`, {biz:12, happy:3}); }},
+    {w:1, when: () => state.crime.prison && Math.random() < 0.3, run: (r, a) => { pushEntry(a, `${r.name} pulls strings, and ${state.name} is granted early release.`, {happy:15}); release('pardon'); }},
+    {w:1, run: (r, a) => offerJob(r, 'Politics', 'wants you on their campaign staff')},
+  ],
+  producer: [
+    {w:2, run: (r, a) => { pushEntry(a, `${r.name} casts ${state.name} in a small role in their new film.`, {fame:6, money: inflR(rint(5, 30) * 1000, 500), happy:6}); }},
+    {w:1, run: (r, a) => offerJob(r, 'Acting', 'thinks you have a face for the screen')},
+  ],
+  journalist: [
+    {w:2, when: () => !!state.business || state.fame.level >= 10, run: (r, a) => {
+      if(state.business){ const b = state.business; b.reputation = clampRep(b.reputation + 8); pushEntry(a, `${r.name} writes a glowing feature about ${bizName(b)}.`, {biz:8, happy:4}); }
+      else pushEntry(a, `${r.name} writes a flattering profile of ${state.name}.`, {fame:5, image:6});
+    }},
+    {w:1, when: () => CR().record.length > 0 || state.crime.earned > 0, run: (r, a) => {
+      presentCustom(`${r.name} is writing a story and asks ${state.name} about rumors from their past.`, [
+        {label: 'Ask them to kill the story', run: () => { if(r.closeness >= 60){ bump(r, -10); pushEntry(a, `${r.name} drops the story as a personal favor.`, {happy:3}); } else { bump(r, -15); pushEntry(a, `${r.name} runs the story anyway.`, {happy:-8, image:-12, fame:3}); } }},
+        {label: 'Tell the truth', run: () => { bump(r, 6); pushEntry(a, `${state.name} tells their side. The piece is fair, and people respect the honesty.`, {happy:-2, image:4}); }},
+      ]);
+      return true;
+    }},
+  ],
+  professor: [
+    {w:2, when: () => EDU_RANK[state.edu.level] >= 3 && !state.edu.rec, run: (r, a) => { state.edu.rec = true; pushEntry(a, `${r.name} offers to write ${state.name} a glowing recommendation for graduate school.`, {happy:3}); }},
+    {w:1, run: (r, a) => { pushEntry(a, `Long talks with ${r.name} sharpen ${state.name}'s thinking.`, {smarts:4}); }},
+    {w:1, run: (r, a) => offerJob(r, 'Education', 'has a teaching position open')},
+  ],
+  chef: [
+    {w:1, run: (r, a) => offerJob(r, 'Culinary', 'needs help in the kitchen')},
+    {w:1, when: () => !!state.business, run: (r, a) => { pushEntry(a, `${r.name} sends a big catering order ${bizName(state.business)}'s way.`, {money: inflR(rint(3, 9) * 1000, 100), happy:2}); }},
+  ],
+  contractor: [
+    {w:2, when: () => state.assets.some(x => x.category === 'Homes' || x.rental), run: (r, a) => {
+      const x = pick(state.assets.filter(x => x.category === 'Homes' || x.rental)), add = Math.round(x.value * 0.06);
+      x.value += add; if(x.rental) x.rental.cond = 100;
+      pushEntry(a, `${r.name} renovates ${state.name}'s ${x.name.toLowerCase()} at cost, adding about ${fmt(add)} in value.`, {money: -Math.round(add * 0.4), happy:3});
+    }},
+    {w:1, run: (r, a) => offerJob(r, 'Trades', 'needs another pair of hands')},
+  ],
+};
+// ask a connection directly about opportunities
+function networkAsk(r){
+  const p = proOf(r); if(!p) return false;
+  const ops = (NET_OPS[p.key] || []).filter(o => !o.when || o.when());
+  for(let tries = 0; tries < 3 && ops.length; tries++){
+    let x = Math.random() * ops.reduce((t, o) => t + o.w, 0), op = ops[0];
+    for(const o of ops){ x -= o.w; if(x <= 0){ op = o; break; } }
+    const before = state.log.length, got = op.run(r, state.age);
+    if(got === true || state.log.length > before) return true;
+    ops.splice(ops.indexOf(op), 1);
+  }
+  return false;
+}
+function networkYear(a, canAsk){
+  // a board seat pays every year
+  if(state.boardSeat && !state.crime.prison){ if(a >= 75){ pushEntry(a, `${state.name} steps down from the board.`, {}); state.boardSeat = null; } else state.money += inflR(state.boardSeat.fee, 100); }
+  if(a < 18 || state.crime.prison) return false;
+  // friends grow into careers of their own
+  state.relationships.forEach(r => { if(!r.pro && PEER.includes(r.type) && r.age >= 23 && Math.random() < 0.03) r.pro = rollPro(); });
+  if(!canAsk) return false;
+  const close = myNetwork().filter(r => r.closeness >= 45);
+  if(!close.length || Math.random() > Math.min(0.35, 0.05 + close.length * 0.03)) return false;
+  const r = pick(close);
+  return networkAsk(r) && !!document.querySelector('#choices .choice-btn');
+}
+
 // ---------- Achievements and milestones ----------
 // Achievements belong to the player, not to one life: they live in their own save and survive every new record.
 // Milestones are the firsts of a single life, kept on its timeline.
@@ -8096,6 +8352,9 @@ const ACHIEVEMENTS = [
 
   {k:'butterfly', cat:'Life', icon:'🦋', tier:'silver', name:'Butterfly Effect', desc:'See one decision ripple through five turns of fate', test:() => (state.storyDone || []).some(t => t.path.length >= 5)},
   {k:'dropoutrich', cat:'Business', icon:'🎒', tier:'gold', name:'Dropout to Riches', desc:'Drop out, start a business with a coworker, and come out on top', test:() => (state.storyDone || []).some(t => t.key === 'dropout' && t.mood === 'good' && t.path.length >= 5)},
+  {k:'networker', cat:'Fame', icon:'🤝', tier:'silver', name:'Well Connected', desc:'Have 10 close professional connections', test:() => myNetwork().filter(r => r.closeness >= 50).length >= 10},
+  {k:'whoyouknow', cat:'Career', icon:'🔗', tier:'bronze', name:"It's Who You Know", desc:'Land a job through a connection', on:/lands a job as .{1,60} thanks to/},
+  {k:'board', cat:'Career', icon:'🪑', tier:'silver', name:'Board Member', desc:'Get a seat on a company board', test:() => !!state.boardSeat},
   {k:'pandemic', cat:'World', icon:'😷', tier:'bronze', name:'Lived Through It', desc:'Live through a pandemic', test:() => state.ach.events.includes('pandemic')},
   {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
   {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
@@ -8126,6 +8385,7 @@ const MILESTONES = [
   {k:'famous', icon:'📸', test:() => state.fame.level >= 50, text:() => 'Became famous'},
   {k:'inherit', icon:'🕯️', test:() => state.inheritedTotal > 0, text:() => 'Received an inheritance'},
   {k:'prison', icon:'⛓️', test:() => !!state.crime.prison, text:() => 'Went to prison'},
+  {k:'board', icon:'🪑', test:() => !!state.boardSeat, text:() => 'Joined a company board through ' + state.boardSeat.from},
   {k:'retired', icon:'⌚', test:() => state.retired, text:() => 'Retired'},
   {k:'age100', icon:'💯', test:() => state.age >= 100, text:() => 'Turned 100'},
 ];
