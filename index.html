@@ -400,7 +400,7 @@ function startLife(heir){
     social:freshSocial(),
     hobbies:{}, retired:false, pension:0, peakSalary:0, workYears:0, recent:[],
     estates:[], estateSeq:0, will:'family', trust:false, famEstate:0, inheritedTotal:0, evTarget:null, openRel:null, socMenu:null,
-    generation:1, lineage:[], traits:[], trustFund:0
+    generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null
   };
   if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; }
   else state.relationships = initFamily();
@@ -413,9 +413,7 @@ function startLife(heir){
   if(heir){
     const p = heir.pkg;
     pushEntry(state.age, `${name} steps into a new chapter at ${state.age}, carrying the family line forward as generation ${state.generation}.`, {});
-    pushEntry(state.age, p.cash > 0 || p.takesBiz
-      ? `${name} inherits ${fmt(p.cash)}${p.takesBiz ? ' and the family business, worth ' + fmt(p.bizValue) : ''}${p.trust ? ', held in a trust fund until age 18' : ''}.`
-      : `${name} inherits nothing, but starts with the family name and a life ahead.`, {});
+    pushEntry(state.age, inheritText(name, p), {});
   } else pushEntry(0, `${name} is born. The record begins.`, {});
   render();
   audioStartLife();
@@ -436,7 +434,7 @@ const SPECIAL_DELTAS = {
   fans:    n => { const sm = state.social; if(!sm.account || sm.followers <= 0) return 0; for(const k in sm.platforms) scalePlat(k, n/100); syncFollowers(); return n; },
   rep:     n => { const sm = state.social; if(!sm.account) return 0; sm.reputation = clampRep(sm.reputation + n); return n; },
   partner: n => bondDelta(['Partner','Spouse'], n),
-  family:  n => bondDelta(['Mother','Father','Sibling','Child'], n),
+  family:  n => bondDelta(['Mother','Father','Sibling','Child','Grandchild'], n),
   friends: n => bondDelta(['Friend','Coworker'], n),
   credit:  n => { if(state.age < 18) return 0; adjustCredit(n); return n; },
   gpa:     n => { if(!state.edu.school) return 0; state.edu.gpa = clamp(state.edu.gpa + n); return n; },
@@ -684,7 +682,7 @@ const COND = {
   poor:()=>state.money < 0, rich:()=>state.money > 20000, saver:()=>state.savings >= 5000,
   afford:()=>state.money + state.savings >= 2500, indebted:()=>totalDebt() > 5000,
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
-  kids:()=>hasRel('Child'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
+  kids:()=>hasRel('Child'), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
   friends:()=>hasRel('Friend'),
   home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>state.assets.some(x => x.category === 'Cars'),
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
@@ -794,6 +792,9 @@ const BANK = [
   E(20,110,"{rel} makes {n} a handmade card",[["and it goes on the fridge for years",{happy:6,bond:6}]],null,1,["Child"]),
   E(20,110,"{rel} has a hard week",[["and {n} listens patiently",{bond:7,happy:-1}],["and {n} is too busy to talk it through",{bond:-5,happy:-2}]],null,1,["Child"]),
   E(20,110,"{rel} makes {n} laugh until their sides hurt",[["and it is the best part of the month",{happy:7,bond:5}]],null,1,["Child"]),
+  E(40,120,"{rel} comes to stay with {n} for the weekend",[["and they bake far too many cookies together",{happy:6,bond:6}]],null,1,["Grandchild"]),
+  E(40,120,"{rel} asks {n} for a story about the old days",[["and listens to every word",{happy:5,bond:5}],["and {n} is too tired to tell it",{bond:-3}]],null,1,["Grandchild"]),
+  E(40,120,"{rel} draws a family tree at school with {n} at the top",[["and it is framed by the end of the week",{happy:6,bond:4}]],null,1,["Grandchild"]),
   // partners and spouses
   E(18,110,"{rel} cooks {n} a surprise dinner",[["and the candles make it feel like a first date",{bond:8,happy:7}]],null,1.2,["Partner","Spouse"]),
   E(18,110,"{rel} and {n} fall into a tense silence after a disagreement",[["and talk it through before bed",{bond:3,happy:-1}],["and sleep on opposite edges of the bed",{bond:-7,happy:-4}]],null,1.2,["Partner","Spouse"]),
@@ -1264,8 +1265,8 @@ function ageUp(){
   updateMarket(a);
   payDividends(a);
   assetsYear(a);
-  relationshipsYear(a);
-  if(prompted){ render(); return; }
+  const relPrompted = relationshipsYear(a, prompted);
+  if(prompted || relPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -1842,7 +1843,7 @@ function ownedAssetRow(x){
 }
 
 // ---------- Social: family & friends ----------
-const FAMILY_TYPES = ['Mother','Father','Sibling','Spouse','Child'];
+const FAMILY_TYPES = ['Mother','Father','Sibling','Spouse','Child','Grandchild'];
 function relId(){ state.relSeq++; return 'r' + state.relSeq; }
 function findRel(id){ return state.relationships.find(r => r.id === id); }
 
@@ -1850,15 +1851,21 @@ function findRel(id){ return state.relationships.find(r => r.id === id); }
 const TRAITS = ["Loyal","Funny","Ambitious","Moody","Generous","Flaky","Adventurous","Wise"];
 const TRAIT_BLURB = {Loyal:"bonds fade slowly", Funny:"makes outings happier", Ambitious:"boosts your career", Moody:"has off days", Generous:"gives back", Flaky:"cancels plans", Adventurous:"loves a trip", Wise:"gives great advice"};
 const PEER = ["Friend","Coworker"], KIN = ["Mother","Father","Sibling"], LOVE = ["Partner","Spouse"];
-const EVERYONE = ["Friend","Coworker","Mother","Father","Sibling","Partner","Spouse","Child"];
+const EVERYONE = ["Friend","Coworker","Mother","Father","Sibling","Partner","Spouse","Child","Grandchild"];
 function rollTraits(){ const n = Math.random() < 0.5 ? 1 : 2, t = []; while(t.length < n){ const x = pick(TRAITS); if(!t.includes(x)) t.push(x); } return t; }
 function hasTrait(r, t){ return !!(r.traits && r.traits.includes(t)); }
 function makeRel(type, o){
   o = o || {};
-  const r = {id:relId(), name:pick(FRIENDS), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
+  const r = {id:relId(), name:freeName(), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
              closeness: o.closeness !== undefined ? o.closeness : 35, traits: o.traits || rollTraits(), origin: o.origin || ""};
   if(o.livingTogether) r.livingTogether = true;
   return r;
+}
+// avoid giving two people in the same family the same name
+function freeName(){
+  const taken = [state.name].concat(state.relationships.map(x => x.name), state.relationships.filter(x => x.spouse).map(x => x.spouse.name));
+  const free = FRIENDS.filter(f => !taken.includes(f));
+  return pick(free.length ? free : FRIENDS);
 }
 function newRel(type, o){ const r = makeRel(type, o); state.relationships.push(r); return r; }
 function bump(r, n){ r.closeness = FAMILY_TYPES.includes(r.type) ? Math.max(10, Math.min(100, Math.round(r.closeness + n))) : clamp(Math.round(r.closeness + n)); }
@@ -1881,7 +1888,8 @@ function initFamily(){
 }
 
 // ---- yearly life of relationships ----
-function relationshipsYear(a){
+function relationshipsYear(a, prompted){
+  const moments = [];
   state.relationships.slice().forEach(rel => {
     rel.age++;
     const isFamily = FAMILY_TYPES.includes(rel.type);
@@ -1894,13 +1902,23 @@ function relationshipsYear(a){
       state.relationships = state.relationships.filter(r => r.id !== rel.id);
       return;
     }
-    if(rel.age > 1 && Math.random() < mortalityChance(rel.age, 60)){
+    const careHealth = rel.care === "home" || rel.care === "you" ? 72 : rel.care === "other" ? 50 : 60;
+    if(rel.age > 1 && Math.random() < mortalityChance(rel.age, careHealth)){
       pushEntry(a, `${rel.name}, ${state.name}'s ${rel.type.toLowerCase()}, passes away.`, {happy: -Math.round(4 + rel.closeness / 10)});
       state.relationships = state.relationships.filter(r => r.id !== rel.id);
       if(rel.type === "Mother" || rel.type === "Father") parentDied(rel);
       else if(rel.type === "Spouse") createEstate("spouse", rel);
+      return;
     }
+    if(rel.owes && Math.random() < (hasTrait(rel, "Flaky") ? 0.1 : hasTrait(rel, "Loyal") || hasTrait(rel, "Generous") ? 0.45 : 0.3)){
+      pushEntry(a, `${rel.name} pays back the ${fmt(rel.owes)} ${state.name} lent them.`, {money: rel.owes});
+      rel.owes = 0; bump(rel, 4);
+    }
+    if(rel.type === "Child") childYear(rel, a, moments);
+    else if(rel.type === "Mother" || rel.type === "Father") parentYear(rel, a, moments);
+    else if(rel.type === "Sibling" && rel.age >= 21 && state.age >= 18 && Math.random() < 0.025) moneyAsk(rel, moments);
   });
+  loveYear(a, moments);
   // close bonds lift your mood; estranged family weighs on it
   const strong = state.relationships.filter(r => r.closeness >= 70).length;
   const estranged = state.relationships.filter(r => ["Mother","Father","Sibling","Child","Spouse","Partner"].includes(r.type) && r.closeness < 30).length;
@@ -1908,6 +1926,11 @@ function relationshipsYear(a){
   if(lift) applyDelta({happy: lift});
   growFamilyEstate();
   estatesYear(a);
+  // at most one family moment asks for a decision each year; the rest play out on their own
+  const shown = !prompted && moments.length && Math.random() < 0.75 ? pickWeighted(moments, m => m.w) : null;
+  moments.forEach(m => { if(m !== shown && m.fallback) m.fallback(); });
+  if(shown){ presentCustom(shown.prompt, shown.opts); return true; }
+  return false;
 }
 
 // ---- interactions ----
@@ -1922,17 +1945,17 @@ const INTERACTIONS = [
   {key:"intro", label:"Get introduced", who:["Friend"], minClose:50, kind:"intro"},
   {key:"lunch", label:"Lunch", who:["Coworker"], cost:25, gain:[6,9], happy:[1,3], texts:["{n} grabs lunch with {r} and trades office stories.", "{n} and {r} take a long lunch away from the desk."]},
   {key:"collab", label:"Team up", who:["Coworker"], gain:[6,10], happy:[1,3], kind:"collab", needs:() => !!state.job},
-  {key:"visit", label:"Visit", who:KIN, cost:150, gain:[8,12], happy:[3,5], needs:r => !r.livingTogether, texts:["{n} visits {r} and the hours fly by.", "{n} makes the trip to see {r}."]},
+  {key:"visit", label:"Visit", who:KIN.concat(["Child"]), cost:150, gain:[8,12], happy:[3,5], needs:r => !r.livingTogether && (r.type !== "Child" || r.movedOut), texts:["{n} visits {r} and the hours fly by.", "{n} makes the trip to see {r}."]},
   {key:"advice", label:"Ask for advice", who:KIN, gain:[3,6], happy:[0,2], smarts:[1,3], wise:true, texts:["{n} asks {r} for advice and actually listens.", "{n} talks a big decision over with {r}."]},
-  {key:"help", label:"Help out", who:KIN, cost:500, gain:[10,15], happy:[2,4], minAge:18, kind:"gift", texts:["{n} helps {r} through a rough patch.", "{n} quietly takes care of something big for {r}."]},
+  {key:"help", label:"Help out", who:KIN.concat(["Child"]), needs:r => r.type !== "Child" || r.age >= 18, cost:500, gain:[10,15], happy:[2,4], minAge:18, kind:"gift", texts:["{n} helps {r} through a rough patch.", "{n} quietly takes care of something big for {r}."]},
   {key:"amends", label:"Make amends", who:KIN.concat(PEER), maxClose:44, kind:"amends"},
   {key:"date", label:"Date night", who:LOVE, cost:100, gain:[6,10], happy:[4,6], fun:true, texts:["{n} and {r} have a lovely date night.", "{n} and {r} rediscover why they fell for each other."]},
   {key:"getaway", label:"Getaway", who:LOVE, cost:900, gain:[12,16], happy:[7,9], minAge:18, adv:true, fun:true, texts:["{n} and {r} escape on a weekend getaway.", "{n} and {r} take a romantic trip away."]},
   {key:"surprise", label:"Surprise", who:LOVE, cost:200, gain:[8,12], happy:[3,5], kind:"gift", texts:["{n} surprises {r} with something thoughtful.", "{n} plans a small surprise that makes {r} glow."]},
   {key:"counsel", label:"Counseling", who:LOVE, cost:300, gain:[10,18], happy:[1,3], maxClose:59, minAge:18, texts:["{n} and {r} work through things with a counselor.", "{n} and {r} learn to talk to each other again."]},
-  {key:"play", label:"Play together", who:["Child"], gain:[6,10], happy:[3,5], fun:true, texts:["{n} and {r} play together for hours.", "{n} gets down on the floor and plays with {r}."]},
-  {key:"outing", label:"Family outing", who:["Child"], cost:80, gain:[8,12], happy:[3,5], adv:true, texts:["{n} takes {r} on a memorable outing.", "{n} and {r} spend a day out together."]},
-  {key:"teach", label:"Teach them", who:["Child"], gain:[5,8], happy:[2,3], smarts:[1,2], wise:true, texts:["{n} teaches {r} something new.", "{n} patiently shows {r} how it is done."]},
+  {key:"play", label:"Play together", who:["Child","Grandchild"], gain:[6,10], happy:[3,5], fun:true, texts:["{n} and {r} play together for hours.", "{n} gets down on the floor and plays with {r}."]},
+  {key:"outing", label:"Family outing", who:["Child","Grandchild"], cost:80, gain:[8,12], happy:[3,5], adv:true, texts:["{n} takes {r} on a memorable outing.", "{n} and {r} spend a day out together."]},
+  {key:"teach", label:"Teach them", who:["Child","Grandchild"], gain:[5,8], happy:[2,3], smarts:[1,2], wise:true, texts:["{n} teaches {r} something new.", "{n} patiently shows {r} how it is done."]},
 ];
 const ixCost = ix => ix.cost ? inflR(ix.cost, 5) : 0;
 function ixState(r, ix){
@@ -2095,8 +2118,7 @@ function moveIn(id){
 function propose(id){
   const r = findRel(id); if(!r || r.type !== "Partner" || state.age < 18) return;
   if(Math.random() < 0.4 + r.closeness / 150){
-    r.type = "Spouse"; r.livingTogether = true; bump(r, 15);
-    pushEntry(state.age, `${state.name} proposes to ${r.name} — and they say yes! A wedding follows.`, {happy:15, money:-inflR(3000, 100)});
+    marry(r, `${state.name} proposes to ${r.name} — and they say yes! A wedding follows.`);
   } else {
     bump(r, -20);
     pushEntry(state.age, `${state.name} proposes to ${r.name}, who isn't ready. Awkward silence follows.`, {happy:-8});
@@ -2104,21 +2126,179 @@ function propose(id){
   render();
 }
 function haveChild(id){
-  const r = findRel(id), cost = inflR(2000, 100);
-  if(!r || r.type !== "Spouse" || !ensureCash(cost)) return;
-  state.money -= cost;
-  const c = newRel("Child", {age:0, closeness:80, origin:"your child"});
-  pushEntry(state.age, `${state.name} and ${r.name} welcome a new child, ${c.name}.`, {happy:12});
+  const r = findRel(id);
+  if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60) return;
+  birthChild(r);
   render();
 }
 function breakUp(id){
   const r = findRel(id); if(!r || (r.type !== "Partner" && r.type !== "Spouse")) return;
-  pushEntry(state.age, `${state.name} ${r.type === 'Spouse' ? 'divorces' : 'breaks up with'} ${r.name}.`, {happy:-10});
-  state.relationships = state.relationships.filter(x => x.id !== r.id);
+  endRelationship(r);
   render();
 }
 function toggleRel(id){ state.openRel = state.openRel === id ? null : id; renderPanel(); }
 function toggleSocMenu(m){ state.socMenu = state.socMenu === m ? null : m; renderPanel(); }
+
+// ---- children grow up: school, work, marriage, and grandchildren ----
+function grandkidsOf(r){ return state.relationships.filter(g => g.type === "Grandchild" && g.parentId === r.id); }
+function canPay(c){ return state.money + state.savings >= c; }
+function pay(c){ ensureCash(c); state.money -= c; }
+function relJobTitle(r){ return r.job ? CAREERS[r.job.track][r.job.rank].title : ""; }
+function lifeBits(r){
+  const b = [];
+  if(r.inCollege) b.push("in college");
+  else if(r.edu === "Bachelor") b.push("college grad");
+  if(r.job) b.push(relJobTitle(r).toLowerCase());
+  if(r.spouse) b.push("married to " + r.spouse.name);
+  const g = grandkidsOf(r).length; if(g) b.push(g + (g === 1 ? " kid" : " kids"));
+  if(r.care === "home") b.push("in a care home (" + fmt(careCost()) + "/yr)");
+  if(r.care === "you") b.push("lives with you");
+  if(r.owes) b.push("owes you " + fmt(r.owes));
+  return b;
+}
+function relJobFor(r){
+  const edu = r.edu || "High School";
+  const open = Object.keys(CAREERS).filter(k => k !== "Odd Jobs" && CAREERS[k][0].minAge <= r.age && EDU_RANK[edu] >= EDU_RANK[CAREERS[k][0].edu]);
+  return open.length ? {track: pick(open), rank: 0, years: 0} : null;
+}
+function relJobYear(r, a){
+  const j = r.job, next = CAREERS[j.track][j.rank + 1];
+  j.years++;
+  if(next && r.age >= next.minAge && EDU_RANK[r.edu || "High School"] >= EDU_RANK[next.edu] && Math.random() < 0.12 + (hasTrait(r, "Ambitious") ? 0.08 : 0)){
+    j.rank++;
+    if(r.closeness >= 55) pushEntry(a, `${r.name} calls ${state.name} to share big news: a promotion to ${next.title}.`, {happy:2});
+  }
+}
+// someone close asks for money; a loan may come back later
+function moneyAsk(r, moments){
+  const n = state.name, amt = inflR(rint(2, 20) * 1000, 100);
+  const why = pick(["to cover rent", "to start a small business", "after a car accident", "for a medical bill", "to get out of debt"]);
+  const opts = [];
+  if(canPay(amt)){
+    opts.push({label:`Give it to them (${fmt(amt)})`, run:() => { pay(amt); bump(r, 10); pushEntry(state.age, `${n} gives ${r.name} ${fmt(amt)}, no strings attached.`, {happy:2}); }});
+    opts.push({label:"Lend it, to be paid back", run:() => { pay(amt); r.owes = (r.owes || 0) + amt; bump(r, 4); pushEntry(state.age, `${n} lends ${r.name} ${fmt(amt)}.`, {}); }});
+  }
+  opts.push({label:"Say no", run:() => { bump(r, -8); pushEntry(state.age, `${n} turns down ${r.name}'s request for money.`, {happy:-1}); }});
+  moments.push({w:1, prompt:`${r.name}, ${n}'s ${r.type.toLowerCase()}, asks for ${fmt(amt)} ${why}.`, opts});
+}
+function childYear(r, a, moments){
+  const n = state.name;
+  if(r.age === 5) pushEntry(a, `${r.name} starts school.`, {happy:2});
+  if(r.age === 18 && !r.edu){
+    r.edu = "High School";
+    const keen = Math.random() < 0.45 + r.closeness / 300 + (hasTrait(r, "Ambitious") || hasTrait(r, "Wise") ? 0.15 : 0) - (hasTrait(r, "Flaky") ? 0.15 : 0);
+    if(keen){
+      const tuition = inflR(36000, 1000), half = Math.round(tuition / 2);
+      const go = (paid, text, b, d) => { r.inCollege = true; r.movedOut = true; r.collegeEnd = r.age + 4; r.collegePaid = paid; bump(r, b); pushEntry(state.age, text, d || {}); };
+      const opts = [];
+      if(canPay(tuition)) opts.push({label:`Pay all of it (${fmt(tuition)})`, run:() => { pay(tuition); go(true, `${n} pays ${r.name}'s way through college.`, 12, {happy:4}); }});
+      if(canPay(half)) opts.push({label:`Cover half (${fmt(half)})`, run:() => { pay(half); go(false, `${n} covers half of ${r.name}'s tuition.`, 6, {happy:2}); }});
+      opts.push({label:"They'll take out student loans", run:() => go(false, `${r.name} heads off to college on student loans.`, -3)});
+      opts.push({label:"Push them to start working instead", run:() => { bump(r, -10); pushEntry(state.age, `${n} talks ${r.name} out of college and into the workforce.`, {}); }});
+      moments.push({w:4, prompt:`${r.name} graduates high school and gets into college. Tuition comes to about ${fmt(tuition)}.`, opts,
+        fallback:() => go(false, `${r.name} graduates high school and heads off to college on student loans.`, 0)});
+    } else pushEntry(a, `${r.name} graduates high school and heads straight into work.`, {happy:2});
+  }
+  if(r.inCollege && r.age >= r.collegeEnd){ r.inCollege = false; r.edu = "Bachelor"; pushEntry(a, `${r.name} graduates from college.`, {happy:4}); }
+  if(r.age >= 18 && !r.movedOut && Math.random() < (r.age >= 23 ? 0.5 : 0.2)){ r.movedOut = true; pushEntry(a, `${r.name} moves out to start a life of their own.`, {happy:-1}); }
+  if(r.age >= 18 && !r.inCollege){
+    if(!r.job){ if(Math.random() < 0.5){ r.job = relJobFor(r); if(r.job) pushEntry(a, `${r.name} lands a job as ${relJobTitle(r)}.`, {happy:1}); } }
+    else relJobYear(r, a);
+  }
+  if(r.spouse){
+    r.spouse.age++;
+    if(Math.random() < 0.012){ pushEntry(a, `${r.name} and ${r.spouse.name} divorce.`, {happy:-3}); r.spouse = null; }
+  } else if(r.age >= 23 && r.age <= 48 && Math.random() < 0.1){
+    r.spouse = {name: freeName(), age: Math.max(18, r.age + rint(-4, 4)), traits: rollTraits()};
+    const s = r.spouse.name, cost = inflR(15000, 500), opts = [];
+    if(canPay(cost)) opts.push({label:`Pay for the wedding (${fmt(cost)})`, run:() => { pay(cost); bump(r, 12); pushEntry(state.age, `${n} pays for ${r.name} and ${s}'s wedding. It is a day to remember.`, {happy:6}); }});
+    opts.push({label:"Give a heartfelt toast", run:() => { bump(r, 5); pushEntry(state.age, `${n} gives a toast at ${r.name}'s wedding that leaves the room in tears.`, {happy:5}); }});
+    opts.push({label:"Skip the wedding", run:() => { bump(r, -18); pushEntry(state.age, `${n} skips ${r.name}'s wedding to ${s}. It is not forgotten.`, {happy:-3}); }});
+    moments.push({w:3, prompt:`${r.name} is marrying ${s}. How does ${n} show up for them?`, opts,
+      fallback:() => { bump(r, 3); pushEntry(a, `${r.name} marries ${s}.`, {happy:4}); }});
+  }
+  if(r.spouse && r.age >= 24 && r.age <= 44 && grandkidsOf(r).length < 3 && state.relationships.length < 60 && Math.random() < 0.13){
+    const g = newRel("Grandchild", {age:0, closeness: Math.round(40 + r.closeness / 4), origin: r.name + "'s child"});
+    g.parentId = r.id;
+    const first = grandkidsOf(r).length === 1, nanny = inflR(1000, 50);
+    pushEntry(a, `${r.name} and ${r.spouse.name} welcome ${first ? "a baby" : "another child"}, ${g.name}.${first ? " " + n + " is a grandparent!" : ""}`, {happy:8});
+    const opts = [{label:"Help out every week", run:() => { bump(r, 10); bump(g, 15); pushEntry(state.age, `${n} helps with baby ${g.name} every week.`, {happy:4, health:-1}); }}];
+    if(canPay(nanny)) opts.push({label:`Send money for help (${fmt(nanny)})`, run:() => { pay(nanny); bump(r, 6); bump(g, 4); pushEntry(state.age, `${n} sends ${r.name} money for help with the baby.`, {happy:1}); }});
+    opts.push({label:"Keep your distance", run:() => { bump(r, -8); bump(g, -5); pushEntry(state.age, `${n} keeps their distance from the new baby.`, {}); }});
+    moments.push({w:2, prompt:`${r.name} is exhausted with baby ${g.name} and asks ${n} for help.`, opts});
+  }
+  if(r.age >= 21 && state.age >= 18 && Math.random() < 0.035) moneyAsk(r, moments);
+}
+function careCost(){ return inflR(24000, 500); }
+function parentYear(r, a, moments){
+  const n = state.name;
+  if(r.care === "home") applyDelta({money: -careCost()});
+  if(r.care === "you"){ applyDelta({happy:-1}); bump(r, 2); }
+  if(r.age >= 78 && !r.care && state.age >= 18 && Math.random() < 0.18){
+    const c = careCost(), sib = hasRel("Sibling"), opts = [];
+    if(canPay(c)) opts.push({label:`Pay for a care home (${fmt(c)} a year)`, run:() => { r.care = "home"; bump(r, 8); pushEntry(state.age, `${n} moves ${r.name} into a good care home.`, {money:-c}); }});
+    opts.push({label:`Move ${r.name} in`, run:() => { r.care = "you"; r.livingTogether = true; bump(r, 15); pushEntry(state.age, `${n} moves ${r.name} into their home to look after them.`, {happy:-3}); }});
+    opts.push({label: sib ? "Leave it to your siblings" : "Leave them to manage", run:() => { r.care = "other"; bump(r, sib ? -12 : -18); bondDelta(["Sibling"], -6); pushEntry(state.age, `${n} leaves ${r.name}'s care to ${sib ? "the rest of the family" : "chance"}.`, {happy:-2}); }});
+    moments.push({w:3, prompt:`${r.name} can no longer live alone. What does ${n} do?`, opts});
+  }
+}
+// moments with a partner or spouse
+function loveYear(a, moments){
+  const n = state.name, p = state.relationships.find(r => LOVE.includes(r.type));
+  if(!p) return;
+  if(p.closeness < 28 && Math.random() < 0.3){
+    const c = inflR(300, 10), opts = [];
+    if(canPay(c)) opts.push({label:`Go to counseling together (${fmt(c)})`, run:() => { pay(c); bump(p, rint(12, 20)); pushEntry(state.age, `${n} and ${p.name} start counseling and begin to talk again.`, {happy:2}); }});
+    opts.push({label:"Promise to do better", run:() => {
+      if(Math.random() < 0.5){ bump(p, 10); pushEntry(state.age, `${n} promises ${p.name} things will change, and means it.`, {happy:2}); }
+      else { bump(p, -5); pushEntry(state.age, `${n} promises ${p.name} things will change. ${p.name} has heard it before.`, {happy:-2}); }
+    }});
+    opts.push({label:"End it", run:() => endRelationship(p)});
+    moments.push({w:3, prompt:`${p.name} tells ${n} that things have to change, or it is over.`, opts});
+  } else if(p.type === "Partner" && p.closeness >= 65 && state.age >= 20 && Math.random() < 0.12){
+    moments.push({w:3, prompt:`${p.name} gets down on one knee and asks ${n} to marry them.`, opts:[
+      {label:"Say yes", run:() => marry(p, `${n} says yes to ${p.name}! A wedding follows.`)},
+      {label:"Not ready yet", run:() => { bump(p, -15); pushEntry(state.age, `${n} tells ${p.name} they are not ready. It stings.`, {happy:-4}); }},
+    ]});
+  } else if(p.type === "Spouse" && !hasRel("Child") && state.age >= 25 && state.age <= 44 && Math.random() < 0.15){
+    const c = inflR(2000, 100), opts = [];
+    if(canPay(c)) opts.push({label:`Start a family (${fmt(c)})`, run:() => birthChild(p)});
+    opts.push({label:"Not yet", run:() => { bump(p, -8); pushEntry(state.age, `${n} tells ${p.name} they are not ready for children yet.`, {happy:-1}); }});
+    moments.push({w:2, prompt:`${p.name} wants to start a family.`, opts});
+  }
+}
+function marry(r, text){
+  r.type = "Spouse"; r.livingTogether = true; bump(r, 15);
+  pushEntry(state.age, text, {happy:15, money:-inflR(3000, 100)});
+}
+function birthChild(p){
+  const cost = inflR(2000, 100);
+  if(!ensureCash(cost)) return;
+  state.money -= cost;
+  const c = newRel("Child", {age:0, closeness:80, origin:"your child"});
+  c.coParent = p.id;
+  pushEntry(state.age, `${state.name} and ${p.name} welcome a new child, ${c.name}.`, {happy:12});
+}
+function adoptChild(){
+  const cost = inflR(8000, 100);
+  if(state.age < 25 || state.done.adopt || !ensureCash(cost) || state.relationships.length >= 60) return;
+  state.done.adopt = true; state.money -= cost;
+  const p = state.relationships.find(r => LOVE.includes(r.type));
+  const c = newRel("Child", {age: rint(0, 8), closeness: 65, origin: "adopted"});
+  if(p) c.coParent = p.id;
+  pushEntry(state.age, `${state.name}${p ? " and " + p.name : ""} adopt ${c.name}, age ${c.age}, and bring them home.`, {happy:12});
+  render();
+}
+function endRelationship(r){
+  const n = state.name;
+  if(r.type === "Spouse"){
+    const cut = Math.round(Math.max(0, state.money) / 2) + Math.round(state.savings / 2);
+    state.savings -= Math.round(state.savings / 2); state.money -= Math.round(Math.max(0, state.money) / 2);
+    bondDelta(["Child"], -8);
+    pushEntry(state.age, `${n} divorces ${r.name}${cut > 0 ? ", who walks away with " + fmt(cut) + " in the settlement" : ""}.`, {happy:-10});
+  } else pushEntry(state.age, `${n} breaks up with ${r.name}.`, {happy:-10});
+  state.relationships = state.relationships.filter(x => x.id !== r.id);
+}
 
 // ---- inheritance ----
 function rollFamilyEstate(){            // the family's wealth, in today's dollars
@@ -2217,6 +2397,7 @@ function legacyTemplate(x){
   return {category:x.category, appreciation:0.03, vol:0.10};
 }
 function setWill(w){ state.will = w; renderPanel(); }
+function setWillSplit(m, id){ state.willSplit = m; state.willHeir = id || null; renderPanel(); }
 function buyTrust(){
   const cost = inflR(4000, 100);
   if(state.trust || state.age < 21 || !ensureCash(cost)) return;
@@ -2225,24 +2406,39 @@ function buyTrust(){
   render();
 }
 // ---------- The family line: continue as your child ----------
+// each living child is one line of the family; a child who died first passes their line to their own children
+function heirLines(){
+  const lines = state.relationships.filter(r => r.type === "Child").map(k => ({members:[k], close:k.closeness}));
+  const orphans = {};
+  state.relationships.filter(g => g.type === "Grandchild" && !findRel(g.parentId)).forEach(g => (orphans[g.parentId] = orphans[g.parentId] || []).push(g));
+  for(const id in orphans){ const m = orphans[id]; lines.push({members:m, close: m.reduce((t, g) => t + g.closeness, 0) / m.length}); }
+  return lines;
+}
 function legacyPlan(){
   const cum = state.econ.cumInflation, worth = Math.max(0, netWorth());
   const tax = estateTax(worth), net = Math.max(0, worth - tax);
   const spouse = state.relationships.find(r => r.type === "Spouse");
-  const kids = state.relationships.filter(r => r.type === "Child");
+  const lines = heirLines(), kids = lines.flatMap(l => l.members);
   let charity = 0, family = net;
   if(state.will === "charity"){ charity = net; family = 0; }
   else if(state.will === "split"){ charity = Math.round(net / 2); family = net - charity; }
   let spouseShare = 0, kidsPool = family;
   if(spouse && kids.length){ spouseShare = Math.round(family / 2); kidsPool = family - spouseShare; }   // the surviving parent keeps half
   else if(spouse){ spouseShare = family; kidsPool = 0; }
-  const each = kids.length ? Math.round(kidsPool / kids.length) : 0;
-  return {worth, tax, net, charity, family, spouse, spouseShare, kids, each, cum};
+  const chosen = state.willSplit === "one" && kids.find(k => k.id === state.willHeir);
+  const weights = lines.map(l => chosen ? (l.members.includes(chosen) ? 1 : 0) : state.willSplit === "bond" ? Math.pow(Math.max(10, l.close), 2) : 1);
+  const wsum = weights.reduce((t, w) => t + w, 0) || 1, shares = {};
+  lines.forEach((l, i) => {
+    const pool = kidsPool * weights[i] / wsum;
+    l.members.forEach(m => shares[m.id] = chosen ? (m === chosen ? Math.round(pool) : 0) : Math.round(pool / l.members.length));
+  });
+  return {worth, tax, net, charity, family, spouse, spouseShare, kids, shares, cum};
 }
 function legacyText(){
   const p = legacyPlan();
   if(p.worth < 1000 * p.cum) return "They left little behind but plenty of memories.";
-  const kidsTxt = p.kids.length === 1 ? "their child, " + p.kids[0].name : "their " + p.kids.length + " children";
+  const onlyKids = p.kids.every(k => k.type === "Child");
+  const kidsTxt = p.kids.length === 1 ? "their " + (onlyKids ? "child" : "grandchild") + ", " + p.kids[0].name : "their " + p.kids.length + (onlyKids ? " children" : " heirs");
   const fam = p.spouse && p.kids.length ? "their spouse, " + p.spouse.name + ", and " + kidsTxt
             : p.spouse ? "their spouse, " + p.spouse.name
             : p.kids.length ? kidsTxt : "extended family and friends";
@@ -2250,26 +2446,55 @@ function legacyText(){
   return `Their estate of ${fmt(p.worth)} (${fmt(p.worth / p.cum)} in today's money)${p.tax ? ", after " + fmt(p.tax) + " in estate tax," : ""} passes to ${to}.`;
 }
 const TRAIT_START = {Funny:{happy:5}, Wise:{smarts:6}, Loyal:{happy:3}, Ambitious:{smarts:3}, Generous:{happy:3}, Adventurous:{health:5}, Moody:{happy:-4}, Flaky:{smarts:-3}};
-// what one child receives, and in what form (called while the finished life is still the current state)
+// what one heir receives, and in what form (called while the finished life is still the current state).
+// An adult heir takes the business, property and investments as they are, as far as their share covers them; the rest is cash.
 function heirCash(kid, plan){
-  const biz = state.business, takesBiz = kid.age >= 18 && !!biz;
-  return {cash: Math.max(0, plan.each - (takesBiz ? biz.value : 0)), takesBiz, bizValue: takesBiz ? biz.value : 0, trust: kid.age < 18};
+  const share = plan.shares[kid.id] || 0, adult = kid.age >= 18;
+  const biz = state.business, takesBiz = adult && !!biz;
+  let left = share - (takesBiz ? biz.value : 0), assetValue = 0;
+  const assets = [];
+  state.assets.slice().sort((x, y) => y.value - x.value).forEach(x => {
+    if(!adult && x.category !== "Jewelry" && x.category !== "Collectibles") return;
+    const loan = state.loans.find(l => l.assetId === x.id), net = x.value - (loan ? loan.balance : 0);
+    if(net > 0 && net <= left){ assets.push(x.id); left -= net; assetValue += net; }
+  });
+  const pv = portfolioValue(), takesStocks = adult && pv > 0 && pv <= left;
+  if(takesStocks) left -= pv;
+  return {cash: Math.max(0, Math.round(left)), takesBiz, bizValue: takesBiz ? biz.value : 0, assets, assetValue: Math.round(assetValue),
+          takesStocks, stockValue: takesStocks ? Math.round(pv) : 0, trust: !adult,
+          assetNames: state.assets.filter(x => assets.includes(x.id)).map(x => x.name)};
+}
+function inheritParts(p){
+  const parts = [fmt(p.cash) + (p.trust ? " (held in a trust fund until 18)" : "")];
+  if(p.takesBiz) parts.push("the family business (" + fmt(p.bizValue) + ")");
+  if(p.assetNames.length) parts.push(p.assetNames.join(", ") + " (" + fmt(p.assetValue) + ")");
+  if(p.takesStocks) parts.push("the investment portfolio (" + fmt(p.stockValue) + ")");
+  return parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+}
+function inheritText(name, p){
+  return p.cash > 0 || p.takesBiz || p.assets.length || p.takesStocks
+    ? `${name} inherits ${inheritParts(p)}.`
+    : `${name} inherits nothing, but starts with the family name and a life ahead.`;
+}
+function lineageHtml(){
+  const line = (state.lineage || []).concat([{name: state.name, age: state.age, worth: Math.max(0, netWorth()) / state.econ.cumInflation}]);
+  if(line.length < 2) return "";
+  return '<div class="plabel">The family line</div><div class="status">' +
+    line.map((x, i) => "Generation " + (i + 1) + ": <b>" + x.name + "</b>, lived to " + x.age + ", left " + fmt(x.worth) + " in today's money").join("<br>") + "</div>";
 }
 function showHeirs(){
   const box = document.getElementById("heirBox"); if(!box) return;
   const p = legacyPlan();
-  if(!p.kids.length){ box.innerHTML = '<div class="status">There are no children to carry the family line forward.</div>'; return; }
+  let h = lineageHtml();
+  if(!p.kids.length){ box.innerHTML = h + '<div class="status">There are no children to carry the family line forward.</div>'; return; }
   const parts = ["Estate " + fmt(p.worth), "estate tax " + fmt(p.tax)];
   if(p.charity) parts.push("charity " + fmt(p.charity));
   if(p.spouse) parts.push(p.spouse.name + " keeps " + fmt(p.spouseShare));
-  parts.push("each child receives " + fmt(p.each));
-  let h = '<div class="plabel">Continue the family line</div><div class="status">' + parts.join(" · ") + "</div>";
-  p.kids.slice().sort((a, b) => b.age - a.age).forEach(k => {
+  h += '<div class="plabel">Continue the family line</div><div class="status">' + parts.join(" · ") + "</div>";
+  p.kids.slice().sort((a, b) => (b.type === "Child") - (a.type === "Child") || b.age - a.age).forEach(k => {
     const c = heirCash(k, p), tr = (k.traits || []).map(t => t.toLowerCase()).join(" · ");
-    let body = [tr, bondLabel(k).toLowerCase() + " bond with you"].filter(Boolean).join(" · ") + ". Inherits " + fmt(c.cash);
-    if(c.takesBiz) body += " and takes over the family business, worth " + fmt(c.bizValue);
-    if(c.trust) body += ", held in a trust fund until age 18";
-    h += bankRow(k.name + ", age " + k.age, body + ".", '<button onclick="continueAs(\'' + k.id + '\')">Continue as ' + k.name + "</button>");
+    const body = [tr].concat(lifeBits(k)).concat([bondLabel(k).toLowerCase() + " bond with you"]).filter(Boolean).join(" · ") + ". Inherits " + inheritParts(c) + ".";
+    h += bankRow(k.name + (k.type === "Grandchild" ? " (grandchild)" : "") + ", age " + k.age, body, '<button onclick="continueAs(\'' + k.id + '\')">Continue as ' + k.name + "</button>");
   });
   box.innerHTML = h;
 }
@@ -2282,47 +2507,73 @@ function applyHeir(h){
   const old = h.old, kid = h.kid, plan = h.plan, pkg = h.pkg, age = kid.age, cum = old.econ.cumInflation;
   state.age = age;
   state.generation = (old.generation || 1) + 1;
-  state.lineage = (old.lineage || []).concat([old.name]);
+  state.lineage = (old.lineage || []).concat([{name: old.name, age: old.age, worth: plan.worth / cum}]);
   state.econ = old.econ; state.market = old.market;               // the world carries on from where the last life ended
   state.movedOut = age >= 18;
   state.traits = (kid.traits || []).slice();
+  state.will = old.will; state.trust = old.trust;
   // genes and upbringing
   const mix = v => clamp(Math.round(0.4 * v + 0.6 * rint(38, 85)));
   state.stats.smarts = mix(old.stats.smarts); state.stats.looks = mix(old.stats.looks);
   state.stats.health = clamp(rint(62, 92) - Math.max(0, age - 55));
   state.stats.happy = clamp(rint(48, 82) + Math.round((kid.closeness - 50) / 5));
   state.traits.forEach(t => { const d = TRAIT_START[t]; if(d) for(const k in d) state.stats[k] = clamp(state.stats[k] + d[k]); });
-  // schooling
+  if(kid.edu === "Bachelor" || kid.inCollege) state.stats.smarts = clamp(state.stats.smarts + 5);
+  // schooling: pick up where they were
   const e = state.edu;
   if(age >= 5 && age < 18){ e.school = age < 12 ? "Primary School" : "High School"; e.gpa = clamp(Math.round(40 + state.stats.smarts * 0.3 + rint(0, 14))); }
+  else if(kid.inCollege){ e.level = "High School"; e.school = "College"; e.endAge = kid.collegeEnd; e.financeMethod = kid.collegePaid ? "paid" : "loan"; e.gpa = clamp(Math.round(45 + state.stats.smarts * 0.3 + rint(0, 12))); }
+  else if(kid.edu) e.level = kid.edu;
   else if(age >= 18) e.level = (pkg.cash >= 40000 * cum && Math.random() < 0.4 + state.stats.smarts / 300) ? "Bachelor" : "High School";
+  // their working life so far
+  if(kid.job){
+    const t = CAREERS[kid.job.track][kid.job.rank];
+    state.job = {track: kid.job.track, rank: kid.job.rank, title: t.title, salary: inflR(t.salary, 100), years: kid.job.years};
+    state.peakSalary = state.job.salary; state.workYears = kid.job.years;
+  }
   // the inheritance
   if(pkg.trust) state.trustFund = pkg.cash; else state.money = pkg.cash;
   if(pkg.takesBiz) state.business = old.business;
-  state.inheritedTotal = pkg.cash + pkg.bizValue;
+  if(pkg.assets.length){
+    state.assetSeq = old.assetSeq; state.loanSeq = old.loanSeq;
+    state.assets = old.assets.filter(x => pkg.assets.includes(x.id)).map(x => Object.assign({}, x, {boughtPrice: Math.round(x.value), boughtAge: age}));
+    state.loans = old.loans.filter(l => pkg.assets.includes(l.assetId)).map(l => Object.assign({}, l));
+  }
+  if(pkg.takesStocks){ state.portfolio = old.portfolio; state.basis = old.basis; }
+  state.inheritedTotal = pkg.cash + pkg.bizValue + pkg.assetValue + pkg.stockValue;
   // a passion you grew up around
   let top = null;
   for(const k in old.hobbies) if(old.hobbies[k].level >= 50 && (!top || old.hobbies[k].level > old.hobbies[top].level)) top = k;
   if(top) state.hobbies[top] = {level: Math.round(old.hobbies[top].level * 0.3)};
   // the people around you
-  const rels = [], named = (type, name, o) => { const r = makeRel(type, o); r.name = name; return r; };
-  if(plan.spouse){
-    rels.push(named(Math.random() < 0.5 ? "Mother" : "Father", plan.spouse.name, {age: plan.spouse.age, closeness: 60 + rint(-10, 15), origin:"family", traits: plan.spouse.traits, livingTogether: age < 18}));
-    state.famEstate = Math.round(plan.spouseShare / cum);          // what the surviving parent holds becomes a future inheritance
-  } else if(age < 18){
+  const rels = [], copy = (type, src, o) => {
+    const r = makeRel(type, Object.assign({age: src.age, traits: src.traits}, o)); r.name = src.name;
+    ["edu", "job", "spouse", "inCollege", "collegeEnd", "collegePaid", "movedOut"].forEach(k => { if(src[k] !== undefined) r[k] = src[k] && typeof src[k] === "object" ? Object.assign({}, src[k]) : src[k]; });
+    return r;
+  };
+  const oldRel = id => old.relationships.find(r => r.id === id);
+  if(kid.type === "Child"){
+    const co = (kid.coParent && oldRel(kid.coParent) && LOVE.includes(oldRel(kid.coParent).type)) ? oldRel(kid.coParent) : plan.spouse;
+    if(co){
+      rels.push(copy(Math.random() < 0.5 ? "Mother" : "Father", co, {closeness: Math.max(30, Math.min(95, co.closeness - 5 + rint(-10, 10))), origin:"family", livingTogether: age < 18}));
+      state.famEstate = co === plan.spouse ? Math.round(plan.spouseShare / cum) : rint(20000, 150000);   // what the surviving parent holds becomes a future inheritance
+    }
+    old.relationships.filter(r => r.type === "Child" && r.id !== kid.id).forEach(k => rels.push(copy("Sibling", k, {closeness: 50 + rint(-15, 20), origin:"family"})));
+  } else {
+    old.relationships.filter(r => r.type === "Grandchild" && r.parentId === kid.parentId && r.id !== kid.id).forEach(k => rels.push(copy("Sibling", k, {closeness: 50 + rint(-15, 20), origin:"family"})));
+  }
+  if(age < 18 && !rels.some(r => r.type === "Mother" || r.type === "Father")){
     rels.push(makeRel(Math.random() < 0.5 ? "Mother" : "Father", {age: age + rint(26, 38), closeness: 55 + rint(0, 15), origin:"guardian", livingTogether:true}));
     state.famEstate = rint(20000, 150000);
   }
-  plan.kids.filter(k => k.id !== kid.id).forEach(k => rels.push(named("Sibling", k.name, {age:k.age, closeness: 50 + rint(-15, 20), origin:"family", traits:k.traits})));
+  // their own spouse and children, exactly as they were
+  if(kid.spouse){
+    const sp = copy("Spouse", kid.spouse, {closeness: rint(55, 80), origin:"your spouse", livingTogether:true});
+    rels.push(sp);
+    old.relationships.filter(g => g.type === "Grandchild" && g.parentId === kid.id).forEach(g => { const c = copy("Child", g, {closeness: Math.max(50, g.closeness + 20), origin:"your child"}); c.coParent = sp.id; rels.push(c); });
+  } else if(age >= 22 && Math.random() < 0.2) rels.push(makeRel("Partner", {age: Math.max(18, age + rint(-5, 5)), closeness: rint(45, 70), origin:"on a date"}));
   if(age >= 3) for(let i = 0, n = age < 12 ? rint(1, 3) : rint(2, 4); i < n; i++)
     rels.push(makeRel("Friend", {age: Math.max(0, age + rint(-4, 4)), closeness: rint(35, 60), origin: age < 18 ? "at school" : pick(["in the neighborhood", "through work", "online"])}));
-  if(age >= 22){
-    const pSpouse = age >= 28 ? Math.min(0.65, 0.2 + (age - 28) * 0.02) : 0.12, roll = Math.random();
-    if(roll < pSpouse){
-      rels.push(makeRel("Spouse", {age: Math.max(18, age + rint(-5, 5)), closeness: rint(55, 80), origin:"your spouse", livingTogether:true}));
-      if(age >= 26) for(let i = 0, n = rint(0, 2); i < n; i++) rels.push(makeRel("Child", {age: rint(0, Math.max(0, Math.min(25, age - 22))), closeness: rint(55, 85), origin:"your child"}));
-    } else if(roll < pSpouse + 0.2) rels.push(makeRel("Partner", {age: Math.max(18, age + rint(-5, 5)), closeness: rint(45, 70), origin:"on a date"}));
-  }
   state.relationships = rels;
 }
 // a trust fund holds a minor heir's money until they turn 18
@@ -2365,6 +2616,7 @@ function relRow(r){
   let more = all.filter(o => !basics.includes(o.ix.key)).map(o => btn(o.ix)).join("");
   if(r.type === "Partner"){
     if(!r.livingTogether) more += '<button onclick="moveIn(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Move in</button>';
+    else more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) ? "disabled" : "") + '>Have a child</button>';
     more += '<button onclick="propose(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Propose</button><button onclick="breakUp(\'' + r.id + '\')">Break up</button>';
   } else if(r.type === "Spouse"){
     more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) ? "disabled" : "") + '>Have a child</button><button onclick="breakUp(\'' + r.id + '\')">Divorce</button>';
@@ -2372,7 +2624,7 @@ function relRow(r){
     more += '<button onclick="cutTies(\'' + r.id + '\')">Cut ties</button>';
   }
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
-  const meta = [tr, r.origin ? "met " + r.origin : "", r.livingTogether ? "living together" : ""].filter(Boolean).join(" · ");
+  const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
   return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b> <span class="tick">' + r.type.toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
     '<div class="stat-track" style="margin:5px 0 2px;"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' +
@@ -2385,12 +2637,14 @@ function socialPanelHtml(){
   const closest = people.slice().sort((x, y) => y.closeness - x.closeness)[0];
   let h = '<div class="status">' + people.length + " people in your life · " + strong + " close bond" + (strong === 1 ? "" : "s") +
           (closest ? "<br>Closest: <b>" + closest.name + "</b> (" + bondLabel(closest).toLowerCase() + ")" : "") +
-          "<br>Close bonds lift your mood a little every year.</div>";
+          "<br>Close bonds lift your mood a little every year." +
+          (state.lineage.length ? "<br>Generation " + state.generation + " of the family line, after " + state.lineage.map(x => x.name).join(" → ") + "." : "") + "</div>";
   if(state.estates.length) h += estatesHtml();
   const single = !hasRel("Partner","Spouse"), famCount = people.filter(r => FAMILY_TYPES.includes(r.type)).length;
   h += '<div class="btnrow-social"><button onclick="toggleSocMenu(\'meet\')">' + (state.socMenu === "meet" ? "Close" : "Meet people") + "</button>";
   if(a >= 14 && single) h += '<button onclick="toggleSocMenu(\'date\')">' + (state.socMenu === "date" ? "Close" : "Dating") + "</button>";
   if(a >= 16){ const pc = inflR(300,10); h += '<button onclick="hostParty()" ' + ((state.done.party || state.money + state.savings < pc || !people.some(r => r.type === "Friend" || r.type === "Coworker")) ? "disabled" : "") + '>Host a party (' + fmt(pc) + ")</button>"; }
+  if(a >= 25){ const ac = inflR(8000,100); h += '<button onclick="adoptChild()" ' + ((state.done.adopt || state.money + state.savings < ac) ? "disabled" : "") + '>Adopt a child (' + fmt(ac) + ")</button>"; }
   if(famCount >= 2){ const gc = inflR(200,10); h += '<button onclick="familyGathering()" ' + ((state.done.gathering || state.money + state.savings < gc) ? "disabled" : "") + '>Family gathering (' + fmt(gc) + ")</button>"; }
   h += "</div>";
   if(state.socMenu === "meet"){
@@ -2400,7 +2654,7 @@ function socialPanelHtml(){
     h += '<div class="plabel">How do you want to meet someone romantically?</div><div class="btnrow-social">' + DATE_KINDS.map(d => { const st = dateState(d); return '<button onclick="dateOut(\'' + d.key + '\')" ' + (st.ok ? "" : "disabled") + ">" + d.label + (dCost(d) ? " (" + fmt(dCost(d)) + ")" : "") + (st.ok ? "" : " · " + st.why) + "</button>"; }).join("") + "</div>";
   }
   if(!people.length) h += '<div class="status">No connections yet. Use "Meet people" to start.</div>';
-  const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"]];
+  const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child","Grandchild"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"]];
   groups.forEach(([label, test]) => {
     const list = people.filter(test).sort((x, y) => y.closeness - x.closeness);
     if(list.length) h += '<div class="plabel">' + label + " (" + list.length + ")</div>" + list.map(relRow).join("");
@@ -2413,6 +2667,13 @@ function estatePlanHtml(){
   const tc = inflR(4000, 100);
   let h = '<div class="plabel">ESTATE PLANNING</div><div class="invrow"><div class="owned">Decide where your estate goes when your story ends. Estate tax applies above ' + fmt(1500000 * state.econ.cumInflation) + " (" + (state.trust ? "18%" : "35%") + ").</div>";
   h += '<div class="sortrow">' + pill("Family", state.will === "family", "setWill('family')") + pill("Split with charity", state.will === "split", "setWill('split')") + pill("Charity", state.will === "charity", "setWill('charity')") + "</div>";
+  const heirs = heirLines().flatMap(l => l.members);
+  if(heirs.length > 1){
+    const p = legacyPlan();
+    h += '<div class="owned" style="margin-top:8px;">How your heirs share it:</div><div class="sortrow">' + pill("Equal shares", state.willSplit === "equal", "setWillSplit('equal')") + pill("By closeness", state.willSplit === "bond", "setWillSplit('bond')") +
+      heirs.slice(0, 6).map(k => pill("All to " + k.name, state.willSplit === "one" && state.willHeir === k.id, "setWillSplit('one','" + k.id + "')")).join("") + "</div>";
+    h += '<div class="owned">' + heirs.map(k => k.name + " " + fmt(p.shares[k.id] || 0)).join(" · ") + " (at today's net worth)</div>";
+  }
   h += '<div class="assetbuy"><button onclick="buyTrust()" ' + ((state.trust || state.money + state.savings < tc) ? "disabled" : "") + ">" + (state.trust ? "Family trust in place" : "Set up a family trust (" + fmt(tc) + ")") + "</button></div></div>";
   return h;
 }
@@ -3348,7 +3609,7 @@ function schoolYear(a){
       let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
       if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, state.econ.rate - 0.005), {deferred:true});
       sl.principal += tuition; sl.balance += tuition;
-    } else {
+    } else if(e.financeMethod !== 'paid'){
       applyDelta({money:-tuition});
     }
   }
