@@ -324,6 +324,8 @@
   .hl-tag{ font-size:15px; line-height:1.3; }
   .hl-d{ color:var(--muted); font-size:12.5px; margin-top:1px; }
   .hl-you{ font-size:10px; font-weight:800; color:var(--gold); background:rgba(185,132,44,0.12); padding:1px 6px; border-radius:99px; white-space:nowrap; vertical-align:2px; }
+  .paper-chips{ display:flex; flex-wrap:wrap; gap:5px; margin:2px 0 4px; }
+  .paper-chips span{ font-size:11px; font-weight:700; background:rgba(189,82,79,0.08); color:var(--ink); border:1px solid var(--line); padding:2px 8px; border-radius:99px; }
   .paper-more{ background:none; border:none; color:var(--accent); font-size:12.5px; padding:6px 0 2px; text-decoration:underline; }
   .paper-past{ font-size:11px; letter-spacing:.02em; color:var(--muted); padding:4px 0; border-top:1px dashed var(--line); line-height:1.45; }
   /* toast */
@@ -1788,6 +1790,8 @@ const TRACK_INFO = {
   Acting:{star:true, blurb:'Looks and luck; most never make it'},
   Music:{star:true, blurb:'A long shot with a huge payoff'},
   Sports:{star:true, maxAge:38, risk:0.05, blurb:'Over by your late thirties'},
+  'Green Energy':{gated:'Green Energy', blurb:'A brand-new industry'},
+  'Space Industry':{gated:'Space Industry', risk:0.02, blurb:'Reach for the stars'},
 };
 // some rungs need a specific degree; a relevant major can be replaced by three years in the field
 const DEGREE_RULES = {
@@ -1958,6 +1962,22 @@ const CAREERS = {
     {title:'Headliner', minAge:26, edu:'None', minSmarts:35, minLooks:50, salary:800000, hours:50, stress:70, promo:0.025},
     {title:'Music Legend', minAge:32, edu:'None', minSmarts:35, salary:1800000, hours:35, stress:55, promo:0},
   ],
+  'Green Energy': [
+    {title:'Solar Installer', minAge:18, edu:'High School', minSmarts:20, salary:38000, hours:40, stress:30, promo:0.18},
+    {title:'Wind Technician', minAge:20, edu:'High School', minSmarts:35, salary:52000, hours:42, stress:38, promo:0.14},
+    {title:'Energy Engineer', minAge:23, edu:'Bachelor', minSmarts:62, salary:90000, hours:45, stress:45, promo:0.1},
+    {title:'Project Manager', minAge:28, edu:'Bachelor', minSmarts:68, salary:115000, hours:48, stress:55, promo:0.08},
+    {title:'Plant Director', minAge:35, edu:'Bachelor', minSmarts:75, salary:160000, hours:50, stress:62, promo:0.05},
+    {title:'Chief Sustainability Officer', minAge:42, edu:'Bachelor', minSmarts:80, salary:240000, hours:52, stress:68, promo:0},
+  ],
+  'Space Industry': [
+    {title:'Launch Technician', minAge:18, edu:'High School', minSmarts:35, salary:42000, hours:45, stress:40, promo:0.16},
+    {title:'Mission Controller', minAge:22, edu:'Bachelor', minSmarts:65, salary:85000, hours:48, stress:60, promo:0.11},
+    {title:'Aerospace Engineer', minAge:24, edu:'Bachelor', minSmarts:72, salary:120000, hours:50, stress:62, promo:0.08},
+    {title:'Astronaut', minAge:30, edu:'Master', minSmarts:80, minHealth:80, salary:180000, hours:55, stress:75, promo:0.05},
+    {title:'Flight Director', minAge:36, edu:'Master', minSmarts:82, salary:230000, hours:55, stress:72, promo:0.04},
+    {title:'Head of Space Program', minAge:45, edu:'Master', minSmarts:86, salary:350000, hours:58, stress:80, promo:0},
+  ],
   Sports: [
     {title:'Amateur Athlete', minAge:16, edu:'None', minSmarts:0, minHealth:70, hobby:'sports', hobbyLvl:40, salary:5000, hours:25, stress:30, promo:0.15},
     {title:'Minor League Player', minAge:18, edu:'None', minSmarts:0, minHealth:75, salary:35000, hours:40, stress:45, promo:0.1},
@@ -2092,7 +2112,8 @@ function updateMarket(a){
     m.prev = m.price;
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5; // roughly -1..1, centered
     const marketMove = x.hedge ? -bias * 0.35 : bias;                    // gold and bonds hold up when stocks crash
-    const change = x.drift + marketMove + (swings[x.sector] || 0) + (hit && hit.key === x.key ? hit.move : 0) + noise * x.vol;
+    const wf = wfx(), worldMove = (x.hedge ? -wf.market * 0.5 : wf.market) + (wf.sectors[x.sector] || 0) + wf.inflation * 0.8 + (x.type === 'stock' && !x.hedge ? 0.03 : 0);   // prices of real businesses rise with inflation; stocks pay a premium for living through bad times
+    const change = x.drift + marketMove + worldMove + (swings[x.sector] || 0) + (hit && hit.key === x.key ? hit.move : 0) + noise * x.vol;
     m.price = Math.max(0.0001, m.price * (1 + change));
   });
   state.marketNews = news.map(n => ({text:n.text, up:n.up, key:n.key || null, age:a}));
@@ -2484,6 +2505,7 @@ function housingYear(a){
   if(r < 0.04){ H.trend = -0.1 - Math.random() * 0.08; pushEntry(a, 'The housing market crashes. Property values are falling fast.', state.assets.some(x => x.category === 'Homes' || x.rental) ? {happy:-3} : {}); }
   else if(r < 0.09){ H.trend = 0.06 + Math.random() * 0.05; if(state.assets.some(x => x.category === 'Homes' || x.rental)) pushEntry(a, 'The housing market is booming, and property values are climbing.', {happy:2}); }
   else H.trend = H.trend * 0.55 + (Math.random() * 0.04 - 0.02);
+  H.trend += wfx().housing;
   H.idx = Math.max(0.4, H.idx * (1 + H.trend));
   makeListings();
 }
@@ -2539,7 +2561,7 @@ function rentalsYear(a){
     const vac = Math.max(0.01, Math.min(0.8, 0.05 + (r.rent === 'high' ? 0.1 : r.rent === 'low' ? -0.03 : 0) + Math.max(0, (55 - r.cond) / 150) + loc.vacancy +
       (state.econ.recession ? 0.05 : 0) - (r.manager ? 0.03 : 0) - (r.lease ? 0.04 : 0) + (t.shortTerm ? 0.08 : 0) + (t.commercial ? 0.04 : 0)));
     let occ = 0; for(let i = 0; i < r.units; i++) if(Math.random() > vac) occ++;
-    const gross = x.value * ((t.rentalYield || 0.05) + loc.yield) * RENT_MULT[r.rent];
+    const gross = x.value * ((t.rentalYield || 0.05) + loc.yield) * (r.rent === 'high' && (state.world.laws || []).includes('rentControl') ? 1.03 : RENT_MULT[r.rent]);
     const collected = Math.round(gross * occ / r.units * (t.shortTerm ? 0.7 + Math.random() * 0.6 : 1));
     const fee = r.manager ? Math.round(collected * (t.shortTerm ? 0.2 : 0.1)) : 0;
     const tax = Math.round(x.value * 0.011);
@@ -2839,6 +2861,167 @@ function relationshipsYear(a, prompted){
   return false;
 }
 
+// ---------- World events: long-running changes the player lives through ----------
+// Each event lasts some years and shapes markets (sectors), careers (tracks), businesses (types), housing and prices.
+const WORLD_EVENTS = [
+  {key:'recession', name:'Recession', icon:'📉', chance:0.05, years:[1,3], blocks:['boom'],
+   fx:{market:-0.04, hiring:-8, layoffs:0.05, biz:-0.12, housing:-0.03}, desc:'Jobs are scarce, layoffs common, businesses and markets struggle.',
+   start:'RECESSION OFFICIALLY DECLARED', end:'RECESSION IS OVER', onStart:ev => { state.econ.recession = true; state.econ.recessionLeft = ev.left; pushEntry(state.age, `A recession hits — jobs get scarcer and markets get shakier.`, {happy:-4}); }},
+  {key:'boom', name:'Economic boom', icon:'🚀', chance:0.05, years:[2,4], blocks:['recession'],
+   fx:{market:0.06, hiring:8, raise:0.025, biz:0.12, housing:0.03}, desc:'Hiring is easy, raises are bigger, businesses and markets thrive.',
+   start:'ECONOMY BOOMS AS GROWTH HITS RECORD HIGH', end:'BOOM YEARS COOL OFF'},
+  {key:'pandemic', name:'Pandemic', icon:'🦠', chance:0.012, years:[2,3],
+   fx:{flu:4, market:-0.05, noTravel:true, tracks:{Medicine:{hire:15, pay:0.1}, Acting:{layoff:0.08}, Culinary:{layoff:0.1}, Aviation:{layoff:0.12}, Music:{layoff:0.08}, Retail:{layoff:0.04}},
+       bizTypes:{restaurant:-0.4, bar:-0.45, gym:-0.4, hotel:-0.5, coffee:-0.3, salon:-0.35, onlinestore:0.3, tech:0.15, appstudio:0.15, logistics:0.2},
+       sectors:{Healthcare:0.12, Biotech:0.18, Transport:-0.2, Entertainment:-0.12, Tech:0.06}},
+   desc:'Illness spreads, borders close to travel, restaurants and hotels collapse while doctors, online shops and delivery boom.',
+   start:'PANDEMIC DECLARED', end:'PANDEMIC OFFICIALLY OVER', onStart:() => { state.world.fx.marketShock = -0.2; if(!state.econ.recession){ state.econ.recession = true; state.econ.recessionLeft = 1; } }},
+  {key:'housingcrash', name:'Housing crash', icon:'🏚', chance:0.025, years:[2,3], blocks:['housingboom'],
+   fx:{housing:-0.1, sectors:{'Real Estate':-0.15, Financial:-0.08}, tracks:{Trades:{layoff:0.05}}, bizTypes:{realestate:-0.35, construction:-0.25}},
+   desc:'Home values fall year after year; builders and realtors struggle.', start:'HOUSING MARKET CRASHES', end:'HOUSING MARKET FINALLY STABILIZES'},
+  {key:'housingboom', name:'Housing boom', icon:'🏗', chance:0.03, years:[2,4], blocks:['housingcrash'],
+   fx:{housing:0.07, sectors:{'Real Estate':0.1}, tracks:{Trades:{hire:8, pay:0.05}}, bizTypes:{realestate:0.25, construction:0.2}},
+   desc:'Home prices climb fast; builders and realtors are busy.', start:'HOUSING BOOM: PRICES HIT ALL-TIME HIGHS', end:'HOUSING BOOM LOSES STEAM'},
+  {key:'bear', name:'Bear market', icon:'🐻', chance:0.035, years:[1,2],
+   fx:{market:-0.06, sectors:{Tech:-0.04, AI:-0.06}}, desc:'Stocks grind lower for a year or more.', start:'BEAR MARKET GRIPS WALL STREET', end:'BULLS RETURN AS BEAR MARKET ENDS', onStart:() => { state.world.fx.marketShock = (state.world.fx.marketShock || 0) - 0.08; }},
+  {key:'war', name:'War overseas', icon:'⚔️', chance:0.012, years:[2,5],
+   fx:{market:-0.03, inflation:0.015, gas:1.3, sectors:{Aerospace:0.15, Energy:0.12, Transport:-0.06}, tracks:{Military:{hire:20, pay:0.15, danger:true}}},
+   desc:'Defense and energy stocks rise, prices and gas climb, and the military hires and pays more but is far more dangerous.',
+   start:'WAR BREAKS OUT OVERSEAS', end:'PEACE TREATY SIGNED, WAR ENDS'},
+  {key:'fuel', name:'Fuel shortage', icon:'⛽', chance:0.03, years:[1,2],
+   fx:{gas:1.8, inflation:0.01, sectors:{Energy:0.2, Transport:-0.2, Automotive:-0.1}, tracks:{Aviation:{layoff:0.06}}, bizTypes:{logistics:-0.25, dealership:-0.2}},
+   desc:'Gas costs soar; airlines, shipping and car dealers suffer while energy stocks rise.', start:'FUEL SHORTAGE: LINES STRETCH AROUND THE BLOCK', end:'FUEL SUPPLIES BACK TO NORMAL'},
+  {key:'inflation', name:'Inflation surge', icon:'💸', chance:0.03, years:[2,3],
+   fx:{inflation:0.035, rate:0.012, sectors:{Commodities:0.1, Bonds:-0.06}}, desc:'Prices and interest rates climb fast; savings lose value and gold holds up.',
+   start:'INFLATION SURGES TO MULTI-DECADE HIGH', end:'INFLATION BACK UNDER CONTROL'},
+  {key:'ai', name:'AI revolution', icon:'🤖', chance:0.025, years:[6,10], once:true,
+   fx:{sectors:{AI:0.12, Tech:0.06}, tracks:{Technology:{hire:12, pay:0.15}, Science:{hire:6, pay:0.05}, Retail:{layoff:0.04}, Business:{layoff:0.02}, Finance:{layoff:0.02}}, bizTypes:{tech:0.2, appstudio:0.25, agency:-0.1}},
+   desc:'Tech pays far more and hires constantly; some retail, office and finance jobs are automated away.', start:'AI REVOLUTION RESHAPES THE ECONOMY', end:'AI IS NOW PART OF EVERYDAY LIFE'},
+  {key:'disaster', name:'Natural disaster', icon:'🌋', chance:0.04, years:[1,1],
+   fx:{storm:true, sectors:{Financial:-0.06, Materials:0.08}, tracks:{Trades:{hire:10, pay:0.05}, Firefighting:{hire:10}}, bizTypes:{construction:0.25}},
+   desc:'Homes and properties are damaged; rebuilding keeps builders busy.', start:null, onStart:() => headline(pick(['MAJOR EARTHQUAKE STRIKES THE REGION', 'DEVASTATING HURRICANE SEASON', 'HISTORIC FLOODS DISPLACE THOUSANDS', 'WILDFIRES BURN THROUGH THE HILLS']), 'Homeowners face a long rebuild.', 'weather', state.assets.some(x => x.category === 'Homes' || x.rental))},
+];
+// one-time breakthroughs and new industries that change the world for good
+const WORLD_TECH = [
+  {key:'greenEnergy', chance:0.03, unlock:'Green Energy', head:'CLEAN ENERGY INDUSTRY TAKES OFF', d:'A whole new field of jobs opens up.'},
+  {key:'space', chance:0.02, unlock:'Space Industry', head:'COMMERCIAL SPACEFLIGHT BECOMES AN INDUSTRY', d:'Rocket companies are hiring.', after:'greenEnergy'},
+  {key:'selfDriving', chance:0.025, head:'SELF-DRIVING CARS HIT THE ROADS', d:'Crashes drop sharply.'},
+  {key:'fusion', chance:0.015, head:'FUSION POWER GOES ONLINE', d:'Energy bills shrink for everyone.'},
+];
+const WORLD_LAWS = [
+  {key:'rentControl', head:'RENT CONTROL PASSED', d:'Landlords can no longer charge top rents.', side:'progressive'},
+  {key:'fourDay', head:'FOUR-DAY WORK WEEK BECOMES LAW', d:'Workers everywhere get a longer weekend.', side:'progressive'},
+  {key:'cannabis', head:'CANNABIS LEGALIZED', d:'A new kind of business opens up.', side:'progressive'},
+  {key:'remote', head:'REMOTE WORK PROTECTED BY LAW', d:'Businesses save on offices.', side:'any'},
+  {key:'dereg', head:'SWEEPING DEREGULATION SIGNED', d:'Businesses face fewer rules and costs.', side:'conservative'},
+  {key:'toughCrime', head:'TOUGH-ON-CRIME LAW PASSED', d:'Sentences get longer and police get more power.', side:'conservative'},
+];
+const PARTIES = {progressive:{name:'Progressive Party', tax:0.04, wage:0.05}, conservative:{name:'Conservative Party', tax:-0.05, wage:0}};
+// combined effects of everything going on in the world right now
+function worldFx(){
+  const w = state.world, out = {market:0, hiring:0, layoffs:0, raise:0, biz:0, housing:0, inflation:0, rate:0, gas:1, flu:1, sectors:{}, tracks:{}, bizTypes:{}, noTravel:false, storm:false};
+  (w.events || []).forEach(ev => {
+    const d = WORLD_EVENTS.find(x => x.key === ev.key); if(!d) return;
+    const f = d.fx;
+    ['market','hiring','layoffs','raise','biz','housing','inflation','rate'].forEach(k => { if(f[k]) out[k] += f[k]; });
+    if(f.gas) out.gas = Math.max(out.gas, f.gas);
+    if(f.flu) out.flu = Math.max(out.flu, f.flu);
+    if(f.noTravel) out.noTravel = true;
+    if(f.storm) out.storm = true;
+    for(const s in f.sectors || {}) out.sectors[s] = (out.sectors[s] || 0) + f.sectors[s];
+    for(const b in f.bizTypes || {}) out.bizTypes[b] = (out.bizTypes[b] || 0) + f.bizTypes[b];
+    for(const t in f.tracks || {}){ const o = out.tracks[t] = out.tracks[t] || {hire:0, pay:0, layoff:0}; o.hire += f.tracks[t].hire || 0; o.pay += f.tracks[t].pay || 0; o.layoff += f.tracks[t].layoff || 0; if(f.tracks[t].danger) o.danger = true; }
+  });
+  if((w.laws || []).includes('dereg')) out.biz += 0.05;
+  if((w.laws || []).includes('remote')) out.biz += 0.03;
+  return out;
+}
+const trackFx = t => (state.world && state.world.fxCache && state.world.fxCache.tracks[t]) || {hire:0, pay:0, layoff:0};
+const wfx = () => (state.world && state.world.fxCache) || worldFx();
+// each year: events end, new ones begin, elections and laws happen
+function worldEventsYear(a){
+  const w = state.world, e = state.econ, r = Math.random;
+  w.events = w.events || []; w.laws = w.laws || []; w.tech = w.tech || []; w.unlocked = w.unlocked || []; w.seen = w.seen || [];
+  // end or continue what is already happening
+  w.events = w.events.filter(ev => {
+    const d = WORLD_EVENTS.find(x => x.key === ev.key);
+    ev.left--; ev.year++;
+    const over = ev.key === 'recession' ? !e.recession : ev.left <= 0;
+    if(over && d && d.end) headline(d.end, 'Life slowly returns to normal.', 'economy', true);
+    if(over && ['bear','recession','pandemic'].includes(ev.key)) w.fx.marketShock = (w.fx.marketShock || 0) + 0.1;   // markets bounce back when bad times end
+    return !over;
+  });
+  if(e.recession && !w.events.some(ev => ev.key === 'recession')) w.events.push({key:'recession', left:e.recessionLeft || 1, year:1});
+  // new events
+  WORLD_EVENTS.forEach(d => {
+    if(w.events.some(ev => ev.key === d.key) || (d.blocks || []).some(k => w.events.some(ev => ev.key === k))) return;
+    if(d.once && w.seen.includes(d.key)) return;
+    if(r() >= d.chance) return;
+    const ev = {key:d.key, left:rint(d.years[0], d.years[1]), year:1};
+    w.events.push(ev); w.seen.push(d.key);
+    if(d.onStart) d.onStart(ev);
+    if(d.start) headline(d.start, d.desc, 'economy', true);
+  });
+  // breakthroughs and new industries
+  WORLD_TECH.forEach(t => {
+    if(w.tech.includes(t.key) || (t.after && !w.tech.includes(t.after)) || r() >= t.chance) return;
+    w.tech.push(t.key); if(t.unlock) w.unlocked.push(t.unlock);
+    if(t.key === 'fusion') w.costMult = Math.round((w.costMult || 1) * 0.92 * 100) / 100;
+    headline(t.head, t.d, 'tech', t.unlock ? !state.job && a >= 16 : t.key === 'selfDriving' ? roadVehicles().length > 0 : true);
+  });
+  // elections every four years
+  if(w.year % 4 === 0 && a > 0){
+    const side = r() < 0.5 ? 'progressive' : 'conservative', P = PARTIES[side];
+    const pol = (w.celebs || []).find(c => c.active && c.kind === 'politician');
+    const winner = state.job && state.job.track === 'Politics' && state.job.rank === CAREERS.Politics.length - 1 ? state.name : pol ? pol.name : pick(FRIENDS) + ' ' + pick(SURNAMES);
+    const changed = w.party !== side;
+    w.party = side;
+    // a new government may repeal the other side's laws
+    const theirs = w.laws.filter(k => { const l = WORLD_LAWS.find(x => x.key === k); return l && l.side !== side && l.side !== 'any'; });
+    if(changed && theirs.length && r() < 0.4){ const k = pick(theirs); w.laws = w.laws.filter(x => x !== k); headline(`${(WORLD_LAWS.find(l => l.key === k).head).replace(/ (PASSED|BECOMES LAW|LEGALIZED|SIGNED|PROTECTED BY LAW)$/, '')} REPEALED`, 'The new government reverses course.', 'policy', false); }
+    if(changed){ w.taxMult = Math.max(0.8, Math.min(1.25, (w.taxMult || 1) + P.tax)); w.wageMult = Math.round(((w.wageMult || 1) + P.wage) * 100) / 100; }
+    headline(`${winner.toUpperCase()} WINS THE PRESIDENCY`, `The ${P.name} takes power${changed ? ` and promises ${side === 'progressive' ? 'higher taxes, higher wages and new protections' : 'tax cuts and fewer rules for business'}` : ' again'}.`, 'policy', changed && !!state.job);
+    const options = WORLD_LAWS.filter(l => !w.laws.includes(l.key) && (l.side === side || l.side === 'any'));
+    if(options.length && r() < 0.3){ const law = pick(options); w.laws.push(law.key); headline(law.head, law.d, 'policy', law.key === 'rentControl' ? rentals().length > 0 : law.key === 'fourDay' ? !!state.job : law.key === 'dereg' || law.key === 'remote' ? !!state.business : false); }
+  }
+  // what it does to the economy this year
+  const fx = worldFx();
+  w.fxCache = fx;
+  if(fx.inflation){ e.inflation = Math.min(0.15, e.inflation + fx.inflation); e.cumInflation *= 1 + fx.inflation; }
+  if(fx.rate) e.rate = Math.min(0.14, e.rate + fx.rate);
+  if(fx.gas > (w.fx.gas || 1)) w.fx.gas = fx.gas;
+  if(fx.flu > (w.fx.flu || 1)) w.fx.flu = fx.flu;
+  if(fx.storm) w.fx.storm = true;
+  if(fx.noTravel) w.fx.noTravel = true;
+}
+// a few plain-language lines about how the world touches you right now
+function worldImpactLines(){
+  const fx = wfx(), lines = [];
+  if(state.job){
+    const t = fx.tracks[state.job.track];
+    if(t && (t.hire > 0 || t.pay > 0)) lines.push('Your field (' + state.job.track.toLowerCase() + ') is in demand: easier hiring' + (t.pay ? ', ' + Math.round(t.pay * 100) + '% better pay' : '') + '.');
+    if(t && t.layoff > 0) lines.push('Your field (' + state.job.track.toLowerCase() + ') is shedding jobs: layoffs are more likely.');
+    if(t && t.danger) lines.push('Military service is far more dangerous right now.');
+  }
+  if(state.business){ const b = fx.bizTypes[state.business.type] || 0; if(b) lines.push('Your business ' + (b > 0 ? 'is riding a wave: revenue +' : 'is hurting: revenue ') + Math.round(b * 100) + '%.'); }
+  return lines;
+}
+function worldEventsHtml(){
+  const w = state.world, fx = wfx();
+  const evs = (w.events || []).map(ev => WORLD_EVENTS.find(d => d.key === ev.key) && Object.assign({}, WORLD_EVENTS.find(d => d.key === ev.key), ev)).filter(Boolean);
+  let h = '<div class="plabel">The world in ' + w.year + '</div><div class="invrow"><div class="owned">';
+  h += evs.length ? evs.map(ev => `${ev.icon} <b>${ev.name}</b> (year ${ev.year}${ev.left > 0 && ev.key !== 'recession' ? ', ' + ev.left + ' more expected' : ''}): ${ev.desc}`).join('<br>') : 'Calm times. No major events are shaping the world right now.';
+  const sectors = Object.keys(fx.sectors).filter(s => Math.abs(fx.sectors[s]) >= 0.05);
+  if(sectors.length) h += '<br><br>Stock outlook: ' + sectors.map(s => `<span class="${fx.sectors[s] > 0 ? 'up' : 'down'}">${s} ${fx.sectors[s] > 0 ? '▲' : '▼'}</span>`).join(' · ');
+  if(w.party) h += '<br>Government: ' + PARTIES[w.party].name;
+  if((w.laws || []).length) h += '<br>Laws in force: ' + w.laws.map(k => (WORLD_LAWS.find(l => l.key === k) || {head:k}).head.toLowerCase().replace(/ (passed|becomes law|legalized|signed|protected by law)$/, '')).join(', ');
+  if((w.unlocked || []).length) h += '<br>New industries: ' + w.unlocked.join(', ');
+  if((w.tech || []).some(k => !WORLD_TECH.find(t => t.key === k).unlock)) h += '<br>Breakthroughs: ' + w.tech.filter(k => !WORLD_TECH.find(t => t.key === k).unlock).map(k => ({selfDriving:'self-driving cars', fusion:'fusion power'})[k]).join(', ');
+  const mine = worldImpactLines();
+  if(mine.length) h += '<br><br><b>For you:</b> ' + mine.join(' ');
+  return h + '</div></div>';
+}
+
 // ---------- The world: yearly news that changes the game ----------
 const CELEB_KINDS = {athlete:['striker','quarterback','tennis star','sprinter','point guard'], actor:['actor','film star'], musician:['pop star','rapper','rock singer'], politician:['senator','governor']};
 const SURNAMES = ['Vance','Sterling','Blake','Monroe','Hart','Okafor','Reyes','Lindqvist','Tanaka','Duval','Kowalski','Mbeki','Castellano','Ferreira','Nakamura','Adeyemi'];
@@ -2863,6 +3046,7 @@ function worldStart(a){
   w.year++;
   newsDraft = [];
   ensureCelebs();
+  worldEventsYear(a);
   const r = () => Math.random();
   // jobs
   if(r() < 0.18){
@@ -2880,11 +3064,7 @@ function worldStart(a){
     headline(pick(['MAJOR STORM APPROACHING', 'HURRICANE MAKES LANDFALL', 'RECORD FLOODS SWAMP THE COAST', 'WILDFIRES SPREAD ACROSS THE REGION']), 'Homeowners brace for damage.', 'weather', state.assets.some(x => x.category === 'Homes' || x.rental));
   } else if(r() < 0.08) headline(pick(['HEAT WAVE BREAKS RECORDS', 'BLIZZARD SHUTS DOWN THE CITY', 'DROUGHT DECLARED']), 'Officials urge people to stay safe.', 'weather');
   // health
-  if(r() < 0.025){
-    fx.flu = 4; fx.marketShock = -0.22;
-    if(!state.econ.recession){ state.econ.recession = true; state.econ.recessionLeft = rint(1, 2); }
-    headline('PANDEMIC DECLARED', 'Hospitals fill, borders close and markets reel.', 'health', true);
-  } else if(r() < 0.12){ fx.flu = 2.5; headline('NASTY FLU SEASON HITS HARD', 'Doctors urge people to get vaccinated.', 'health'); }
+  if(!fx.flu && r() < 0.12){ fx.flu = 2.5; headline('NASTY FLU SEASON HITS HARD', 'Doctors urge people to get vaccinated.', 'health'); }
   if(r() < 0.07 && w.medTech < 0.15){
     w.medTech = Math.round((w.medTech + 0.04) * 100) / 100;
     headline(pick(['BREAKTHROUGH CANCER TREATMENT APPROVED', 'NEW IMMUNOTHERAPY SHOWS STUNNING RESULTS']), 'Survival rates are expected to climb.', 'health', state.health.conditions.some(c => c.key === 'cancer'));
@@ -2956,8 +3136,6 @@ function worldEnd(a){
   (state.marketNews || []).filter(x => x.key || /sector|stocks|Investors/.test(x.text)).slice(0, 2).forEach(x => headline(x.text.toUpperCase(), x.key ? `${x.key} shares ${x.up ? 'jump' : 'tumble'}.` : 'Investors take note.', x.up ? 'market' : 'crash', x.key && ownsStock(x.key)));
   const ipoMoves = state.ipos.filter(s => s.worldIpo && state.market[s.key]).map(s => ({s, m:(state.market[s.key].price - state.market[s.key].prev) / state.market[s.key].prev})).filter(x => Math.abs(x.m) > 0.45);
   ipoMoves.slice(0, 1).forEach(x => headline(`${x.s.name.toUpperCase()} ${x.m > 0 ? 'SOARS' : 'PLUNGES'} ${Math.round(Math.abs(x.m) * 100)}%`, x.m > 0 ? 'Early investors are celebrating.' : 'Investors run for the exits.', x.m > 0 ? 'tech' : 'crash', ownsStock(x.s.key)));
-  if(e.recession && !w.wasRecession) headline('RECESSION OFFICIALLY DECLARED', 'Economists warn of tough times ahead.', 'economy', true);
-  if(!e.recession && w.wasRecession) headline('RECESSION IS OVER', 'Growth returns and hiring picks up.', 'economy', true);
   w.wasRecession = e.recession;
   if(w.lastRate !== undefined && Math.abs(e.rate - w.lastRate) >= 0.006) headline(`CENTRAL BANK ${e.rate > w.lastRate ? 'RAISES' : 'CUTS'} RATES TO ${(e.rate * 100).toFixed(1)}%`, e.rate > w.lastRate ? 'Borrowing just got more expensive.' : 'Cheaper loans and mortgages ahead.', 'economy', state.loans.length > 0);
   w.lastRate = e.rate;
@@ -2987,7 +3165,8 @@ function newsHtml(){
   const w = W(); if(!w || !w.news.length) return '';
   const latest = w.news[w.news.length - 1];
   const item = s => `<div class="hl"><span class="hl-tag" aria-hidden="true">${TAG_ICON[s.tag] || '📰'}</span><div><b>${s.h}</b>${s.mine ? ' <span class="hl-you">affects you</span>' : ''}<div class="hl-d">${s.d}</div></div></div>`;
-  let h = `<div class="paper"><div class="paper-mast"><span>The Daily Ledger</span><span>${latest.year}</span></div>${latest.items.map(item).join('')}`;
+  const evs = (w.events || []).map(ev => WORLD_EVENTS.find(d => d.key === ev.key)).filter(Boolean);
+  let h = `<div class="paper"><div class="paper-mast"><span>The Daily Ledger</span><span>${latest.year}</span></div>${evs.length ? '<div class="paper-chips">' + evs.map(d => `<span>${d.icon} ${d.name}</span>`).join('') + '</div>' : ''}${latest.items.map(item).join('')}`;
   if(w.news.length > 1){
     h += `<button class="paper-more" onclick="state.showNews=!state.showNews;render()">${state.showNews ? 'Hide past headlines' : 'Past headlines'}</button>`;
     if(state.showNews) h += w.news.slice(0, -1).reverse().slice(0, 15).map(y => `<div class="paper-past"><b>${y.year}</b> · ${y.items.slice(0, 3).map(s => s.h).join(' · ')}</div>`).join('');
@@ -3062,7 +3241,7 @@ function vehiclesYear(a, canPrompt){
   }
   const fast = road.some(x => vehOf(x).speed);
   const risk = 0.02 + (fast ? 0.025 : 0) + (hb.drink === 2 ? 0.04 : 0) + (a < 25 ? 0.02 : 0) + (a > 80 ? 0.03 : 0) + (road.some(x => x.cond < 30) ? 0.02 : 0);
-  if(Math.random() < risk){
+  if(Math.random() < risk * ((state.world.tech || []).includes('selfDriving') ? 0.6 : 1)){
     const x = pick(road), cover = state.insurance.auto ? 0.8 : 0, serious = Math.random() < 0.3;
     const repair = Math.round(x.value * (serious ? 0.6 : 0.2) + 1500 * cum);
     if(serious && Math.random() < 0.4){
@@ -3129,6 +3308,7 @@ function tripState(d){
   if(a < d.minAge) return {ok:false, why:'from age ' + d.minAge};
   if(d.needs === 'road' && !roadVehicles().length) return {ok:false, why:'needs a vehicle'};
   if(d.needs === 'boat' && !state.assets.some(x => x.category === 'Cars' && vehKind(x) === 'boat')) return {ok:false, why:'needs a boat'};
+  if(wfx().noTravel && !d.domestic) return {ok:false, why:'borders closed'};
   if(state.done['trip_' + d.key]) return {ok:false, why:'done this year'};
   if((state.done.trips || 0) >= limit) return {ok:false, why:'no more time off this year'};
   if(!canPay(tripCost(d))) return {ok:false, why:'costs ' + fmt(tripCost(d))};
@@ -3191,7 +3371,7 @@ function travelHtml(){
 // ---------- Fame: where it comes from, what it pays, what it costs ----------
 const CAREER_FAME = {Acting:[5,15,35,60,85,95], Music:[3,12,25,55,80,95], Sports:[5,15,45,65,85,95], Politics:[3,10,30,45,70,96],
   Culinary:[0,0,2,5,12,70], Business:[0,0,0,3,10,30], Technology:[0,0,0,2,8,20], Military:[0,0,2,5,15,40], 'Law Enforcement':[0,0,3,5,8,25],
-  Law:[0,0,0,2,5,15], Medicine:[0,0,0,0,4,12], Aviation:[0,0,0,0,2,8], Science:[0,0,0,2,6,15], Education:[0,0,0,0,2,8]};
+  Law:[0,0,0,2,5,15], Medicine:[0,0,0,0,4,12], Aviation:[0,0,0,0,2,8], Science:[0,0,0,2,6,15], Education:[0,0,0,0,2,8], 'Space Industry':[0,0,2,6,40,25,35]};
 const FAME_TIERS = [[90,'Icon'],[70,'Superstar'],[50,'Famous'],[30,'Rising star'],[10,'Local celebrity'],[0,'Unknown']];
 const FM = () => state.fame;
 const fameTier = l => FAME_TIERS.find(t => l >= t[0])[1];
@@ -3750,7 +3930,7 @@ function lifeBits(r){
 }
 function relJobFor(r){
   const edu = r.edu || "High School";
-  const open = Object.keys(CAREERS).filter(k => k !== "Odd Jobs" && !(TRACK_INFO[k] || {}).star && CAREERS[k][0].minAge <= r.age && EDU_RANK[edu] >= EDU_RANK[CAREERS[k][0].edu]);
+  const open = Object.keys(CAREERS).filter(k => k !== "Odd Jobs" && !(TRACK_INFO[k] || {}).star && trackOpen(k) && CAREERS[k][0].minAge <= r.age && EDU_RANK[edu] >= EDU_RANK[CAREERS[k][0].edu]);
   return open.length ? {track: pick(open), rank: 0, years: 0} : null;
 }
 function relJobYear(r, a){
@@ -4664,7 +4844,7 @@ function sentence(c, amt, plea){
     }
     return;
   }
-  let years = Math.max(1, Math.round(rint(c.years[0], c.years[1]) * (1 + priors * 0.35) * (plea ? 0.55 : 1) + (k.probation > 0 ? 1 : 0)));
+  let years = Math.max(1, Math.round(rint(c.years[0], c.years[1]) * (1 + priors * 0.35) * (plea ? 0.55 : 1) * ((state.world.laws || []).includes('toughCrime') ? 1.3 : 1) + (k.probation > 0 ? 1 : 0)));
   if(years <= 2 && !priors && Math.random() < 0.5){
     addRecord(c, false, "probation"); k.probation = 3;
     pushEntry(state.age, `${n} is convicted of ${c.charge} but avoids prison with 3 years of probation.`, {happy:-4});
@@ -5012,9 +5192,6 @@ function updateEconomy(a){
   if(e.recession){
     e.recessionLeft--;
     if(e.recessionLeft <= 0){ e.recession = false; pushEntry(a, `The economy climbs out of recession.`, {happy:3}); }
-  } else if(Math.random() < 0.06){
-    e.recession = true; e.recessionLeft = rint(1,3);
-    pushEntry(a, `A recession hits — jobs get scarcer and markets get shakier.`, {happy:-4});
   }
   e.rate = Math.max(0.01, Math.min(0.14, e.rate + (Math.random()+Math.random()-1)*0.01 + (0.04-e.rate)*0.1 + (e.recession?0.01:0)));
   e.inflation = Math.max(-0.01, Math.min(0.12, e.inflation + (Math.random()+Math.random()-1)*0.008 + (0.025-e.inflation)*0.1 + (e.recession?0.012:0)));
@@ -5159,6 +5336,7 @@ const BUSINESS_TYPES = [
   {key:'appstudio', name:'App Studio', cost:30000, revPerEmp:45000, risk:0.07},
   {key:'logistics', name:'Logistics Company', cost:120000, revPerEmp:54000, risk:0.035},
   {key:'hotel', name:'Boutique Hotel', cost:300000, revPerEmp:75000, risk:0.04},
+  {key:'dispensary', name:'Cannabis Dispensary', cost:70000, revPerEmp:48000, risk:0.05, law:'cannabis'},
 ];
 // hobby mastery (level 70+) gives a founding bonus when starting the matching business
 const HOBBY_BUSINESS = {photography:'photography', music:'music', art:'art', cooking:'restaurant', cars:'dealership', dance:'gym', writing:'agency', coding:'appstudio', woodworking:'construction'};
@@ -5171,7 +5349,7 @@ const ipoMin = () => inflR(500000, 1000);
 // ---- naming your company ----
 const BIZ_WORD = {restaurant:'Kitchen', clothing:'Apparel', construction:'Builders', tech:'Technologies', dealership:'Motors', realestate:'Realty', onlinestore:'Goods',
   gym:'Fitness', bar:'Tavern', agency:'Creative', photography:'Studios', music:'Records', art:'Gallery', coffee:'Coffee', salon:'Salon', brewery:'Brewing Co.',
-  appstudio:'Apps', logistics:'Logistics', hotel:'Hotel'};
+  appstudio:'Apps', logistics:'Logistics', hotel:'Hotel', dispensary:'Dispensary'};
 const BIZ_PREFIX = ['Blue','Golden','Iron','Bright','Silver','North','Red','Little','Wild','Urban','Copper','Maple','Summit','Harbor','Oak','Lucky','Velvet','Atlas'];
 // typed names go into the page, so keep only safe characters
 const cleanName = v => String(v || '').replace(/[<>&"`\\{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
@@ -5339,7 +5517,7 @@ function bizRevenueMult(b){
   const t = bizType(b.type), U = b.upgrades;
   return (1 + 0.15 * (b.locations - 1)) * (b.price === 'low' ? 0.85 : b.price === 'high' ? 1.25 : 1) * (1 + b.marketing) * (0.5 + b.reputation / 100) *
     (0.8 + b.morale / 250) * (1 + b.growth) * (1 + b.trend) * (U.website ? (ONLINE_FIRST.includes(t.key) ? 1.2 : 1.1) : 1) * (U.equipment ? 1.12 : 1) *
-    (state.econ.recession ? 0.85 : 1) * (!U.manager && state.job ? 0.85 : 1);
+    (state.econ.recession ? 0.85 : 1) * (!U.manager && state.job ? 0.85 : 1) * Math.max(0.3, 1 + wfx().biz + (wfx().bizTypes[b.type] || 0));
 }
 function setWages(w){ const b = state.business; if(!b) return; b.wages = w; renderPanel(); }
 function setReinvest(p){ const b = state.business; if(!b) return; b.reinvest = p; renderPanel(); }
@@ -5455,6 +5633,7 @@ function bizPanelHtml(){
     (hasYear ? `<br>Last year: revenue ${fmt(b.lastRevenue)} · costs ${fmt(b.lastCosts)} · <span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? 'profit' : 'loss'} ${fmt(Math.abs(p))}</span>` : '') +
     (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
     (b.employees === 0 ? '<br>Hire staff to start bringing in revenue.' : '') +
+    (wfx().bizTypes[b.type] ? `<br><span class="${wfx().bizTypes[b.type] > 0 ? 'up' : 'down'}">World events: revenue ${wfx().bizTypes[b.type] > 0 ? '+' : ''}${Math.round(wfx().bizTypes[b.type] * 100)}% for businesses like yours.</span>` : '') +
     (!U.manager && state.job ? '<br><span class="down">Running it on top of a job: revenue −15% and it wears on you. A manager fixes this.</span>' : '') + `</div>`;
   if(b.history.length >= 2) h += '<div class="invrow"><div class="owned">Profit, last ' + b.history.length + ' years</div>' + profitChart(b.history) + '</div>';
   h += '<div class="invrow"><div class="itop"><span>Reputation</span><span class="price">' + b.reputation + '/100</span></div>' + meter(b.reputation, 'gold') +
@@ -5634,6 +5813,7 @@ function yearlyFinances(a){
     if(L.happy) applyDelta({happy: L.happy});
   }
   if(a >= 65) expenses = Math.round(expenses * 0.85);                     // downsized, simpler living
+  expenses = Math.round(expenses * (state.world.costMult || 1));
   let net = income - expenses;
   // students cover a shortfall with student loans instead of going broke
   if((e.program || e.gradAge === a) && net < 0 && state.money + state.savings + net < 0){
@@ -6171,7 +6351,7 @@ const TRACK_MAJORS = {
   Retail:['Business'], Business:['Business','Finance','Communications'], Technology:['Computer Science','Engineering'], Medicine:['Pre-Med','Nursing'],
   Education:['Education'], Law:['Pre-Law','Communications'], Finance:['Finance','Business'], Science:['Pre-Med','Engineering','Computer Science'],
   Aviation:['Engineering'], Politics:['Pre-Law','Communications','Business'], Military:['Engineering'], 'Law Enforcement':['Pre-Law'],
-  Acting:['Fine Arts','Communications'], Music:['Fine Arts'], Firefighting:[], Culinary:[], Trades:[], Sports:[],
+  Acting:['Fine Arts','Communications'], Music:['Fine Arts'], 'Green Energy':['Engineering'], 'Space Industry':['Engineering','Computer Science'], Firefighting:[], Culinary:[], Trades:[], Sports:[],
 };
 const GRAD_PROGRAMS = [
   {key:'master', name:"Master's program", school:'Graduate School', years:2, tuition:15000, award:'Master', degree:"Master's"},
@@ -6214,7 +6394,7 @@ function startRankFor(track){
   }
   return best;
 }
-function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track) * (['Retail','Culinary','Odd Jobs'].includes(track) ? state.world.wageMult : 1), 100); }
+function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track) * (['Retail','Culinary','Odd Jobs'].includes(track) ? state.world.wageMult : 1) * (1 + trackFx(track).pay), 100); }
 function eduSummary(){
   const e = ED();
   if(e.program) return e.program.name + ' · year ' + (e.program.year + 1) + ' of ' + e.program.years + (e.program.major && e.program.major !== 'Undecided' ? ' · ' + e.program.major : '');
@@ -6459,7 +6639,8 @@ function workYear(a){
   const boost = state.boost; state.boost = false;
   if(!j) return;
   j.years++; state.workYears++;
-  j.salary = Math.round(j.salary * (1 + Math.max(0, state.econ.inflation) * 0.9) / 100) * 100;   // wages track prices
+  j.salary = Math.round(j.salary * (1 + Math.max(0, state.econ.inflation) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
+  if((state.world.laws || []).includes('fourDay')) applyDelta({happy:1});
   state.peakSalary = Math.max(state.peakSalary, j.salary);
   if(a >= 70){ retire(true); return; }
   const track = CAREERS[j.track], rank = track[j.rank];
@@ -6472,7 +6653,7 @@ function workYear(a){
     pushEntry(a, `${state.name}'s body can't keep up any more, and they retire from ${j.track.toLowerCase()} as ${rank.title}.`, {happy:-4});
     return;
   }
-  if(info.risk && Math.random() < info.risk){
+  if(info.risk && Math.random() < info.risk * (trackFx(j.track).danger ? 2.5 : 1)){
     const c = addCondition('bone', a);
     pushEntry(a, c ? `${state.name} is injured on the job as ${rank.title} and breaks a bone.` : `${state.name} is hurt on the job.`, {health:-6, happy:-3});
   }
@@ -6485,7 +6666,7 @@ function workYear(a){
     if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
-  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0)){
+  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + wfx().layoffs + trackFx(j.track).layoff){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
@@ -6535,6 +6716,7 @@ function mePanelHtml(){
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
+  h += worldEventsHtml();
   return h;
 }
 
@@ -6687,16 +6869,17 @@ function dropOut(ok){
   render();
 }
 const RECORD_BARRED = ['Law', 'Medicine', 'Education'];
+const trackOpen = t => { const g = (TRACK_INFO[t] || {}).gated; return !g || (state.world && (state.world.unlocked || []).includes(g)); };
 const recordBlocks = trackName => (RECORD_BARRED.includes(trackName) && felonyCount() > 0) || (!!(TRACK_INFO[trackName] || {}).clean && priorCount() > 0);
 function applyJob(trackName){
   const track = CAREERS[trackName];
-  if(recordBlocks(trackName) || state.crime.prison) return;
+  if(recordBlocks(trackName) || state.crime.prison || !trackOpen(trackName)) return;
   if(!track || (state.job && state.job.track === trackName) || state.done['app_'+trackName]) return;
   const rank0 = track[0];
   if(state.retired || state.age > 66) return;
   if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     if(state.job){
       convertCoworkersToFriends();
@@ -6805,6 +6988,8 @@ function renderPanel(){
         [['default','Default'],['gainers','Gainers'],['losers','Losers'],['name','A–Z']]
           .map(([m,l]) => `<button class="sortbtn${state.invSort===m?' active':''}" onclick="setSort('${m}')">${l}</button>`).join('') +
         '</div>';
+      const wf = wfx(), outlook = Object.keys(wf.sectors).filter(s => Math.abs(wf.sectors[s]) >= 0.05);
+      if(outlook.length || wf.market) h += '<div class="plabel">WORLD OUTLOOK</div><div class="invrow"><div class="owned">' + (wf.market ? (wf.market > 0 ? 'World events are lifting the whole market. ' : 'World events are weighing on the whole market. ') : '') + outlook.map(s => `<span class="${wf.sectors[s] > 0 ? 'up' : 'down'}">${s} ${wf.sectors[s] > 0 ? '▲' : '▼'}</span>`).join(' · ') + '</div></div>';
       if(state.marketNews && state.marketNews.length) h += '<div class="plabel">MARKET NEWS</div><div class="invrow"><div class="owned">' +
         state.marketNews.map(n => '<span class="' + (n.up ? 'up' : 'down') + '">' + (n.up ? '▲' : '▼') + '</span> ' + n.text + (n.key ? ' <span class="tick">' + n.key + '</span>' : '')).join('<br>') + '</div></div>';
       const f = state.invFilter || 'all', owns = x => (state.portfolio[x.key] || 0) > 0;
@@ -6888,7 +7073,7 @@ function renderPanel(){
     else if(!b){
       h += '<div class="status">Name your company, then pick what kind of business to start. Each needs upfront capital.</div>';
       h += '<div class="invrow"><input id="bizName" class="amt-input" maxlength="32" placeholder="Business name (optional)" aria-label="Business name"><div class="assetbuy"><button onclick="fillBizName()">Suggest a name</button></div></div>';
-      BUSINESS_TYPES.forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
+      BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
     } else h += bizPanelHtml();
   } else {
     if(a < 12){ h = '<div class="status">Too young to work.</div>'; }
@@ -6901,6 +7086,8 @@ function renderPanel(){
         h += '<div class="plabel">CAREER LADDER</div>';
         h += `<div class="invrow"><div class="owned">${track.map((r,i) => i === j.rank ? `<b>${r.title}</b>` : (i < j.rank ? `✓ ${r.title}` : r.title)).join(' &nbsp;→&nbsp; ')}</div></div>`;
         const nx = track[j.rank + 1], nxGap = nx ? rankGap(nx, j.track) : '';
+        const wl = worldImpactLines().filter(l => /field|Military/.test(l));
+        if(wl.length) h += `<div class="status">${wl.join('<br>')}</div>`;
         if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">needs ' + nxGap + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
         h += opt('Work extra hard', '−2 health', 'workHarder()', state.done.work);
         h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
@@ -6914,6 +7101,7 @@ function renderPanel(){
       }
       h += '<div class="plabel">CAREER TRACKS</div>';
       for(const trackName in CAREERS){
+        if(!trackOpen(trackName)) continue;
         const rank0 = CAREERS[trackName][0];
         const already = j && j.track === trackName;
         const barred = recordBlocks(trackName), gap = rankGap(rank0, trackName), info = TRACK_INFO[trackName] || {};
