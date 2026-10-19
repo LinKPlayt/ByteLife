@@ -6717,7 +6717,7 @@ function workYear(a){
   j.salary = Math.round(j.salary * (1 + Math.max(0, yrInfl()) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
   if((state.world.laws || []).includes('fourDay')) applyDelta({happy:1});
   state.peakSalary = Math.max(state.peakSalary, j.salary);
-  if(a >= 70){ retire(true); return; }
+  if(a >= 70 && j.track !== 'Politics'){ retire(true); return; }           // elected officials serve out their terms
   const track = CAREERS[j.track], rank = track[j.rank];
   const stressHealth = rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0;
   const stressHappy = rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0;
@@ -7181,6 +7181,7 @@ function renderPanel(){
         h += `<div class="status"><b>Retired</b><br>Pension ${fmt(state.pension)}/yr, adjusted for the cost of living each year.</div>`;
       } else {
         h += '<div class="status">Currently unemployed. Browse career tracks below — you\'ll start at the entry rank of whichever one you apply to.</div>';
+        if(a >= 60) h += opt('Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       }
       h += milHtml() + govHtml();
       h += '<div class="plabel">CAREER TRACKS</div>';
@@ -8524,6 +8525,7 @@ function startCampaign(i, style, cost){
 }
 function takeOffice(i){
   const P = POL(), o = OFFICES[i], prev = inOffice() ? state.job.title : null;
+  if(state.retired){ state.retired = false; P.wasRetired = true; }            // coming out of retirement to serve
   const j = threadJob('Politics', i);
   P.termEnd = state.age + o.term; P.approval = rint(52, 64); P.losses = 0; P.terms[i] = (P.terms[i] || 0) + 1; P.highest = Math.max(P.highest || 0, i); P.wins++;
   return j;
@@ -8651,6 +8653,7 @@ function politicsYear(a, canAsk){
 function leaveOffice(i, disgraced){
   const P = POL(), o = OFFICES[i];
   if(state.job && state.job.track === 'Politics'){ convertCoworkersToFriends(); state.job = null; }
+  if(P.wasRetired){ state.retired = true; P.wasRetired = false; }             // back to the pension they left behind
   if(!disgraced && i >= 3) P.former = {title:o.title, fee:{3:150000, 4:400000, 5:1500000}[i], from:state.age, until:state.age + (i === 5 ? 10 : 5)};
 }
 // the presidency is decided on the national election calendar
