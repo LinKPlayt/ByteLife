@@ -344,6 +344,28 @@
   #modalNo{ background:var(--surface-2); border:1px solid var(--line); color:var(--ink); }
   #modalYes{ background:var(--red); color:#fff; }
 
+  .ach-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  @media (max-width:380px){ .ach-grid{ grid-template-columns:1fr; } }
+  .ach{ display:flex; gap:8px; align-items:center; padding:8px 9px; background:var(--surface-2); border:1px solid var(--line); border-radius:12px; opacity:.55; filter:grayscale(1); min-width:0; }
+  .ach.on{ opacity:1; filter:none; background:var(--surface); }
+  .ach.on.bronze{ border-color:#c08a5a; } .ach.on.silver{ border-color:#9aa3a8; } .ach.on.gold{ border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; }
+  .ach-ic{ font-size:20px; line-height:1; flex:none; }
+  .ach-tx{ min-width:0; font-size:12.5px; line-height:1.3; color:var(--ink); }
+  .ach-tx small{ display:block; color:var(--muted); font-size:11px; }
+  .ach-cnt{ float:right; font-weight:600; }
+  .ach-bar{ height:6px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden; margin:2px 0 6px; }
+  .ach-fill{ height:100%; background:var(--gold); }
+  .ach-chips{ display:flex; flex-wrap:wrap; gap:5px; margin:2px 0 8px; }
+  .ach-chip{ font-size:11.5px; padding:4px 8px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink); }
+  .ach-chip.gold{ border-color:var(--gold); } .ach-chip.silver{ border-color:#9aa3a8; } .ach-chip.bronze{ border-color:#c08a5a; }
+  .timeline{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:8px 12px; text-align:left; }
+  .tl-row{ display:flex; gap:9px; align-items:baseline; padding:5px 0; font-size:13.5px; color:var(--ink); border-bottom:1px dashed var(--line); }
+  .tl-row:last-child{ border-bottom:none; }
+  .tl-age{ font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--muted); width:26px; text-align:right; flex:none; }
+  .tl-more{ font-size:11.5px; color:var(--muted); padding:3px 0 4px 35px; }
+  #achModal .modal-card{ max-width:460px; max-height:84vh; overflow-y:auto; text-align:left; }
+  #achModal h3{ margin:0 0 6px; font-family:'Fraunces',serif; font-size:20px; color:var(--ink); }
+  #goHighlights{ text-align:left; display:grid; gap:8px; margin-bottom:16px; }
   #gameover{ display:none; text-align:center; }
   #gameover h2{ font-family:'Fraunces',serif; font-size:25px; font-weight:700; color:var(--ink); margin-bottom:8px; }
   #gameover .epitaph{ color:var(--muted); font-style:italic; font-family:'Fraunces',serif; margin-bottom:22px; font-size:15.5px; line-height:1.5; }
@@ -354,6 +376,13 @@
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalText">
     <p id="modalText"></p>
     <div class="modal-btns"><button id="modalNo" onclick="closeConfirm(false)">Cancel</button><button id="modalYes" onclick="closeConfirm(true)">Yes</button></div>
+  </div>
+</div>
+<div class="modal" id="achModal" hidden onclick="if(event.target === this) closeAchievements()">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-label="Achievements">
+    <h3>🏆 Achievements</h3>
+    <div id="achBody" style="display:grid;gap:8px;"></div>
+    <div class="modal-btns" style="margin-top:14px;"><button id="achClose" onclick="closeAchievements()" style="background:var(--accent);color:#fff;">Close</button></div>
   </div>
 </div>
 <div class="sheet">
@@ -371,6 +400,7 @@
     <button class="btn-primary" onclick="startLife()">Begin the record</button>
     <p class="audio-hint">Sound and music start when you begin.</p>
     <button class="audio-link" id="audioSetupBtn" onclick="toggleAllAudio()">Sound: on</button>
+    <button class="audio-link" id="achSetupBtn" onclick="openAchievements()">🏆 Achievements</button>
   </section>
 
   <section id="game">
@@ -441,6 +471,7 @@
   <section id="gameover">
     <h2 id="goTitle">The record ends here</h2>
     <p class="epitaph" id="goText"></p>
+    <div id="goHighlights"></div>
     <div id="heirBox"></div>
     <button class="btn-primary" onclick="newRecord()">Begin a new record</button>
   </section>
@@ -493,6 +524,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
+    milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -512,6 +544,7 @@ function hairFor(gender){ return gender === 'female' ? pick([1, 2]) : gender ===
 function startLife(heir){
   const name = heir ? heir.kid.name : (document.getElementById('nameInput').value.trim() || 'Unnamed');
   state = freshState(name);
+  ACH.stats.lives++; saveAch();
   state.gender = heir ? (heir.kid.gender || rollGender()) : (setup.gender === 'random' ? rollGender() : setup.gender);
   state.appearance.hairStyle = hairFor(state.gender);
   if(!heir){
@@ -520,7 +553,7 @@ function startLife(heir){
   }
   if(heir) state.ipos = (heir.old.ipos || []).slice();
   syncIpos();
-  if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; }
+  if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; try{ checkAchievements(true); } catch(e){} }
   else state.relationships = initFamily();
   showScreen('game');
   const hb = document.getElementById('heirBox'); if(hb) hb.innerHTML = '';
@@ -571,6 +604,7 @@ function resumeGame(){
   try{
     state = upgradeSave(saved);
     migrateEdu();
+    if(!saved.ach) try{ checkAchievements(true); } catch(e){}
     if(state.panel === 'hob') state.panel = 'act';
     syncIpos();
     document.getElementById('nameTag').textContent = state.name + (state.generation > 1 ? ' · generation ' + state.generation : '');
@@ -687,6 +721,7 @@ function pushEntry(age, text, delta){
   if(!inYear && state.panel && document.body.classList.contains("playing")) queueToast(text, state.log[state.log.length - 1].dtext);
   coverOverdraft();
   audioEntry(text, delta);
+  try{ achText(text); } catch(e){}
 }
 
 function drawAvatar(){
@@ -1681,6 +1716,7 @@ function ageUpYear(){
   yearStart = serialize();
   state.age += 1;
   const a = state.age;
+  ACH.stats.years++; saveAch();
 
   // death chance: negligible through childhood, then a realistic curve that rises with age and falls with good health
   const fatal = deathRoll(a);
@@ -4040,7 +4076,7 @@ function loveYear(a, moments){
   }
 }
 function marry(r, text){
-  r.type = "Spouse"; r.livingTogether = true; bump(r, 15);
+  r.type = "Spouse"; r.livingTogether = true; r.marriedAge = state.age; bump(r, 15);
   pushEntry(state.age, text, {happy:15, money:-inflR(3000, 100)});
 }
 function birthChild(p){
@@ -6716,6 +6752,7 @@ function mePanelHtml(){
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
+  h += achMeHtml();
   h += worldEventsHtml();
   return h;
 }
@@ -7222,7 +7259,7 @@ function sfxNow(name){ if(!AUDIO.ctx || !AUDIO.prefs.sfx) return; try{ playSfx(n
 
 // which moments of a life make which sound, and how much they matter
 const SFX_RULES = [
-  [/jackpot|wins the lottery/i, "jackpot", 9], [/graduates/i, "fanfare", 9], [/takes the business public/i, "fanfare", 9],
+  [/jackpot|wins the lottery/i, "jackpot", 9], [/graduates/i, "fanfare", 9], [/ public! .{1,12} starts trading/i, "fanfare", 9],
   [/steps into a new chapter/i, "fanfare", 8], [/say yes|a wedding follows/i, "wedding", 9], [/welcome a new child/i, "baby", 8],
   [/earns a promotion|is promoted/i, "promotion", 8], [/recognized influencer|verified badge/i, "fanfare", 8], [/retires/i, "retire", 8],
   [/files for bankruptcy|forcing bankruptcy/i, "bad_big", 8], [/gets canceled/i, "bad_big", 8], [/goes viral/i, "viral", 7],
@@ -7407,6 +7444,7 @@ function die(cause){
   state.obit = {title: `${state.name}'s record closes at ${state.age}${state.generation > 1 ? ' (generation ' + state.generation + ')' : ''}`,
     text: `They passed ${pick(causes)}${a >= 90 ? ', having lived to a remarkable age' : ''}.${state.fame.peak >= 50 ? ' Fans around the world mourn a ' + fameTier(state.fame.peak).toLowerCase() + (state.fame.awards.length ? ' with ' + state.fame.awards.length + ' major award' + (state.fame.awards.length > 1 ? 's' : '') : '') + '.' : ''} Final net worth: ${fmt(netWorth())} (about ${fmt(netWorth() / state.econ.cumInflation)} in today's money). ${legacyText()} Health: ${state.stats.health}, Happiness: ${state.stats.happy}.`};
   document.getElementById('choices').innerHTML = '';
+  try{ achOnDeath(); } catch(e){}
   showGameOver();
   saveGame();
 }
@@ -7414,10 +7452,241 @@ function showGameOver(){
   showScreen("gameover");
   document.getElementById('goTitle').textContent = state.obit ? state.obit.title : state.name + "'s record closes";
   document.getElementById('goText').textContent = state.obit ? state.obit.text : legacyText();
+  const gh = document.getElementById('goHighlights'); if(gh) try{ gh.innerHTML = achGameOverHtml(); } catch(e){ gh.innerHTML = ''; }
   showHeirs();
 }
 
+// ---------- Achievements and milestones ----------
+// Achievements belong to the player, not to one life: they live in their own save and survive every new record.
+// Milestones are the firsts of a single life, kept on its timeline.
+const ACH_KEY = "ledger-achievements";
+const ACH_TIERS = {bronze:{pts:10, label:'Bronze'}, silver:{pts:25, label:'Silver'}, gold:{pts:50, label:'Gold'}};
+const ACH_CATS = ['Life', 'Money', 'Career', 'School', 'Family', 'Fame', 'Crime', 'Health', 'Leisure', 'Business', 'World'];
+const todayWorth = () => netWorth() / state.econ.cumInflation;
+const relCount = t => state.relationships.filter(r => r.type === t).length;
+const topRank = j => !!(j && CAREERS[j.track] && j.rank >= CAREERS[j.track].length - 1);
+// test: checked after every year; a regex in `on` instead unlocks it the moment the log records that moment
+const ACHIEVEMENTS = [
+  {k:'born', cat:'Life', icon:'👶', tier:'bronze', name:'First Breath', desc:'Begin a life', test:() => true},
+  {k:'adult', cat:'Life', icon:'🎂', tier:'bronze', name:'Coming of Age', desc:'Turn 18', test:() => state.age >= 18},
+  {k:'old80', cat:'Life', icon:'👴', tier:'silver', name:'Golden Years', desc:'Live to 80', test:() => state.age >= 80},
+  {k:'old100', cat:'Life', icon:'💯', tier:'gold', name:'Centenarian', desc:'Live to 100', test:() => state.age >= 100},
+  {k:'joy', cat:'Life', icon:'😄', tier:'silver', name:'Happy Ever After', desc:'Have 100 happiness at 65 or older', test:() => state.age >= 65 && state.stats.happy >= 100},
+  {k:'young', cat:'Life', icon:'🥀', tier:'bronze', name:'Gone Too Soon', desc:'Die before 30', secret:true},
+  {k:'lives10', cat:'Life', icon:'♾️', tier:'silver', name:'Many Lives', desc:'Begin 10 lives', test:() => ACH.stats.lives >= 10},
+  {k:'years500', cat:'Life', icon:'⏳', tier:'gold', name:'Old Soul', desc:'Live 500 years across all your lives', test:() => ACH.stats.years >= 500},
+  {k:'gen3', cat:'Life', icon:'🌳', tier:'silver', name:'Dynasty', desc:'Reach the third generation', test:() => state.generation >= 3},
+  {k:'gen5', cat:'Life', icon:'🏰', tier:'gold', name:'House of Legends', desc:'Reach the fifth generation', test:() => state.generation >= 5},
+
+  {k:'nw100k', cat:'Money', icon:'💵', tier:'bronze', name:'Six Figures', desc:"Net worth of $100,000 in today's money", test:() => todayWorth() >= 1e5},
+  {k:'nw1m', cat:'Money', icon:'💰', tier:'silver', name:'Millionaire', desc:"Net worth of $1 million in today's money", test:() => todayWorth() >= 1e6},
+  {k:'nw10m', cat:'Money', icon:'🏦', tier:'gold', name:'Multi-Millionaire', desc:"Net worth of $10 million in today's money", test:() => todayWorth() >= 1e7},
+  {k:'nw1b', cat:'Money', icon:'👑', tier:'gold', name:'Billionaire', desc:"Net worth of $1 billion in today's money", test:() => todayWorth() >= 1e9},
+  {k:'invest', cat:'Money', icon:'📈', tier:'silver', name:'Market Maker', desc:"Hold $100,000 of stocks and funds (today's money)", test:() => portfolioValue() / state.econ.cumInflation >= 1e5},
+  {k:'nest', cat:'Money', icon:'🪺', tier:'silver', name:'Nest Egg', desc:"Save $250,000 in a retirement account (today's money)", test:() => state.retirement.balance / state.econ.cumInflation >= 2.5e5},
+  {k:'debtfree', cat:'Money', icon:'🧾', tier:'silver', name:'Clean Slate', desc:"Owe $50,000 or more, then pay off every cent", test:() => state.ach.peakDebt >= 5e4 && totalDebt() <= 0},
+  {k:'lucky', cat:'Money', icon:'🎰', tier:'gold', name:'Jackpot', desc:'Win the lottery', on:/hits the jackpot|wins the lottery!/},
+  {k:'broke', cat:'Money', icon:'📉', tier:'bronze', name:'Rock Bottom', desc:'File for bankruptcy', secret:true, on:/files for bankruptcy/},
+
+  {k:'job', cat:'Career', icon:'💼', tier:'bronze', name:'First Paycheck', desc:'Land a real job', test:() => !!state.job && state.job.track !== 'Odd Jobs'},
+  {k:'promo', cat:'Career', icon:'📊', tier:'bronze', name:'Moving Up', desc:'Earn a promotion', on:/earns a promotion|wins the election and becomes/},
+  {k:'top', cat:'Career', icon:'🪜', tier:'silver', name:'Top of the Ladder', desc:'Reach the highest rank of any career', test:() => topRank(state.job) && state.job.track !== 'Odd Jobs'},
+  {k:'ceo', cat:'Career', icon:'🏢', tier:'gold', name:'Corner Office', desc:'Become a CEO', test:() => !!state.job && /\bCEO\b/.test(state.job.title)},
+  {k:'doctor', cat:'Career', icon:'🩺', tier:'silver', name:'Doctor in the House', desc:'Practice medicine with an MD', test:() => !!state.job && state.job.track === 'Medicine' && hasDegree('MD')},
+  {k:'president', cat:'Career', icon:'🏛️', tier:'gold', name:'Leader of the Nation', desc:'Be elected President', test:() => !!state.job && state.job.title === 'President'},
+  {k:'astronaut', cat:'Career', icon:'🚀', tier:'gold', name:'Ad Astra', desc:'Become an astronaut', test:() => !!state.job && state.job.track === 'Space Industry' && state.job.rank >= 3},
+  {k:'star', cat:'Career', icon:'🌟', tier:'gold', name:'Headliner', desc:'Become a movie star, headliner or all-star', test:() => !!state.job && ['Acting', 'Music', 'Sports'].includes(state.job.track) && state.job.rank >= 4},
+  {k:'retire', cat:'Career', icon:'⌚', tier:'silver', name:'Gold Watch', desc:'Retire after 30 or more working years', test:() => state.retired && state.workYears >= 30},
+
+  {k:'hs', cat:'School', icon:'📜', tier:'bronze', name:'Diploma', desc:'Graduate from high school', test:() => EDU_RANK[state.edu.level] >= 1},
+  {k:'degree', cat:'School', icon:'🎓', tier:'bronze', name:'Cap and Gown', desc:"Earn a bachelor's degree", test:() => EDU_RANK[state.edu.level] >= 3},
+  {k:'summa', cat:'School', icon:'🏅', tier:'silver', name:'Summa Cum Laude', desc:'Graduate college with top honors', test:() => degrees().some(d => d.honors === 'summa cum laude')},
+  {k:'elite', cat:'School', icon:'🏛', tier:'silver', name:'Ivy Halls', desc:'Graduate from an elite university', test:() => degrees().some(d => d.tier === 'elite')},
+  {k:'doctorate', cat:'School', icon:'🧪', tier:'gold', name:'Highest Degree', desc:'Earn an MD, JD or PhD', test:() => ['MD', 'JD', 'PhD'].some(hasDegree)},
+  {k:'selfmade', cat:'School', icon:'🛠️', tier:'gold', name:'Self-Made', desc:"Become a millionaire without a college degree", test:() => EDU_RANK[state.edu.level] <= 1 && todayWorth() >= 1e6 && !state.inheritedTotal},
+
+  {k:'love', cat:'Family', icon:'💘', tier:'bronze', name:'First Love', desc:'Start a relationship', test:() => hasRel('Partner', 'Spouse')},
+  {k:'married', cat:'Family', icon:'💍', tier:'bronze', name:'Tied the Knot', desc:'Get married', test:() => hasRel('Spouse')},
+  {k:'parent', cat:'Family', icon:'🍼', tier:'bronze', name:'Parenthood', desc:'Have or adopt a child', test:() => hasRel('Child')},
+  {k:'bigfam', cat:'Family', icon:'👨‍👩‍👧‍👦', tier:'silver', name:'Full House', desc:'Have four or more children', test:() => relCount('Child') >= 4},
+  {k:'grand', cat:'Family', icon:'👵', tier:'silver', name:'Grandparent', desc:'Meet a grandchild', test:() => hasRel('Grandchild')},
+  {k:'golden', cat:'Family', icon:'💛', tier:'gold', name:'Golden Anniversary', desc:'Stay married for 50 years', test:() => state.relationships.some(r => r.type === 'Spouse' && r.marriedAge != null && state.age - r.marriedAge >= 50)},
+  {k:'heir', cat:'Family', icon:'🕯️', tier:'bronze', name:'Torch Bearer', desc:'Continue the family line as your child', test:() => state.generation >= 2},
+
+  {k:'friends', cat:'Fame', icon:'🫂', tier:'bronze', name:'Social Butterfly', desc:'Have 10 friends at once', test:() => relCount('Friend') >= 10},
+  {k:'viral', cat:'Fame', icon:'📱', tier:'bronze', name:'Gone Viral', desc:'Go viral online', on:/goes viral/},
+  {k:'followers', cat:'Fame', icon:'📣', tier:'silver', name:'Influencer', desc:'Reach 100,000 followers', test:() => state.social.account && state.social.followers >= 1e5},
+  {k:'famous', cat:'Fame', icon:'📸', tier:'silver', name:'Famous', desc:'Reach 50 fame', test:() => state.fame.level >= 50},
+  {k:'icon', cat:'Fame', icon:'🌍', tier:'gold', name:'Global Icon', desc:'Reach 90 fame', test:() => state.fame.level >= 90},
+  {k:'award', cat:'Fame', icon:'🏆', tier:'gold', name:'Award Winner', desc:'Win a major award', test:() => state.fame.awards.length >= 1},
+
+  {k:'crook', cat:'Crime', icon:'🦹', tier:'bronze', name:'Life of Crime', desc:'Get away with a crime', secret:true, on:/gets away with/},
+  {k:'busted', cat:'Crime', icon:'🚓', tier:'bronze', name:'Busted', desc:'Get arrested', secret:true, test:() => state.crime.arrests >= 1},
+  {k:'jail', cat:'Crime', icon:'⛓️', tier:'bronze', name:'Hard Time', desc:'Go to prison', secret:true, test:() => !!state.crime.prison},
+  {k:'acquit', cat:'Crime', icon:'⚖️', tier:'silver', name:'Not Guilty', desc:'Be acquitted by a jury', secret:true, on:/finds .{1,30} not guilty/},
+  {k:'escape', cat:'Crime', icon:'🕳️', tier:'gold', name:'The Great Escape', desc:'Break out of prison', secret:true, on:/escapes from prison/},
+  {k:'heist', cat:'Crime', icon:'💎', tier:'gold', name:'The Big Score', desc:'Pull off a bank heist', secret:true, on:/gets away with robbing a bank/},
+  {k:'expunge', cat:'Crime', icon:'🧽', tier:'silver', name:'Fresh Start', desc:'Clear a conviction from your record', secret:true, test:() => state.crime.record.some(x => x.expunged)},
+
+  {k:'survivor', cat:'Health', icon:'🎗️', tier:'gold', name:'Survivor', desc:'Beat cancer', on:/cancer goes into remission/},
+  {k:'quit', cat:'Health', icon:'🚭', tier:'bronze', name:'Kicked the Habit', desc:'Quit smoking for good', on:/quits smoking for good/},
+  {k:'fit', cat:'Health', icon:'💪', tier:'silver', name:'Peak Condition', desc:'Have 100 health at 50 or older', test:() => state.age >= 50 && state.stats.health >= 100},
+
+  {k:'trip', cat:'Leisure', icon:'🧳', tier:'bronze', name:'Wanderlust', desc:'Take your first trip', test:() => state.travel.trips >= 1},
+  {k:'globe', cat:'Leisure', icon:'🗺️', tier:'silver', name:'Globetrotter', desc:'Visit 12 different places', test:() => state.travel.places.length >= 12},
+  {k:'space', cat:'Leisure', icon:'🌌', tier:'gold', name:'Edge of Space', desc:'Fly to the edge of space', test:() => state.travel.places.includes('the edge of space')},
+  {k:'pets3', cat:'Leisure', icon:'🐾', tier:'bronze', name:'Menagerie', desc:'Keep three pets at once', test:() => myPets().length >= 3},
+  {k:'bestshow', cat:'Leisure', icon:'🎀', tier:'silver', name:'Best in Show', desc:'Win best in show with a pet', on:/wins best in show/},
+  {k:'master', cat:'Leisure', icon:'🎯', tier:'silver', name:'Master of a Craft', desc:'Reach level 90 in a hobby', test:() => Object.values(state.hobbies).some(h => h && h.level >= 90)},
+  {k:'polymath', cat:'Leisure', icon:'🎨', tier:'silver', name:'Renaissance Soul', desc:'Reach level 35 in five hobbies', test:() => Object.values(state.hobbies).filter(h => h && h.level >= 35).length >= 5},
+  {k:'jet', cat:'Leisure', icon:'🛩️', tier:'gold', name:'Wheels Up', desc:'Own a private jet', test:() => ownsJet()},
+  {k:'classic', cat:'Leisure', icon:'🚗', tier:'silver', name:'Collector', desc:'Keep a classic car in 90+ condition', test:() => state.assets.some(x => x.key === 'classic' && x.cond >= 90)},
+
+  {k:'founder', cat:'Business', icon:'🏪', tier:'bronze', name:'Founder', desc:'Start a business', test:() => !!state.business},
+  {k:'ipo', cat:'Business', icon:'🔔', tier:'gold', name:'Ring the Bell', desc:'Take your business public', on:/ public! .{1,12} starts trading/},
+  {k:'franchise', cat:'Business', icon:'🍔', tier:'gold', name:'Franchise Empire', desc:'Sell five franchises', test:() => !!state.business && (state.business.franchises || 0) >= 5},
+  {k:'home', cat:'Business', icon:'🏡', tier:'bronze', name:'Homeowner', desc:'Buy a home', test:() => state.assets.some(x => x.category === 'Homes')},
+  {k:'landlord', cat:'Business', icon:'🔑', tier:'silver', name:'Landlord', desc:'Own three rental properties', test:() => rentals().length >= 3},
+  {k:'tycoon', cat:'Business', icon:'🏙️', tier:'gold', name:'Property Tycoon', desc:'Own 25 rental units', test:() => rentals().reduce((t, x) => t + (x.rental.units || 1), 0) >= 25},
+
+  {k:'pandemic', cat:'World', icon:'😷', tier:'bronze', name:'Lived Through It', desc:'Live through a pandemic', test:() => state.ach.events.includes('pandemic')},
+  {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
+  {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
+  {k:'war', cat:'World', icon:'🕊️', tier:'bronze', name:'Through the Storm', desc:'Live through a war and a recession in one life', test:() => state.ach.events.includes('war') && state.ach.events.includes('recession')},
+];
+// the firsts of one life; each is recorded once, at the age it happens
+const GRAD_DEG = ["Master's", 'MBA', 'MD', 'JD', 'PhD'];
+const MILESTONES = [
+  {k:'hs', icon:'📜', test:() => EDU_RANK[state.edu.level] >= 1, text:() => 'Graduated from high school'},
+  {k:'degree', icon:'🎓', test:() => degrees().some(d => d.degree === "Bachelor's"), text:() => { const d = degrees().find(x => x.degree === "Bachelor's"); return "Earned a bachelor's" + (d.major && d.major !== 'Undecided' ? ' in ' + d.major : '') + (d.schoolName ? ' from ' + d.schoolName : ''); }},
+  {k:'grad', icon:'🧪', test:() => degrees().some(d => GRAD_DEG.includes(d.degree)), text:() => { const d = degrees().find(x => GRAD_DEG.includes(x.degree)).degree; return 'Earned ' + (['MBA', 'MD'].includes(d) ? 'an ' : 'a ') + d; }},
+  {k:'trade', icon:'🔧', test:() => degrees().some(d => d.degree === 'Certificate'), text:() => 'Earned a trade certificate'},
+  {k:'job', icon:'💼', test:() => !!state.job && state.job.track !== 'Odd Jobs', text:() => 'First real job: ' + state.job.title},
+  {k:'top', icon:'🪜', test:() => topRank(state.job) && state.job.track !== 'Odd Jobs', text:() => 'Reached the top as ' + state.job.title},
+  {k:'moved', icon:'📦', test:() => state.movedOut, text:() => 'Moved out on their own'},
+  {k:'love', icon:'💘', test:() => hasRel('Partner', 'Spouse'), text:() => 'Fell in love with ' + state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse').name},
+  {k:'married', icon:'💍', test:() => hasRel('Spouse'), text:() => 'Married ' + state.relationships.find(r => r.type === 'Spouse').name},
+  {k:'child', icon:'🍼', test:() => hasRel('Child'), text:() => 'Became a parent to ' + state.relationships.find(r => r.type === 'Child').name},
+  {k:'grand', icon:'👵', test:() => hasRel('Grandchild'), text:() => 'Became a grandparent'},
+  {k:'car', icon:'🚗', test:() => roadVehicles().length > 0, text:() => 'Got their first set of wheels'},
+  {k:'home', icon:'🏡', test:() => state.assets.some(x => x.category === 'Homes'), text:() => 'Bought a home: ' + state.assets.find(x => x.category === 'Homes').name},
+  {k:'rental', icon:'🔑', test:() => rentals().length > 0, text:() => 'Became a landlord'},
+  {k:'biz', icon:'🏪', test:() => !!state.business, text:() => 'Founded ' + bizName(state.business)},
+  {k:'trip', icon:'🧳', test:() => state.travel.trips >= 1, text:() => 'First trip, to ' + (state.travel.places[0] || 'somewhere new')},
+  {k:'pet', icon:'🐾', test:() => myPets().length > 0, text:() => 'Brought home ' + myPets()[0].name},
+  {k:'k100', icon:'💵', test:() => todayWorth() >= 1e5, text:() => "Worth $100,000 in today's money"},
+  {k:'m1', icon:'💰', test:() => todayWorth() >= 1e6, text:() => 'Became a millionaire'},
+  {k:'famous', icon:'📸', test:() => state.fame.level >= 50, text:() => 'Became famous'},
+  {k:'inherit', icon:'🕯️', test:() => state.inheritedTotal > 0, text:() => 'Received an inheritance'},
+  {k:'prison', icon:'⛓️', test:() => !!state.crime.prison, text:() => 'Went to prison'},
+  {k:'retired', icon:'⌚', test:() => state.retired, text:() => 'Retired'},
+  {k:'age100', icon:'💯', test:() => state.age >= 100, text:() => 'Turned 100'},
+];
+const MS_ON = [[/takes .{1,40} public! .{1,12} starts trading/, '🔔', 'Took the business public'], [/hits the jackpot|wins the lottery!/, '🎰', 'Won the lottery'],
+  [/cancer goes into remission/, '🎗️', 'Beat cancer'], [/escapes from prison/, '🕳️', 'Escaped from prison'], [/wins the election and becomes President/, '🏛️', 'Elected President']];
+
+function loadAch(){
+  let a = null; try{ a = JSON.parse(localStorage.getItem(ACH_KEY) || "null"); } catch(e){}
+  if(!a || typeof a.unlocked !== "object") a = {};
+  return {unlocked: a.unlocked || {}, stats: Object.assign({lives:0, years:0}, a.stats || {})};
+}
+const ACH = loadAch();
+function saveAch(){ try{ localStorage.setItem(ACH_KEY, JSON.stringify(ACH)); } catch(e){} }
+const achCount = () => ACHIEVEMENTS.filter(x => ACH.unlocked[x.k]).length;
+const achPoints = () => ACHIEVEMENTS.reduce((t, x) => t + (ACH.unlocked[x.k] ? ACH_TIERS[x.tier].pts : 0), 0);
+function lifeAch(){ const a = state.ach || (state.ach = {}); a.events = a.events || []; a.got = a.got || []; a.peakDebt = a.peakDebt || 0; a.ms = a.ms || {}; return a; }
+function unlockAch(x){
+  if(!state || ACH.unlocked[x.k]) return;
+  ACH.unlocked[x.k] = {age: state.age, who: state.name, gen: state.generation || 1, at: Date.now()};
+  lifeAch().got.push(x.k);
+  saveAch();
+  state.log.push({age: state.age, text: `🏆 Achievement unlocked: <b>${x.name}</b> — ${x.desc.charAt(0).toLowerCase() + x.desc.slice(1)}.`, dtext: ''});
+  queueToast('🏆 Achievement unlocked: <b>' + x.name + '</b>', '');
+  sfxNow('fanfare');
+}
+function addMilestone(icon, text, k){
+  const a = lifeAch();
+  if(k){ if(a.ms[k]) return; a.ms[k] = 1; }
+  (state.milestones || (state.milestones = [])).push({age: state.age, icon, text});
+}
+// moments the log records as they happen
+function achText(text){
+  if(!state || !state.alive && !/passes|record closes/.test(text)) return;
+  for(const x of ACHIEVEMENTS) if(x.on && !ACH.unlocked[x.k] && x.on.test(text)) unlockAch(x);
+  for(const [re, icon, t] of MS_ON) if(re.test(text)) addMilestone(icon, t, 'on:' + t);
+}
+// everything that can be read from the state of the life
+function checkAchievements(quiet){
+  if(!state) return;
+  const a = lifeAch();
+  a.peakDebt = Math.max(a.peakDebt, totalDebt() / state.econ.cumInflation);
+  ((state.world && state.world.events) || []).forEach(ev => { if(!a.events.includes(ev.key)) a.events.push(ev.key); });
+  for(const m of MILESTONES){
+    if(a.ms[m.k]) continue;
+    let ok = false; try{ ok = m.test(); } catch(e){}
+    if(!ok) continue;
+    if(quiet) a.ms[m.k] = 1; else{ let t = ''; try{ t = m.text(); } catch(e){ t = ''; } a.ms[m.k] = 1; if(t) addMilestone(m.icon, t); }
+  }
+  for(const x of ACHIEVEMENTS){
+    if(!x.test || ACH.unlocked[x.k]) continue;
+    let ok = false; try{ ok = x.test(); } catch(e){}
+    if(ok) unlockAch(x);
+  }
+}
+function achOnDeath(){
+  if(state.age < 30) unlockAch(ACHIEVEMENTS.find(x => x.k === 'young'));
+  checkAchievements();
+}
+
+function achBadge(x, on){
+  const hide = x.secret && !on, u = ACH.unlocked[x.k];
+  return `<div class="ach${on ? ' on ' + x.tier : ''}" title="${hide ? 'Secret achievement' : x.desc}"><span class="ach-ic">${hide ? '❔' : x.icon}</span><span class="ach-tx"><b>${hide ? '???' : x.name}</b><small>${hide ? 'A secret — keep living to find it' : x.desc}${u ? ' · ' + u.who + ', age ' + u.age : ''}</small></span></div>`;
+}
+function achGridHtml(){
+  return ACH_CATS.map(c => {
+    const list = ACHIEVEMENTS.filter(x => x.cat === c), got = list.filter(x => ACH.unlocked[x.k]).length;
+    return `<div class="plabel">${c} <span class="ach-cnt">${got}/${list.length}</span></div><div class="ach-grid">` + list.map(x => achBadge(x, !!ACH.unlocked[x.k])).join('') + '</div>';
+  }).join('');
+}
+function achSummary(){
+  const n = achCount(), N = ACHIEVEMENTS.length;
+  return `<div class="ach-bar"><div class="ach-fill" style="width:${Math.round(n / N * 100)}%"></div></div><div class="owned">${n} of ${N} unlocked · ${achPoints()} points · ${ACH.stats.lives} li${ACH.stats.lives === 1 ? 'fe' : 'ves'}, ${ACH.stats.years} years lived</div>`;
+}
+function openAchievements(){
+  document.getElementById('achBody').innerHTML = achSummary() + achGridHtml();
+  document.getElementById('achModal').hidden = false;
+}
+function closeAchievements(){ document.getElementById('achModal').hidden = true; }
+function milestonesHtml(limit){
+  const ms = (state.milestones || []).slice();
+  if(!ms.length) return '';
+  const shown = limit ? ms.slice(-limit) : ms;
+  return '<div class="timeline">' + (limit && ms.length > limit ? `<div class="tl-more">${ms.length - limit} earlier milestone${ms.length - limit > 1 ? 's' : ''}</div>` : '') +
+    shown.map(m => `<div class="tl-row"><span class="tl-age">${m.age}</span><span class="tl-ic">${m.icon}</span><span class="tl-tx">${m.text}</span></div>`).join('') + '</div>';
+}
+function achMeHtml(){
+  let h = '';
+  const ms = milestonesHtml(8);
+  if(ms) h += '<div class="plabel">Milestones</div>' + ms;
+  const got = lifeAch().got.map(k => ACHIEVEMENTS.find(x => x.k === k)).filter(Boolean);
+  h += '<div class="plabel">Achievements</div><div class="invrow">' + achSummary() +
+    (got.length ? '<div class="ach-chips">' + got.slice(-6).map(x => `<span class="ach-chip ${x.tier}">${x.icon} ${x.name}</span>`).join('') + '</div>' : '') +
+    '<div class="btnrow-social" style="margin:8px 0 0;"><button onclick="openAchievements()">🏆 View all achievements</button></div></div>';
+  return h;
+}
+function achGameOverHtml(){
+  let h = '';
+  const ms = milestonesHtml(0);
+  if(ms) h += '<div class="plabel">Highlights of a life</div>' + ms;
+  const got = lifeAch().got.map(k => ACHIEVEMENTS.find(x => x.k === k)).filter(Boolean);
+  h += '<div class="plabel">Achievements this life</div><div class="invrow">' + (got.length ? '<div class="ach-chips">' + got.map(x => `<span class="ach-chip ${x.tier}">${x.icon} ${x.name}</span>`).join('') + '</div>' : '<div class="owned">No new achievements this time.</div>') +
+    achSummary() + '<div class="btnrow-social" style="margin:8px 0 0;"><button onclick="openAchievements()">🏆 View all achievements</button></div></div>';
+  return h;
+}
+function achSetupLabel(){ const b = document.getElementById('achSetupBtn'); if(b) b.textContent = '🏆 Achievements: ' + achCount() + ' of ' + ACHIEVEMENTS.length; }
+
 function render(){
+  try{ checkAchievements(); } catch(e){}
   document.getElementById('avatarBox').innerHTML = drawAvatar();
   document.getElementById('ageNum').textContent = state.age;
   const ed = state.edu;
@@ -7449,12 +7718,14 @@ function render(){
 
 audioWire();
 renderSetup();
+achSetupLabel();
 resumeGame();
 document.addEventListener("visibilitychange", () => { if(document.hidden) saveGame(); });
 window.addEventListener("pagehide", saveGame);
 // keyboard: Space or Enter ages up, 1-4 picks an answer
 document.addEventListener("keydown", e => {
   if(!document.getElementById("modal").hidden){ if(e.key === "Escape") closeConfirm(false); return; }
+  if(!document.getElementById("achModal").hidden){ if(e.key === "Escape") closeAchievements(); return; }
   if(!state || !state.alive || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
   const opts = document.querySelectorAll('#choices .choice-btn');
   if(opts.length && /^[1-9]$/.test(e.key) && opts[+e.key - 1]){ e.preventDefault(); opts[+e.key - 1].click(); return; }
