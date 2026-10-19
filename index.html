@@ -573,6 +573,7 @@ function startLife(heir){
     pushEntry(state.age, inheritText(name, p), {});
   } else { state.world.year--; worldStart(0); worldEnd(0); }
   if(!heir) pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}. The record begins.`, {});
+  yearStart = serialize();          // a decision opened before the first age-up must not save an older life
   render();
   audioStartLife();
 }
@@ -616,6 +617,7 @@ function resumeGame(){
     if(state.panel === 'hob') state.panel = 'act';
     syncIpos();
     document.getElementById('nameTag').textContent = state.name + (state.generation > 1 ? ' · generation ' + state.generation : '');
+    yearStart = serialize();
     if(state.alive){
       showScreen("game");
       document.getElementById('choices').innerHTML = ''; document.getElementById('ageBtn').disabled = false;
@@ -865,7 +867,7 @@ const CHOICE_EVENTS = [
     {label:'Take a class', delta:{smarts:6}},
     {label:'Pick up a hobby', delta:{happy:6}}],
   [30,70,n=>`A friend asks ${n} for a sizable loan.`,
-    {label:'Lend it', delta:{happy:3,health:-1}},
+    {label:'Lend it ($2,000)', risk:0.6, win:{happy:3}, lose:{money:-2000,happy:-3,friends:-4}, winText:'They pay every cent back.', loseText:'They never pay it back.'},
     {label:'Say you can\'t this time', delta:{happy:-3}}],
   [40,85,n=>`${n} is due for a full checkup they've been putting off.`,
     {label:'Finally go', delta:{health:8,happy:-1}},
@@ -878,7 +880,7 @@ const CHOICE_EVENTS = [
     {label:'Take the trip', delta:{happy:7}}],
   [18,60,n=>`${n}'s old car starts making a terrible noise.`,
     {label:'Get it repaired ($800)', delta:{money:-800,happy:1}},
-    {label:'Ignore it and hope', delta:{happy:-4}}],
+    {label:'Ignore it and hope', delta:{happy:-4}},'car'],
   [20,65,n=>`A relative offers ${n} money to help with rent.`,
     {label:'Accept the help', delta:{money:3000,happy:-2}},
     {label:'Decline politely', delta:{happy:3,smarts:1}}],
@@ -974,7 +976,7 @@ const CHOICE_EVENTS = [
     {label:'Stay loyal', delta:{happy:1}},'job'],
   [35,65,n=>`${n}'s teenager wants a car.`,
     {label:'Buy a used one ($8,000)', delta:{money:-8000,family:8}},
-    {label:'Make them earn it', delta:{family:-2,smarts:1}},'kids'],
+    {label:'Make them earn it', delta:{family:-2,smarts:1}},'teenKid&afford'],
   [35,70,n=>`${n} is asked to run for the local school board.`,
     {label:'Run for it', risk:0.5, win:{happy:6,smarts:2}, lose:{happy:-3}, winText:'They win a seat.', loseText:'They lose by a handful of votes.'},
     {label:'Decline', delta:{}}],
@@ -989,7 +991,7 @@ const CHOICE_EVENTS = [
     {label:'Put it off', delta:{happy:1}}],
   [50,80,n=>`${n}'s adult child wants to move back home.`,
     {label:'Welcome them back', delta:{family:10,money:-3000,happy:-1}},
-    {label:'Help them find a place ($2,000)', delta:{family:4,money:-2000}},'kids',1,
+    {label:'Help them find a place ($2,000)', delta:{family:4,money:-2000}},'adultKid',1,
     {label:'Say no', delta:{family:-10}}],
   [60,90,n=>`${n} is invited on a cruise with old friends.`,
     {label:'Go ($4,000)', delta:{money:-4000,happy:9,friends:6}},
@@ -1038,8 +1040,8 @@ const CHOICE_EVENTS = [
     {label:'Rush them to the vet ($400)', delta:{money:-400,happy:2}},
     {label:'Wait a day and see', risk:0.6, win:{happy:1}, lose:{happy:-5}, winText:'It was just an upset stomach.', loseText:'It turns into an expensive emergency visit.'},'pet'],
   [10,80,n=>`{mypet} slipped out the door and is nowhere to be found.`,
-    {label:'Search the neighborhood all night', risk:0.8, win:{happy:5}, lose:{happy:-8}, winText:'They find them hiding under a porch.', loseText:'No luck. They never come home.'},
-    {label:'Put up posters and wait', risk:0.6, win:{happy:4}, lose:{happy:-8}, winText:'A neighbor calls the next day.', loseText:'Weeks pass with no sign of them.'},'pet'],
+    {label:'Search the neighborhood all night', risk:0.8, win:{happy:5}, lose:{happy:-8}, winText:'They find them hiding under a porch.', loseText:'No luck. They never come home.', onLose:loseEvPet},
+    {label:'Put up posters and wait', risk:0.6, win:{happy:4}, lose:{happy:-8}, winText:'A neighbor calls the next day.', loseText:'Weeks pass with no sign of them.', onLose:loseEvPet},'pet'],
   // ---- fame ----
   [16,40,n=>`A talent scout stops ${n} in the street and hands them a card.`,
     {label:'Sign with the agency', delta:{fame:8,happy:5}, effect:()=>{ state.hobbies.acting = state.hobbies.acting || {level:0}; state.hobbies.acting.level = Math.max(state.hobbies.acting.level, 25); state.hobbies.acting.last = state.age; }},
@@ -1080,16 +1082,19 @@ const rint = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 const roll = v => Array.isArray(v) ? rint(v[0], v[1]) : v;
 function fill(t){
   const f = pick(FRIENDS), h = pick(HOBBIES), c = pick(CITIES), p = pick(PETS), d = pick(FOODS);
-  const mine = state.pets && state.pets.length ? pick(state.pets).name : 'the family pet';
-  return t.replace(/\{mypet\}/g, mine).replace(/\{n\}/g, state.name).replace(/\{f\}/g, f).replace(/\{h\}/g, h).replace(/\{c\}/g, c).replace(/\{pet\}/g, p).replace(/\{food\}/g, d).replace(/\{rel\}/g, state.evTarget ? state.evTarget.name : 'a friend');
+  let mine = 'the family pet', dog = 'the dog';
+  if(/\{mypet\}/.test(t) && state.pets && state.pets.length){ const pt = pick(state.pets); mine = pt.name; state.evPet = pt.id; }
+  if(/\{mydog\}/.test(t)){ const dogs = (state.pets || []).filter(p => p.species === 'dog'); if(dogs.length){ const pt = pick(dogs); dog = pt.name; state.evPet = pt.id; } }
+  return t.replace(/\{mypet\}/g, mine).replace(/\{mydog\}/g, dog).replace(/\{n\}/g, state.name).replace(/\{f\}/g, f).replace(/\{h\}/g, h).replace(/\{c\}/g, c).replace(/\{pet\}/g, p).replace(/\{food\}/g, d).replace(/\{rel\}/g, state.evTarget ? state.evTarget.name : 'a friend');
 }
+function loseEvPet(){ if(state.evPet) state.pets = (state.pets || []).filter(p => p.id !== state.evPet); state.evPet = null; }
 const hasRel = (...types) => state.relationships.some(r => types.includes(r.type));
 const COND = {
   job:()=>!!state.job, school:()=>!!state.edu.school, college:()=>!!state.edu.program && ['college','community'].includes(state.edu.program.kind),
-  poor:()=>state.money < 0, rich:()=>state.money > 20000, saver:()=>state.savings >= 5000,
-  afford:()=>state.money + state.savings >= 2500, indebted:()=>totalDebt() > 5000,
+  poor:()=>state.money < 0, rich:()=>state.money > infl(20000), saver:()=>state.savings >= infl(5000),
+  afford:()=>state.money + state.savings >= infl(15000), indebted:()=>totalDebt() > infl(5000),
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
-  kids:()=>hasRel('Child'), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
+  kids:()=>hasRel('Child'), youngKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 5 && r.age <= 17), teenKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 15 && r.age <= 19), adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
   friends:()=>hasRel('Friend'),
   home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>roadVehicles().length > 0, nocar:()=>!roadVehicles().length, traveler:()=>!!state.travel && state.travel.trips >= 3,
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
@@ -1188,7 +1193,7 @@ const BANK = [
   E(16,110,"{rel} goes through a rough breakup",[["and {n} is there for every late-night call",{bond:8,happy:-2}],["and {n} struggles to find the right words",{bond:2,happy:-3}]],null,1,["Friend"]),
   E(12,110,"{rel} introduces {n} to a whole new circle of friends",[["and {n} suddenly has a busier social life",{happy:6,friends:3}]],null,0.9,["Friend"]),
   E(14,110,"{rel} sends {n} a long-overdue message",[["and they reconnect over a long call",{happy:5,bond:7}]],null,1,["Friend"]),
-  E(18,110,"{rel} borrows some money from {n}",[["and pays it back early",{bond:4,money:-300,happy:1}],["and quietly never mentions it again",{bond:-5,money:-300,happy:-2}]],null,1,["Friend"]),
+  E(18,110,"{rel} borrows some money from {n}",[["and pays it back early",{bond:4,happy:1}],["and quietly never mentions it again",{bond:-5,money:-300,happy:-2}]],null,1,["Friend"]),
   // coworkers
   E(18,69,"{rel} covers for {n} during a tough week",[["and {n} returns the favor with coffee",{bond:6,happy:3}]],"job",1.2,["Coworker"]),
   E(18,69,"{rel} takes credit for {n}'s idea",[["and {n} calmly sets the record straight",{bond:-3,smarts:2}],["and {n} stews about it for weeks",{bond:-8,happy:-5}]],"job",1,["Coworker"]),
@@ -1481,9 +1486,9 @@ const BANK = [
   E(28,60,'{n} finds a forgotten investment account',[['with a pleasant balance inside',{money:2500,happy:5}]],null,0.4),
   E(28,65,'{n} is asked to join the board of a local charity',[['and finds it deeply rewarding',{happy:5,smarts:2}]],'job'),
   E(30,65,'{n} hits a deer on a dark country road',[['but nobody is hurt',{money:-1500,happy:-3}],['and spends a night in the hospital',{health:-6,money:-2000,happy:-4}]],'car'),
-  E(30,60,"{n}'s kids put on a talent show",[['and it is gloriously chaotic',{happy:6,family:4}]],'kids'),
+  E(30,60,"{n}'s kids put on a talent show",[['and it is gloriously chaotic',{happy:6,family:4}]],'youngKid'),
   E(30,75,'{n} gets a call from an old school friend',[['and they pick up like no time has passed',{happy:5,friends:4}]]),
-  E(35,65,"{n} is roped into coaching a kids' sports team",[['and loves every minute',{happy:6,health:2}],['and the parents are a nightmare',{happy:-2}]],'kids'),
+  E(35,65,"{n} is roped into coaching a kids' sports team",[['and loves every minute',{happy:6,health:2}],['and the parents are a nightmare',{happy:-2}]],'youngKid'),
   E(35,75,'{n} wins a raffle at a charity dinner',[['and takes home a weekend getaway',{happy:6}]],null,0.6),
   E(40,75,"{n}'s property taxes go up",[['and the bill stings',{money:-1200,happy:-2}]],'home'),
   E(40,80,'{n} plants a vegetable garden',[['and it overflows with tomatoes',{happy:5,health:2}],['and the rabbits eat everything',{happy:-1}]],'home'),
@@ -1502,8 +1507,8 @@ const BANK = [
   E(4,90,'{mypet} curls up on {n} during a rough week',[['and it helps more than anything',{happy:5}]],'pet'),
   E(4,90,'{mypet} knocks a full glass off the table',[['and stares at {n} without remorse',{happy:1}]],'pet'),
   E(6,90,'{mypet} learns to open the treat cupboard',[['and helps themselves to everything',{happy:2,money:-40}]],'pet'),
-  E(10,90,'{n} takes {mypet} to the dog park',[['and makes friends with another owner',{happy:4,friends:3}]],'dog'),
-  E(16,90,'{n} meets someone while walking {mypet}',[['and they hit it off',{happy:5}]],'dog'),
+  E(10,90,'{n} takes {mydog} to the dog park',[['and makes friends with another owner',{happy:4,friends:3}]],'dog'),
+  E(16,90,'{n} meets someone while walking {mydog}',[['and they hit it off',{happy:5}]],'dog'),
   E(10,99,'{n} is recognized at the grocery store',[['and happily poses for a selfie',{happy:3,image:1}],['and gets mobbed by fans',{happy:-2}]],'celeb'),
   E(16,99,'Paparazzi follow {n} on a private vacation',[['and the photos are everywhere within hours',{happy:-4,fame:1}]],'famous'),
   E(10,99,'{n} receives a sack of fan mail',[['and reads every single letter',{happy:5}]],'celeb'),
@@ -1594,11 +1599,11 @@ CHOICE_EVENTS.push(
     {label:'Save the money', delta:{smarts:1}}, 'afford'],
   // ----- people and relationships -----
   [24,50,n=>`${n}'s partner suggests adopting a dog.`,
-    {label:'Adopt one', delta:{happy:8,partner:6,money:-400,health:2}},
+    {label:'Adopt one', delta:{happy:8,partner:6,money:-400,health:2}, effect:()=>{ if(myPets().length < 6) newPet('dog', {age:rint(1, 5)}); }},
     {label:'Not right now', delta:{partner:-3}}, 'partner'],
   [25,55,n=>`${n}'s child wants to try out for a team.`,
     {label:'Support it and pay for gear', delta:{family:7,happy:4,money:-300}},
-    {label:'Tell them to focus on school', delta:{family:-4,smarts:1}}, 'kids'],
+    {label:'Tell them to focus on school', delta:{family:-4,smarts:1}}, 'youngKid'],
   [35,70,n=>`A parent needs more help at home.`,
     {label:'Move closer and help daily', delta:{family:10,happy:-2,money:-1500,health:-2}},
     {label:'Hire part-time help', delta:{family:3,money:-3000}}, 'parents&afford'],
@@ -1669,7 +1674,7 @@ CHOICE_EVENTS.push(
     {label:'Politely decline', delta:{}}],
   [75,110,n=>`${n} is invited to a grandchild's graduation across the country.`,
     {label:'Make the trip', delta:{happy:9,family:6,health:-2,money:-900}},
-    {label:'Watch it by video', delta:{happy:3,family:2}}, 'kids'],
+    {label:'Watch it by video', delta:{happy:3,family:2}}, 'grandkids'],
 );
 
 // Events that fit your actual life (job, home, partner, business...) come up more often, and nothing repeats for a while.
@@ -1793,8 +1798,11 @@ function ageUpYear(){
 }
 
 let choiceSeq = 0;
+let inChoice = false;
 function presentCustom(promptText, opts){
-  const box = document.getElementById('choices'), seq = ++choiceSeq;
+  const box = document.getElementById('choices');
+  if(!inYear && !inChoice && box.querySelector('.choice-btn')){ queueToast('Answer the decision above first.', ''); return false; }
+  const seq = ++choiceSeq;
   box.innerHTML = `<div class="decision"><div class="decision-label">Decision · age ${state.age}</div>${promptText}</div>` +
     opts.map((o,i)=>`<button class="choice-btn" data-idx="${i}"><span class="num">${i + 1}</span>${o.label}</button>`).join('');
   window.scrollTo({top:0, behavior:"smooth"});
@@ -1802,7 +1810,8 @@ function presentCustom(promptText, opts){
   audioPrompt();
   box.querySelectorAll('.choice-btn').forEach(btn=>{
     btn.onclick = () => {
-      opts[+btn.dataset.idx].run();
+      inChoice = true;
+      try{ opts[+btn.dataset.idx].run(); } finally{ inChoice = false; }
       if(choiceSeq === seq){            // only close the prompt if this choice did not open a follow-up one
         box.innerHTML = '';
         document.getElementById('ageBtn').disabled = false;
@@ -1819,7 +1828,7 @@ function presentChoice(ev){
     label,
     run:()=>{
       let d = o.delta || {}, extra = '';
-      if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); }
+      if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); if(!win && o.onLose) o.onLose(); }
       if(o.effect) o.effect();
       pushEntry(state.age, `${promptText} — ${state.name} chose: ${label.charAt(0).toLowerCase() + label.slice(1)}.${extra}`, scaleMoneyDelta(d));
     }
@@ -2052,7 +2061,6 @@ const ACTIVITIES = [
   {key:'vacation', label:'Take a vacation', min:18, cost:2000, delta:{happy:12,health:2}, text:n=>`${n} escapes on a proper vacation.`},
   {key:'gamble', label:'Gamble at the casino', min:21, cost:200, delta:{}, text:n=>`${n} tries their luck at the casino`},
   {key:'meditate', label:'Meditate', min:10, cost:0, delta:{happy:3,health:1}, text:n=>`${n} sits with their thoughts for a while and comes out calmer.`},
-  {key:'volunteer', label:'Volunteer', min:12, cost:0, delta:{happy:5,smarts:1}, text:n=>`${n} volunteers and meets some good people.`},
   {key:'surgery', label:'Cosmetic surgery', min:18, cost:6000, delta:{}, text:n=>`${n} goes under the knife`},
 ];
 
@@ -2657,7 +2665,7 @@ function sellAssetFor(id, price){
 }
 // tenant trouble and offers; a property manager handles most of it for you
 function propertyEventYear(a){
-  const owned = rentals().filter(x => x.rental.occupied > 0 || x.rental.home);
+  const owned = rentals().filter(x => x.rental.occupied > 0);
   if(!owned.length || state.crime.prison || Math.random() > 0.35) return false;
   const x = pick(owned), r = x.rental, n = state.name, cum = state.econ.cumInflation, loc = locOf(r.loc);
   const kinds = ['nopay', 'repair', 'repair', 'renewal', 'offer'];
@@ -4932,6 +4940,7 @@ function imprison(years, crime, juvenile){
   const k = CR(), n = state.name;
   k.prison = {left:years, total:years, crime, behavior:0, juvenile:!!juvenile, gang:false};
   k.probation = 0; k.heat = 0; k.wanted = false;
+  if(state.pol){ state.pol.campaign = null; if(inOffice()) leaveOffice(officeIdx(), true); }
   if(!juvenile && milActive()) milDischarge('dishonorable', `${n} is dishonorably discharged from the ${MIL_BRANCHES[state.mil.branch].name}.`);
   if(state.job){ convertCoworkersToFriends(); pushEntry(state.age, `${n} loses their job as ${state.job.title}.`, {}); state.job = null; }
   if(!juvenile && state.edu.school){ pushEntry(state.age, `${n} is forced to leave ${state.edu.school.toLowerCase()}.`, {}); state.edu.school = null; state.edu.program = null; state.edu.endAge = 0; activateStudentLoan(); }
@@ -5899,9 +5908,10 @@ function yearlyFinances(a){
   // students cover a shortfall with student loans instead of going broke
   if((e.program || e.gradAge === a) && net < 0 && state.money + state.savings + net < 0){
     studentShort = Math.round(-(state.money + state.savings + net));
-    let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
-    if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, econ.rate - 0.005), {deferred:true});
+    let sl = state.loans.find(l => l.type === 'Student' && (e.program ? l.deferred : !l.deferred));
+    if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, econ.rate - 0.005), e.program ? {deferred:true} : {});
     sl.principal += studentShort; sl.balance += studentShort;
+    if(!sl.deferred) sl.yearlyPayment = Math.round(sl.balance * sl.apr / (1 - Math.pow(1 + sl.apr, -Math.max(1, sl.yearsLeft))));
     net += studentShort;
   }
   if(income || expenses){
@@ -6364,7 +6374,7 @@ function mediaPanelHtml(){
   if(sm.offers.length){
     h += '<div class="plabel">Offers (they expire at year end)</div>';
     sm.offers.forEach(o => {
-      h += bankRow(o.label, o.body, '<button onclick="acceptOffer(\'' + o.id + '\')" ' + ((o.kind === 'charity' && state.money < 500) ? 'disabled' : '') + '>Accept</button><button onclick="declineOffer(\'' + o.id + '\')">Decline</button>');
+      h += bankRow(o.label, o.body, '<button onclick="acceptOffer(\'' + o.id + '\')" ' + ((o.kind === 'charity' && state.money < mediaCost('charity')) ? 'disabled' : '') + '>Accept</button><button onclick="declineOffer(\'' + o.id + '\')">Decline</button>');
     });
   }
   h += '<div class="plabel">Growth</div>';
@@ -6388,7 +6398,7 @@ function schoolYear(a){
   migrateEdu();
   if(a === 5){ e.school = 'Primary School'; pushEntry(a, `${state.name} starts school.`, {}); }
   if(a === 12 && e.school){ e.school = 'High School'; pushEntry(a, `${state.name} moves up to high school.`, {}); }
-  if(a === 18 && e.school === 'High School' && !e.program){
+  if(a >= 18 && e.school === 'High School' && !e.program){
     setLevel('High School'); e.school = null;
     pushEntry(a, `${state.name} graduates high school (GPA ${Math.round(e.gpa)}).`, {happy:6});
     collegeApplications(true);
@@ -6706,6 +6716,7 @@ function pensionFor(){
 }
 function retire(silent){
   if(state.retired || state.age < 60) return;
+  leaveRoleFor('retirement');
   const early = state.age < 65;
   const cut = early ? 1 - 0.06 * (65 - state.age) : 1;                    // taking it early costs 6% per year
   state.retired = true;
@@ -6794,7 +6805,8 @@ function mePanelHtml(){
   const facts = [];
   if(kids) facts.push(kids + " child" + (kids > 1 ? "ren" : "") + (gk ? " and " + gk + " grandchild" + (gk > 1 ? "ren" : "") : ""));
   if(state.inheritedTotal) facts.push("Inherited " + fmt(state.inheritedTotal));
-  if(k.record.length) facts.push(k.record.filter(x => !x.expunged).length + " conviction" + (k.record.length > 1 ? "s" : "") + " on record");
+  const convictions = k.record.filter(x => !x.expunged).length;
+  if(convictions) facts.push(convictions + " conviction" + (convictions > 1 ? "s" : "") + " on record");
   if(k.earned) facts.push("Made " + fmt(k.earned) + " from crime");
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
@@ -6968,6 +6980,7 @@ function applyJob(trackName){
   state.done['app_'+trackName] = true;
   const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
+    leaveRoleFor(trackName);
     if(state.job){
       convertCoworkersToFriends();
       pushEntry(state.age, `${state.name} leaves their job as ${state.job.title} for a new career.`, {});
@@ -7205,6 +7218,11 @@ function renderPanel(){
     }
   }
   p.innerHTML = head + h;
+  // while a decision is waiting, the panels can be read but not acted on
+  if(document.querySelector('#choices .choice-btn')){
+    p.querySelectorAll('button:not(.panel-close), input').forEach(x => x.disabled = true);
+    p.querySelector('.panel-head').insertAdjacentHTML('afterend', '<div class="status">Answer the decision above first.</div>');
+  }
 }
 
 // ---------- Sound: synthesized effects and generative music (Web Audio, no audio files) ----------
@@ -7529,7 +7547,13 @@ function endThread(th, note, mood){
   state.storyDone = (state.storyDone || []).concat([th]).slice(-12);
 }
 const thRel = th => th.data.rel ? findRel(th.data.rel) : null;
+// switching careers ends military service or public office the proper way
+function leaveRoleFor(track){
+  if(milActive() && track !== 'Military'){ const m = MIL(); milDischarge(state.age >= m.termEnd ? 'honorable' : 'general', `${state.name} leaves the ${MIL_BRANCHES[m.branch].name}${state.age >= m.termEnd ? ' with an honorable discharge' : ' early with a general discharge'}.`); }
+  if(inOffice() && track !== 'Politics') leaveOffice(officeIdx());
+}
 function threadJob(track, rank){
+  leaveRoleFor(track);
   const t = CAREERS[track][rank];
   if(state.job) convertCoworkersToFriends();
   state.job = {track, rank, title: t.title, salary: startingSalary(track, rank), years: 0};
@@ -8217,7 +8241,6 @@ const NET_OPS = {
   ],
   politician: [
     {w:1, when: () => !!state.business, run: (r, a) => { const b = state.business; b.reputation = clampRep(b.reputation + 10); pushEntry(a, `${r.name} cuts through red tape for ${bizName(b)}, and a big city contract follows.`, {biz:12, happy:3}); }},
-    {w:1, when: () => state.crime.prison && Math.random() < 0.3, run: (r, a) => { pushEntry(a, `${r.name} pulls strings, and ${state.name} is granted early release.`, {happy:15}); release('pardon'); }},
     {w:1, run: (r, a) => offerJob(r, 'Politics', 'wants you on their campaign staff')},
   ],
   producer: [
@@ -8340,7 +8363,7 @@ function milDischarge(kind, text){
   m.status = 'veteran'; m.discharge = kind; m.left = state.age;
   if(kind === 'honorable' && m.years >= 3 && !m.giUsed) m.gi = true;
   if(kind !== 'honorable') m.gi = false;
-  if(kind === 'honorable' && m.years >= 20 && state.job) m.pension = Math.round(state.job.salary * 0.5 / 100) * 100;
+  if(kind === 'honorable' && m.years >= 20) m.pension = Math.round((state.job && state.job.track === 'Military' ? state.job.salary : m.lastSalary || 0) * 0.5 / 100) * 100;
   if(state.job && state.job.track === 'Military'){ convertCoworkersToFriends(); state.job = null; }
   if(text) pushEntry(state.age, text, kind === 'honorable' ? {happy:6} : {happy:-8});
 }
@@ -8386,6 +8409,7 @@ function militaryYear(a, canAsk){
   if(state.mil && state.mil.status === 'active' && !(j && j.track === 'Military')){      // left service some other way (retirement age, inheritance)
     state.mil.status = 'veteran'; state.mil.discharge = state.mil.discharge || 'honorable'; state.mil.left = a;
     if(state.mil.years >= 3 && !state.mil.giUsed) state.mil.gi = true;
+    if(state.mil.years >= 20 && state.mil.lastSalary) state.mil.pension = Math.round(state.mil.lastSalary * 0.5 / 100) * 100;
   }
   if(!milActive()){
     // the draft, in wartime
@@ -8401,7 +8425,7 @@ function militaryYear(a, canAsk){
     }
     return false;
   }
-  m.years++;
+  m.years++; m.lastSalary = j.salary;
   j.title = milTitle(j.rank);
   // deployments: dangerous in wartime, otherwise training, bases and peacekeeping
   const war = atWar(), b = MIL_BRANCHES[m.branch];
@@ -8482,6 +8506,7 @@ function runGap(i){
   if(state.age < 18) return 'age 18';
   if(state.crime.prison) return 'freedom';
   if(POL().campaign) return 'a campaign already under way';
+  if(state.done.ran) return 'next year (one race a year)';
   if(inOffice() && i <= officeIdx()) return 'a higher office';
   if(i === 5 && (POL().terms[5] || 0) >= 2) return 'term limits';
   if(i > officeReach()) return 'experience in a lower office';
@@ -8523,6 +8548,8 @@ function runForOffice(i){
 const yearsToElection = () => (4 - ((state.world.year + 1) % 4)) % 4;
 const electionWhen = () => yearsToElection() === 0 ? 'next year' : 'in ' + (yearsToElection() + 1) + ' years';
 function startCampaign(i, style, cost){
+  if(state.done.ran) return;
+  state.done.ran = true;
   pay(cost);
   const P = POL();
   if(style === 'donors') P.owed = (P.owed || 0) + 1;
@@ -8626,7 +8653,7 @@ function politicsYear(a, canAsk){
   // approval drifts back toward the middle and erodes with time in office
   P.approval = Math.max(0, Math.min(100, Math.round(P.approval + rint(-5, 3) + (o.exec ? (e.recession ? -6 : w.events.some(x => x.key === 'boom') ? 4 : 0) : 0) + (45 - P.approval) / 6)));
   // corruption catches up
-  if(P.bribes && Math.random() < 0.12 * P.bribes){
+  if(canAsk && P.bribes && Math.random() < 0.12 * P.bribes){
     P.bribes = 0; P.scandal = a;
     pushEntry(a, `Investigators uncover the bribes ${state.name} took in office.`, {happy:-10, image:-25, fame:6});
     convertCoworkersToFriends(); state.job = null;
@@ -8665,6 +8692,7 @@ function leaveOffice(i, disgraced){
 }
 // the presidency is decided on the national election calendar
 function presidentialRace(w){
+  if(state.crime.prison) return null;
   const P = POL(), sitting = state.job && state.job.track === 'Politics' && state.job.rank === 5;
   if(sitting){
     if((P.terms[5] || 0) >= 2){ pushEntry(state.age, `${state.name} completes a second term as President and leaves office.`, {happy:6}); leaveOffice(5); return null; }
