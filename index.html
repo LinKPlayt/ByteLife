@@ -2974,7 +2974,7 @@ function worldEnd(a){
     else if(state.crime.record.some(x => x.age === a)) headline(`${state.name.toUpperCase()} CONVICTED`, 'Fans are stunned.', 'you', true);
     else if(Math.random() < 0.4) headline(`${state.name.toUpperCase()} ${pick(job ? ['IS THE TALK OF THE TOWN', 'SPOTTED AT EXCLUSIVE PARTY', 'SIGNS MAJOR NEW DEAL'] : ['SPOTTED AT EXCLUSIVE PARTY', 'MAKES SURPRISE APPEARANCE'])}`, 'Everyone is talking about it.', 'you', true);
   }
-  const playerIpo = state.ipos.find(s => !s.worldIpo && state.market[s.key] && state.log.some(l => l.age === a && /takes the business public/.test(l.text)));
+  const playerIpo = state.ipos.find(s => !s.worldIpo && state.market[s.key] && state.log.some(l => l.age === a && /^.* takes .* public! /.test(l.text)));
   if(playerIpo) headline(`${playerIpo.name.toUpperCase()} GOES PUBLIC`, `Founder ${state.name} rings the opening bell.`, 'you', true);
   if(!newsDraft.length) headline(pick(['CITY OPENS NEW PARK DOWNTOWN', 'LOCAL BAKERY WINS NATIONAL PRIZE', 'NEW SUBWAY LINE OPENS', 'MUSEUM UNVEILS RARE EXHIBIT', 'STADIUM RENOVATION COMPLETE']), 'A quiet year in the news.', 'policy');
   // keep the most important stories on the front page
@@ -5168,14 +5168,44 @@ const bizCost = t => inflR(t.cost, 100);
 const adCost = () => inflR(5000, 100);
 const expandCost = b => Math.round(bizCost(bizType(b.type)) * 0.6 * b.locations);
 const ipoMin = () => inflR(500000, 1000);
+// ---- naming your company ----
+const BIZ_WORD = {restaurant:'Kitchen', clothing:'Apparel', construction:'Builders', tech:'Technologies', dealership:'Motors', realestate:'Realty', onlinestore:'Goods',
+  gym:'Fitness', bar:'Tavern', agency:'Creative', photography:'Studios', music:'Records', art:'Gallery', coffee:'Coffee', salon:'Salon', brewery:'Brewing Co.',
+  appstudio:'Apps', logistics:'Logistics', hotel:'Hotel'};
+const BIZ_PREFIX = ['Blue','Golden','Iron','Bright','Silver','North','Red','Little','Wild','Urban','Copper','Maple','Summit','Harbor','Oak','Lucky','Velvet','Atlas'];
+// typed names go into the page, so keep only safe characters
+const cleanName = v => String(v || '').replace(/[<>&"`\\{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
+function suggestBizName(typeKey){
+  const word = BIZ_WORD[typeKey] || 'Company', first = state.name.split(' ')[0];
+  return Math.random() < 0.35 ? `${first}'s ${word}` : `${pick(BIZ_PREFIX)} ${pick(BIZ_PREFIX.concat(['Peak','Fox','Pine','Stone','River']))} ${word}`.replace(/^(\w+) \1 /, '$1 ');
+}
+function bizName(b){ return (b && b.name) || (b ? bizType(b.type).name : ''); }
+function fillBizName(){ const el = document.getElementById('bizName'); if(el) el.value = suggestBizName(pick(BUSINESS_TYPES).key); }
+function renameBusiness(){
+  const b = state.business, el = document.getElementById('bizRename'); if(!b || !el) return;
+  const nm = cleanName(el.value); if(!nm || nm === b.name) return;
+  const old = bizName(b); b.name = nm;
+  pushEntry(state.age, `${state.name} renames ${old} to ${nm}.`, {});
+  render();
+}
+function tickerFor(name){
+  const words = name.replace(/[^A-Za-z ]/g, '').split(' ').filter(w => w && !/^(the|and|of|co|inc|llc)$/i.test(w));
+  let base = (words.length >= 2 ? words.map(w => w[0]).join('') : (words[0] || 'BIZ')).toUpperCase().slice(0, 4);
+  if(base.length < 3) base = (words.join('') || 'BIZ').toUpperCase().slice(0, 4);
+  let t = base, n = 2;
+  while(state.market[t]) t = base.slice(0, 3) + (n++);
+  return t;
+}
 function startBusiness(typeKey){
   const t = bizType(typeKey);
   if(!t || state.business || state.money < bizCost(t) || state.age < 21) return;
+  const typed = document.getElementById('bizName');
+  const name = cleanName(typed && typed.value) || suggestBizName(typeKey);
   state.money -= bizCost(t);
   const hobbyKey = Object.keys(HOBBY_BUSINESS).find(k => HOBBY_BUSINESS[k] === typeKey);
   const mastered = hobbyKey && state.hobbies[hobbyKey] && state.hobbies[hobbyKey].level >= 70;
-  state.business = bizNormalize({type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: Math.round(bizCost(t) * (mastered ? 1.3 : 1)), startAge:state.age, lastProfit:null});
-  pushEntry(state.age, `${state.name} opens a ${t.name.toLowerCase()}${mastered ? ', putting years of hard-won expertise to work' : ''}.`, {happy:6});
+  state.business = bizNormalize({type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: Math.round(bizCost(t) * (mastered ? 1.3 : 1)), startAge:state.age, lastProfit:null, name});
+  pushEntry(state.age, `${state.name} opens ${name}, a ${t.name.toLowerCase()}${mastered ? ', putting years of hard-won expertise to work' : ''}.`, {happy:6});
   render();
 }
 function hireEmployee(n){
@@ -5227,25 +5257,24 @@ function closeBusiness(ok){
   const b = state.business; if(!b) return;
   if(ok !== true) return askConfirm(`Sell the business for ${fmt(Math.round(b.value * 0.7))}?`, "Sell", () => closeBusiness(true));
   state.money += Math.round(b.value * 0.7);
-  pushEntry(state.age, `${state.name} sells the business for ${fmt(Math.round(b.value*0.7))}.`, {happy:-2});
+  pushEntry(state.age, `${state.name} sells ${bizName(b)} for ${fmt(Math.round(b.value*0.7))}.`, {happy:-2});
   state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
   state.business = null;
   render();
 }
 function ipoBusiness(){
   const b = state.business; if(!b || b.value < ipoMin() || b.employees < 5) return;
-  const t = bizType(b.type);
-  const baseTicker = t.name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase();
-  let ticker = baseTicker, n = 2;
-  while(state.market[ticker]) ticker = baseTicker + (n++);
+  const nm = bizName(b), typed = document.getElementById('ipoTicker');
+  const want = typed ? typed.value.toUpperCase().replace(/[^A-Z]/g, '') : '';
+  const ticker = want.length >= 2 && want.length <= 5 && !state.market[want] ? want : tickerFor(nm);
   const totalShares = 1000000, ipoPrice = +(b.value / totalShares).toFixed(2), sharesRetained = 600000;
   const cashRaised = Math.round((totalShares - sharesRetained) * ipoPrice);
-  const newStock = {key:ticker, name:t.name + ' Inc.', sector:'IPO', base:ipoPrice, drift:0.07, vol:0.35, div:0};
+  const newStock = {key:ticker, name:nm, sector:'IPO', base:ipoPrice, drift:0.07, vol:0.35, div:0, ipo:true};
   state.ipos.push(newStock);
   syncIpos();
   state.portfolio[ticker] = (state.portfolio[ticker] || 0) + sharesRetained;
   state.money += cashRaised;
-  pushEntry(state.age, `${state.name} takes the business public! ${ticker} starts trading at ${fmt(ipoPrice)}/share, raising ${fmt(cashRaised)}.`, {happy:15});
+  pushEntry(state.age, `${state.name} takes ${nm} public! ${ticker} starts trading at ${fmt(ipoPrice)}/share, raising ${fmt(cashRaised)}.`, {happy:15});
   state.business = null;
   render();
 }
@@ -5279,7 +5308,7 @@ function businessYear(a){
       pushEntry(a, `${state.name}'s business hits a rough patch but its loyal customers carry it through.`, {happy:-3, biz:-15});
       return profit - kept;
     }
-    pushEntry(a, `${state.name}'s business fails and shuts its doors.${totalDebt()>0 ? ' Any business loans remain due.' : ''}`, {happy:-12});
+    pushEntry(a, `${bizName(b)} fails and shuts its doors.${totalDebt()>0 ? ' Any business loans remain due.' : ''}`, {happy:-12});
     state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
     state.business = null;
     return 0;
@@ -5375,7 +5404,7 @@ function bizEventYear(a){
   } else if(kind === 'buyout'){
     const offer = Math.round(b.value * (1.1 + Math.random() * 0.5) / 100) * 100;
     presentCustom(`A rival company offers to buy ${n}'s business outright for ${fmt(offer)}.`, [
-      {label:`Sell for ${fmt(offer)}`, run:() => { state.business = null; pushEntry(state.age, `${n} sells the business to a rival for ${fmt(offer)}.`, {money:offer, happy:8}); }},
+      {label:`Sell for ${fmt(offer)}`, run:() => { const nm = bizName(b); state.business = null; pushEntry(state.age, `${n} sells ${nm} to a rival for ${fmt(offer)}.`, {money:offer, happy:8}); }},
       {label:"Keep building it", run:() => pushEntry(state.age, `${n} turns down the buyout offer.`, {happy:1})},
     ]);
   } else if(kind === 'inspection'){
@@ -5421,7 +5450,7 @@ function bizPanelHtml(){
   const pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
   const meter = (v, col) => `<div class="stat-track" style="margin:4px 0 2px;"><div class="stat-fill" style="width:${v}%;background:var(--${col})"></div></div>`;
   const p = b.lastProfit, hasYear = b.history.length > 0;
-  let h = `<div class="status"><b>${t.name}</b>${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
+  let h = `<div class="status"><b>${bizName(b)}</b>${b.name ? ' · ' + t.name.toLowerCase() : ''}${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
     ${b.employees} employee${b.employees === 1 ? '' : 's'} · ${b.locations} location${b.locations === 1 ? '' : 's'} · valued at <b>${fmt(Math.round(b.value))}</b>` +
     (hasYear ? `<br>Last year: revenue ${fmt(b.lastRevenue)} · costs ${fmt(b.lastCosts)} · <span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? 'profit' : 'loss'} ${fmt(Math.abs(p))}</span>` : '') +
     (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
@@ -5458,9 +5487,11 @@ function bizPanelHtml(){
   h += bankRow('Business loan', 'Borrow to fund growth. The debt stays with you even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt ? 'disabled' : ''}>Apply</button>`);
 
   h += '<div class="plabel">Exit</div>';
-  if(b.value >= ipoMin() && b.employees >= 5) h += bankRow('Take it public (IPO)', 'Sell 40% to the public for cash and keep 60% as stock in your portfolio.', `<button onclick="ipoBusiness()">IPO</button>`);
+  if(b.value >= ipoMin() && b.employees >= 5) h += `<div class="invrow"><div class="itop"><span><b>Take it public (IPO)</b></span></div><div class="owned">Sell 40% to the public for cash and keep 60% as stock in your portfolio. ${bizName(b)} will trade under the ticker you choose (2-5 letters).</div>
+      <input id="ipoTicker" class="amt-input" maxlength="5" value="${tickerFor(bizName(b))}" aria-label="Ticker symbol" style="text-transform:uppercase"><div class="assetbuy"><button onclick="ipoBusiness()">Go public</button></div></div>`;
   else h += bankRow('IPO not available yet', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
   h += bankRow('Sell the business', 'Cash out now at a discount to its full value.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value * 0.7))}</button>`);
+  h += `<div class="plabel">Name</div><div class="invrow"><input id="bizRename" class="amt-input" maxlength="32" value="${bizName(b)}" aria-label="Business name"><div class="assetbuy"><button onclick="renameBusiness()">Rename</button></div></div>`;
   return h;
 }
 
@@ -6855,7 +6886,8 @@ function renderPanel(){
     const b = state.business;
     if(a < 21){ h = '<div class="status">Too young to start a business. Come back at 21.</div>'; }
     else if(!b){
-      h += '<div class="status">Pick a business to start. Each requires upfront capital.</div>';
+      h += '<div class="status">Name your company, then pick what kind of business to start. Each needs upfront capital.</div>';
+      h += '<div class="invrow"><input id="bizName" class="amt-input" maxlength="32" placeholder="Business name (optional)" aria-label="Business name"><div class="assetbuy"><button onclick="fillBizName()">Suggest a name</button></div></div>';
       BUSINESS_TYPES.forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
     } else h += bizPanelHtml();
   } else {
