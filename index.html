@@ -5549,6 +5549,7 @@ function ipoBusiness(){
 }
 function businessYear(a){
   const b = bizNormalize(state.business); if(!b) return 0;
+  famStaffSync(b);
   const t = bizType(b.type), U = b.upgrades, cum = state.econ.cumInflation;
   b.marketing = Math.max(0, b.marketing * 0.6);
   b.trend = Math.max(-0.25, Math.min(0.25, b.trend * 0.6 + (Math.random() * 0.2 - 0.1)));     // industry booms and slumps
@@ -5642,9 +5643,17 @@ function sellFranchise(){
   pushEntry(state.age, `${state.name} sells a franchise of the business for ${fmt(franchiseFee())}. Royalties will follow every year.`, {money:franchiseFee(), happy:5});
   render();
 }
+// relatives on the payroll who leave the family (death, divorce, cut ties, a new heir) leave the business too
+function famStaffSync(b){
+  const now = state.relationships.filter(r => r.familyBiz).length;
+  if(b.familyStaff === undefined) b.familyStaff = now;
+  if(now < b.familyStaff) b.employees = Math.max(0, b.employees - (b.familyStaff - now));
+  b.familyStaff = now;
+}
 function hireFamily(id){
   const b = bizNormalize(state.business), r = findRel(id); if(!b || !r || r.familyBiz || r.age < 16) return;
-  r.familyBiz = true; b.employees++; bump(r, 8);
+  famStaffSync(b);
+  r.familyBiz = true; b.employees++; b.familyStaff++; bump(r, 8);
   pushEntry(state.age, `${state.name} brings ${r.name} into the family business.`, {happy:3});
   render();
 }
