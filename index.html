@@ -3304,8 +3304,9 @@ function vehiclesYear(a, canPrompt){
     const repair = Math.round(x.value * (serious ? 0.6 : 0.2) + 1500 * cum);
     if(serious && Math.random() < 0.4){
       state.assets = state.assets.filter(y => y.id !== x.id);
-      const li = state.loans.findIndex(l => l.assetId === x.id); if(li >= 0) state.loans.splice(li, 1);
-      const payout = Math.round(x.value * cover);
+      const li = state.loans.findIndex(l => l.assetId === x.id), owed = li >= 0 ? state.loans[li].balance : 0;
+      let payout = Math.round(x.value * cover);
+      if(li >= 0 && cover){ payout = Math.max(0, payout - Math.round(owed)); state.loans.splice(li, 1); }    // insurance clears the loan first; without it the debt remains
       pushEntry(a, `${n} is in a serious crash and the ${x.name.toLowerCase()} is totaled.${cover ? ' Insurance pays out ' + fmt(payout) + '.' : ' There is no insurance to cover it.'}`, {money:payout, happy:-8, health:-10});
       addCondition('bone', a);
     } else {
@@ -3429,7 +3430,7 @@ function travelHtml(){
 // ---------- Fame: where it comes from, what it pays, what it costs ----------
 const CAREER_FAME = {Acting:[5,15,35,60,85,95], Music:[3,12,25,55,80,95], Sports:[5,15,45,65,85,95], Politics:[3,10,30,45,70,96],
   Culinary:[0,0,2,5,12,70], Business:[0,0,0,3,10,30], Technology:[0,0,0,2,8,20], Military:[0,0,2,5,15,40], 'Law Enforcement':[0,0,3,5,8,25],
-  Law:[0,0,0,2,5,15], Medicine:[0,0,0,0,4,12], Aviation:[0,0,0,0,2,8], Science:[0,0,0,2,6,15], Education:[0,0,0,0,2,8], 'Space Industry':[0,0,2,6,40,25,35]};
+  Law:[0,0,0,2,5,15], Medicine:[0,0,0,0,4,12], Aviation:[0,0,0,0,2,8], Science:[0,0,0,2,6,15], Education:[0,0,0,0,2,8], 'Space Industry':[0,0,2,40,25,35]};
 const FAME_TIERS = [[90,'Icon'],[70,'Superstar'],[50,'Famous'],[30,'Rising star'],[10,'Local celebrity'],[0,'Unknown']];
 const FM = () => state.fame;
 const fameTier = l => FAME_TIERS.find(t => l >= t[0])[1];
@@ -3525,7 +3526,7 @@ function fameActState(x){
   if(x.once && f.memoir) return {ok:false, why:'already written'};
   if(x.every && f.lastReality !== undefined && state.age - f.lastReality < x.every) return {ok:false, why:'once every ' + x.every + ' years'};
   if(x.key === 'product' && f.products.length >= 3) return {ok:false, why:'three lines already'};
-  if(x.cost && !canPay(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) return {ok:false, why:'costs ' + fmt(inflR(x.cost, 100))};
+  if(x.cost && !canPay(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) return {ok:false, why:'costs ' + fmt(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))};
   return {ok:true, why:''};
 }
 function fameAct(key){
@@ -3948,13 +3949,13 @@ function cutTies(id, ok){
   render();
 }
 function moveIn(id){
-  const r = findRel(id); if(!r || r.livingTogether || state.age < 18) return;
+  const r = findRel(id); if(!r || r.livingTogether || state.age < 18 || state.crime.prison) return;
   r.livingTogether = true; bump(r, 10);
   pushEntry(state.age, `${state.name} moves in with ${r.name}.`, {happy:6});
   render();
 }
 function propose(id){
-  const r = findRel(id); if(!r || r.type !== "Partner" || state.age < 18) return;
+  const r = findRel(id); if(!r || r.type !== "Partner" || state.age < 18 || state.crime.prison) return;
   if(Math.random() < 0.4 + r.closeness / 150){
     marry(r, `${state.name} proposes to ${r.name} — and they say yes! A wedding follows.`);
   } else {
@@ -3965,7 +3966,7 @@ function propose(id){
 }
 function haveChild(id){
   const r = findRel(id);
-  if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60) return;
+  if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60 || state.crime.prison) return;
   birthChild(r);
   render();
 }
@@ -4290,8 +4291,8 @@ const TRAIT_START = {Funny:{happy:5}, Wise:{smarts:6}, Loyal:{happy:3}, Ambitiou
 // An adult heir takes the business, property and investments as they are, as far as their share covers them; the rest is cash.
 function heirCash(kid, plan){
   const share = plan.shares[kid.id] || 0, adult = kid.age >= 18;
-  const biz = state.business, takesBiz = adult && !!biz;
-  let left = share - (takesBiz ? biz.value : 0), assetValue = 0;
+  const biz = state.business, bizVal = biz ? Math.round(biz.value * bizShare(biz)) : 0, takesBiz = adult && !!biz && bizVal <= share;
+  let left = share - (takesBiz ? bizVal : 0), assetValue = 0;
   const assets = [];
   state.assets.slice().sort((x, y) => y.value - x.value).forEach(x => {
     if(!adult && x.category !== "Jewelry" && x.category !== "Collectibles") return;
@@ -4300,7 +4301,7 @@ function heirCash(kid, plan){
   });
   const pv = portfolioValue(), takesStocks = adult && pv > 0 && pv <= left;
   if(takesStocks) left -= pv;
-  return {cash: Math.max(0, Math.round(left)), takesBiz, bizValue: takesBiz ? biz.value : 0, assets, assetValue: Math.round(assetValue),
+  return {cash: Math.max(0, Math.round(left)), takesBiz, bizValue: takesBiz ? bizVal : 0, assets, assetValue: Math.round(assetValue),
           takesStocks, stockValue: takesStocks ? Math.round(pv) : 0, trust: !adult,
           assetNames: state.assets.filter(x => assets.includes(x.id)).map(x => x.name)};
 }
@@ -4463,7 +4464,8 @@ function relRow(r){
   const all = INTERACTIONS.map(ix => ({ix, st: ixState(r, ix)})).filter(o => o.st.show);
   let quick = all.filter(o => basics.includes(o.ix.key)).map(o => btn(o.ix)).join("");
   let more = all.filter(o => !basics.includes(o.ix.key)).map(o => btn(o.ix)).join("");
-  if(r.type === "Partner"){
+  if(state.crime.prison){ /* no moving in, proposing or having children from a cell */ }
+  else if(r.type === "Partner"){
     if(!r.livingTogether) more += '<button onclick="moveIn(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Move in</button>';
     else more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) ? "disabled" : "") + '>Have a child</button>';
     more += '<button onclick="propose(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Propose</button><button onclick="breakUp(\'' + r.id + '\')">Break up</button>';
@@ -4866,7 +4868,7 @@ function commitCrime(key){
     k.heat = Math.min(100, k.heat + 25); k.arrests++;
     yearStart = before;
     pushEntry(state.age, `${n} is caught ${c.ing} and arrested.`, {happy:-8});
-    arrest(c, amt);
+    arrest(c, 0);
   } else if(Math.random() < 0.18 - k.skill / 600){
     k.heat = Math.min(100, k.heat + 5); k.skill = Math.min(100, k.skill + 2);
     pushEntry(state.age, `${n} tries to ${c.label.toLowerCase()} but loses their nerve and walks away with nothing.`, {happy:-2});
@@ -5296,7 +5298,7 @@ function applyPersonalLoan(){
   if(state.age < 18 || state.bankrupt || state.done.personalLoan) return;
   state.done.personalLoan = true;
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a personal loan but gets denied.`, {happy:-2}); render(); return; }
-  const amt = Math.max(1000, Math.round((state.creditScore-500)*20/100)*100);
+  const amt = inflR(Math.max(1000, (state.creditScore-500)*20), 100);
   const apr = Math.max(0.06, Math.min(0.22, state.econ.rate + (850-state.creditScore)/4000));
   takeLoan('Personal', amt, 5, apr);
   state.money += amt;
@@ -5315,18 +5317,19 @@ function loansYear(a){
   state.loans.slice().forEach(l => {
     if(l.deferred || (l.startAge && state.age < l.startAge)) return;
     const interest = l.balance * l.apr;
-    const due = Math.min(l.yearlyPayment, l.balance + interest);
+    const due = Math.min(l.yearsLeft <= 1 ? Infinity : l.yearlyPayment, l.balance + interest);
     if(ensureCash(due)){
       state.money -= due;
       l.balance = Math.max(0, l.balance + interest - due);
       l.yearsLeft--;
       adjustCredit(l.type === 'Builder' ? 8 : 2);
-      if(l.balance <= 1 || l.yearsLeft <= 0){
+      if(l.balance <= 1){
         state.loans = state.loans.filter(x => x.id !== l.id);
         if(l.type === 'Builder') adjustCredit(25);
       }
     } else {
       l.balance += interest;
+      if(l.yearsLeft <= 1) l.yearlyPayment = Math.round(l.balance * (1 + l.apr));   // past due: the whole balance is owed
       missed = true;
     }
   });
@@ -5498,9 +5501,10 @@ function expandLocation(){
   render();
 }
 function applyBusinessLoan(){
-  const b = state.business; if(!b || state.age < 21 || state.bankrupt) return;
+  const b = state.business; if(!b || state.age < 21 || state.bankrupt || state.done.bizLoan) return;
+  state.done.bizLoan = true;
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a business loan but gets denied.`, {happy:-2}); render(); return; }
-  const amt = Math.max(2000, Math.round((state.creditScore-400)*60/100)*100);
+  const amt = inflR(Math.max(2000, (state.creditScore-400)*60), 100);
   const apr = Math.max(0.07, Math.min(0.20, state.econ.rate + (850-state.creditScore)/3500));
   takeLoan('Business', amt, 7, apr);
   state.money += amt;
@@ -5654,13 +5658,16 @@ function bizEventYear(a){
   if(kind === 'contract'){
     const pay = Math.round(b.lastRevenue * (0.15 + Math.random() * 0.2) / 100) * 100 || inflR(20000, 100), staff = rint(2, 5);
     presentCustom(`A large client offers the business a contract worth ${fmt(pay)}, but it needs ${staff} more staff.`, [
-      {label:`Take it and hire ${staff} people`, run:() => { b.employees += staff; b.reputation = clampRep(b.reputation + 4); pushEntry(state.age, `${n}'s business lands a big contract and grows its team.`, {money:pay, happy:5}); }},
+      {label:`Take it and hire ${staff} people`, run:() => { b.employees += staff; b.reputation = clampRep(b.reputation + 4); pushEntry(state.age, `${n}'s business lands a big contract and grows its team.`, {money:Math.round(pay * bizShare(b)), happy:5}); }},
       {label:"Turn it down", run:() => pushEntry(state.age, `${n} passes on the big contract.`, {})},
     ]);
   } else if(kind === 'buyout'){
     const offer = Math.round(b.value * (1.1 + Math.random() * 0.5) / 100) * 100;
     presentCustom(`A rival company offers to buy ${n}'s business outright for ${fmt(offer)}.`, [
-      {label:`Sell for ${fmt(offer)}`, run:() => { const nm = bizName(b); state.business = null; pushEntry(state.age, `${n} sells ${nm} to a rival for ${fmt(offer)}.`, {money:offer, happy:8}); }},
+      {label:`Sell for ${fmt(Math.round(offer * bizShare(b)))}${bizShare(b) < 1 ? ' (your share)' : ''}`, run:() => { const nm = bizName(b), mine = Math.round(offer * bizShare(b));
+        threads().forEach(t => { if(t.key === 'dropout' && b.cofounder && t.data.rel === b.cofounder) t.data.sold = true; });
+        state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
+        state.business = null; pushEntry(state.age, `${n} sells ${nm} to a rival for ${fmt(offer)}${mine < offer ? ', taking home ' + fmt(mine) + ' for their share' : ''}.`, {money:mine, happy:8}); }},
       {label:"Keep building it", run:() => pushEntry(state.age, `${n} turns down the buyout offer.`, {happy:1})},
     ]);
   } else if(kind === 'inspection'){
@@ -5706,7 +5713,7 @@ function bizPanelHtml(){
   const pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
   const meter = (v, col) => `<div class="stat-track" style="margin:4px 0 2px;"><div class="stat-fill" style="width:${v}%;background:var(--${col})"></div></div>`;
   const p = b.lastProfit, hasYear = b.history.length > 0;
-  let h = `<div class="status"><b>${bizName(b)}</b>${b.name ? ' · ' + t.name.toLowerCase() : ''}${b.cofounder ? ' · co-owned with ' + b.cofounderName + ' (you keep half the profits)' : ''}${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
+  let h = `<div class="status"><b>${bizName(b)}</b>${b.name ? ' · ' + t.name.toLowerCase() : ''}${bizShare(b) < 1 ? ' · you own ' + Math.round(bizShare(b) * 100) + '%' + (b.cofounder ? ', co-owned with ' + b.cofounderName : '') + ', so you keep that share of profits and sale value' : ''}${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
     ${b.employees} employee${b.employees === 1 ? '' : 's'} · ${b.locations} location${b.locations === 1 ? '' : 's'} · valued at <b>${fmt(Math.round(b.value))}</b>` +
     (hasYear ? `<br>Last year: revenue ${fmt(b.lastRevenue)} · costs ${fmt(b.lastCosts)} · <span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? 'profit' : 'loss'} ${fmt(Math.abs(p))}</span>` : '') +
     (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
@@ -5741,13 +5748,13 @@ function bizPanelHtml(){
   h += bankRow('Buy a competitor', 'Absorb a rival: a new location, their staff and their customers.', `<button onclick="acquireCompetitor()" ${state.done.acquire || !canPay(acquireCost(b)) ? 'disabled' : ''}>${state.done.acquire ? 'Done this year' : 'Acquire (' + fmt(acquireCost(b)) + ')'}</button>`);
   const canFr = b.locations >= 3 && b.reputation >= 65;
   h += bankRow('Franchise', canFr ? `Sell the right to open under your name: ${fmt(franchiseFee())} now, plus yearly royalties.` : 'Needs at least 3 locations and a reputation of 65.', `<button onclick="sellFranchise()" ${!canFr || state.done.franchise ? 'disabled' : ''}>${state.done.franchise ? 'Sold one this year' : 'Sell a franchise'}</button>`);
-  h += bankRow('Business loan', 'Borrow to fund growth. The debt stays with you even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt ? 'disabled' : ''}>Apply</button>`);
+  h += bankRow('Business loan', 'Borrow to fund growth. The debt stays with you even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt || state.done.bizLoan ? 'disabled' : ''}>Apply</button>`);
 
   h += '<div class="plabel">Exit</div>';
   if(b.value >= ipoMin() && b.employees >= 5) h += `<div class="invrow"><div class="itop"><span><b>Take it public (IPO)</b></span></div><div class="owned">Sell 40% to the public for cash and keep 60% as stock in your portfolio. ${bizName(b)} will trade under the ticker you choose (2-5 letters).</div>
       <input id="ipoTicker" class="amt-input" maxlength="5" value="${tickerFor(bizName(b))}" aria-label="Ticker symbol" style="text-transform:uppercase"><div class="assetbuy"><button onclick="ipoBusiness()">Go public</button></div></div>`;
   else h += bankRow('IPO not available yet', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
-  h += bankRow('Sell the business', 'Cash out now at a discount to its full value.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value * 0.7))}</button>`);
+  h += bankRow('Sell the business', 'Cash out now at a discount to its full value.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value * 0.7 * bizShare(b)))}</button>`);
   h += `<div class="plabel">Name</div><div class="invrow"><input id="bizRename" class="amt-input" maxlength="32" value="${bizName(b)}" aria-label="Business name"><div class="assetbuy"><button onclick="renameBusiness()">Rename</button></div></div>`;
   return h;
 }
