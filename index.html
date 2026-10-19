@@ -1429,7 +1429,8 @@ function ageUpYear(){
   assetsYear(a);
   const relPrompted = relationshipsYear(a, prompted);
   const legalPrompted = !prompted && !relPrompted && legalYear(a);
-  if(prompted || relPrompted || legalPrompted){ render(); return; }
+  const bizPrompted = !prompted && !relPrompted && !legalPrompted && bizEventYear(a);
+  if(prompted || relPrompted || legalPrompted || bizPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -1691,7 +1692,31 @@ const STOCKS = [
   {key:'SOLR', name:'Solaris Power', sector:'Energy', base:50, drift:0.09, vol:0.32, div:0.01},
   {key:'TELX', name:'Telex Communications', sector:'Telecom', base:40, drift:0.03, vol:0.10, div:0.04},
   {key:'IDXF', name:'Total Market Index Fund', sector:'Index', base:100, drift:0.065, vol:0.13, div:0.015},
+  {key:'PIXL', name:'Pixelforge Games', sector:'Gaming', base:55, drift:0.09, vol:0.30, div:0},
+  {key:'STRM', name:'Streamline Media', sector:'Entertainment', base:140, drift:0.07, vol:0.25, div:0},
+  {key:'VOLT', name:'Voltaic Motors', sector:'Automotive', base:210, drift:0.10, vol:0.45, div:0},
+  {key:'RDST', name:'Roadstar Autos', sector:'Automotive', base:48, drift:0.04, vol:0.15, div:0.025},
+  {key:'HAVN', name:'Haven Property Trust', sector:'Real Estate', base:32, drift:0.035, vol:0.10, div:0.055},
+  {key:'GENX', name:'Genexa Bio', sector:'Biotech', base:18, drift:0.10, vol:0.60, div:0},
+  {key:'PHRM', name:'Pharmora', sector:'Healthcare', base:88, drift:0.05, vol:0.14, div:0.025},
+  {key:'GRID', name:'Gridline Utilities', sector:'Utilities', base:62, drift:0.03, vol:0.07, div:0.04},
+  {key:'SKYL', name:'Skyline Airways', sector:'Transport', base:26, drift:0.04, vol:0.30, div:0.01},
+  {key:'SHIP', name:'Bluehaul Shipping', sector:'Transport', base:38, drift:0.045, vol:0.22, div:0.03},
+  {key:'NRAL', name:'NeuralArc AI', sector:'AI', base:150, drift:0.13, vol:0.50, div:0},
+  {key:'CLDX', name:'Cloudex Systems', sector:'Tech', base:95, drift:0.09, vol:0.26, div:0},
+  {key:'CHIP', name:'Siliconridge Semiconductors', sector:'Tech', base:120, drift:0.10, vol:0.34, div:0.005},
+  {key:'FIZZ', name:'Fizzwell Beverages', sector:'Consumer', base:58, drift:0.04, vol:0.09, div:0.03},
+  {key:'LUXE', name:'Maison Lux', sector:'Consumer', base:300, drift:0.06, vol:0.18, div:0.012},
+  {key:'MINE', name:'Ironpeak Mining', sector:'Materials', base:30, drift:0.04, vol:0.33, div:0.02},
+  {key:'OILX', name:'Petrocrest Oil', sector:'Energy', base:75, drift:0.03, vol:0.25, div:0.045},
+  {key:'INSR', name:'Shieldwell Insurance', sector:'Financial', base:70, drift:0.05, vol:0.11, div:0.03},
+  {key:'PAYX', name:'Paystream', sector:'Financial', base:110, drift:0.08, vol:0.24, div:0},
+  {key:'BNDF', name:'Steady Bond Fund', sector:'Bonds', base:50, drift:0.03, vol:0.04, div:0.035, hedge:true},
+  {key:'TECF', name:'Tech Sector Fund', sector:'Index', base:100, drift:0.085, vol:0.20, div:0.005},
+  {key:'DIVF', name:'High Dividend Fund', sector:'Index', base:100, drift:0.045, vol:0.10, div:0.04},
+  {key:'GLDF', name:'Gold Trust', sector:'Commodities', base:180, drift:0.03, vol:0.15, div:0, hedge:true},
 ];
+const FUND_SECTORS = ['Index', 'Bonds', 'Commodities'];
 const CRYPTO = [
   {key:'BYTE', name:'ByteCoin', base:4200, drift:0.15, vol:0.55},
   {key:'LUMN', name:'Lumen Chain', base:180, drift:0.12, vol:0.70},
@@ -1700,6 +1725,9 @@ const CRYPTO = [
   {key:'NEBX', name:'NebulaX', base:25, drift:0.10, vol:0.60},
   {key:'QNTM', name:'QuantumLedger', base:3.5, drift:0.20, vol:1.10},
   {key:'ASHC', name:'AshCoin', base:0.002, drift:-0.02, vol:1.30},
+  {key:'ORBT', name:'Orbit Token', base:12, drift:0.12, vol:0.80},
+  {key:'FLUX', name:'FluxPay', base:0.9, drift:0.08, vol:0.70},
+  {key:'MEMX', name:'MemeX', base:0.0005, drift:0.0, vol:1.50},
 ];
 const ALL_INSTR = STOCKS.map(x=>Object.assign({type:'stock'},x)).concat(CRYPTO.map(x=>Object.assign({type:'crypto'},x)));
 // companies taken public live in the save; this keeps the instrument lists in step with the current life
@@ -1725,16 +1753,43 @@ function portfolioValue(){
   return v;
 }
 
+const SECTOR_NEWS = {up:["{s} stocks surge on strong demand", "Investors pile into {s}", "A breakthrough lifts the whole {s} sector"], down:["{s} stocks slump as demand dries up", "New regulations hit the {s} sector", "Investors flee {s}"]};
+const COMPANY_NEWS = [
+  {t:"{c} smashes its earnings forecast", d:[0.15, 0.35]}, {t:"{c} misses earnings badly", d:[-0.35, -0.15]},
+  {t:"{c} is hit by an accounting scandal", d:[-0.55, -0.3]}, {t:"{c} announces a blockbuster new product", d:[0.2, 0.5]},
+  {t:"{c}'s CEO resigns unexpectedly", d:[-0.25, -0.1]}, {t:"{c} wins a huge government contract", d:[0.15, 0.3]},
+  {t:"{c} gets a takeover offer", d:[0.25, 0.45]}, {t:"{c} faces a major lawsuit", d:[-0.3, -0.1]},
+];
 function updateMarket(a){
   const roll = Math.random();
   const bias = roll < 0.07 ? -0.32 : roll > 0.93 ? 0.28 : 0;
+  // a sector or two has a big year, good or bad
+  const sectors = Array.from(new Set(STOCKS.map(x => x.sector).filter(x => !FUND_SECTORS.includes(x) && x !== 'IPO')));
+  const swings = {};
+  for(let i = 0, n = rint(0, 2); i < n; i++){ const sec = pick(sectors); swings[sec] = (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.2); }
+  const news = [];
+  for(const sec in swings) news.push({text: pick(SECTOR_NEWS[swings[sec] > 0 ? 'up' : 'down']).replace('{s}', sec.toLowerCase()), up: swings[sec] > 0});
+  // one company makes headlines most years
+  let hit = null;
+  if(Math.random() < 0.7){
+    const c = pick(STOCKS.filter(x => !FUND_SECTORS.includes(x.sector) && x.sector !== 'IPO')), e = pick(COMPANY_NEWS);
+    hit = {key:c.key, move: e.d[0] + Math.random() * (e.d[1] - e.d[0])};
+    if(c.sector === 'Biotech' && Math.random() < 0.5){ const pass = Math.random() < 0.5; hit.move = pass ? 0.5 + Math.random() * 0.6 : -0.4 - Math.random() * 0.25; news.push({text: c.name + (pass ? " wins approval for a new drug" : "'s drug fails its final trial"), up: pass, key:c.key}); }
+    else news.push({text: e.t.replace('{c}', c.name), up: hit.move > 0, key:c.key});
+  }
+  if(bias < 0) news.unshift({text:"A market crash wipes out years of gains", up:false});
+  else if(bias > 0) news.unshift({text:"A roaring bull market lifts nearly everything", up:true});
   ALL_INSTR.forEach(x => {
     const m = state.market[x.key];
     m.prev = m.price;
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5; // roughly -1..1, centered
-    const change = x.drift + bias + noise * x.vol;
+    const marketMove = x.hedge ? -bias * 0.35 : bias;                    // gold and bonds hold up when stocks crash
+    const change = x.drift + marketMove + (swings[x.sector] || 0) + (hit && hit.key === x.key ? hit.move : 0) + noise * x.vol;
     m.price = Math.max(0.0001, m.price * (1 + change));
   });
+  state.marketNews = news.map(n => ({text:n.text, up:n.up, key:n.key || null, age:a}));
+  const mine = news.find(n => n.key && (state.portfolio[n.key] || 0) * state.market[n.key].price > 200);
+  if(mine) pushEntry(a, mine.text + (mine.up ? `, and ${state.name}'s shares jump.` : `, and ${state.name}'s shares fall.`), {happy: mine.up ? 3 : -3});
   if(bias !== 0 && portfolioValue() > 300){
     pushEntry(a, bias < 0
       ? `Markets tumble hard this year — ${state.name}'s portfolio takes a real hit.`
@@ -2456,6 +2511,7 @@ function lifeBits(r){
   if(r.care === "home") b.push("in a care home (" + fmt(careCost()) + "/yr)");
   if(r.care === "you") b.push("lives with you");
   if(r.owes) b.push("owes you " + fmt(r.owes));
+  if(r.familyBiz && state.business) b.push("works in the family business");
   return b;
 }
 function relJobFor(r){
@@ -3837,8 +3893,8 @@ const BUSINESS_TYPES = [
   {key:'clothing', name:'Clothing Brand', cost:25000, revPerEmp:30000, risk:0.055},
   {key:'construction', name:'Construction Company', cost:60000, revPerEmp:36000, risk:0.035},
   {key:'tech', name:'Tech Company', cost:50000, revPerEmp:40000, risk:0.065},
-  {key:'dealership', name:'Car Dealership', cost:150000, revPerEmp:42000, risk:0.04},
-  {key:'realestate', name:'Real Estate Company', cost:80000, revPerEmp:44000, risk:0.045},
+  {key:'dealership', name:'Car Dealership', cost:150000, revPerEmp:58000, risk:0.04},
+  {key:'realestate', name:'Real Estate Company', cost:80000, revPerEmp:50000, risk:0.045},
   {key:'onlinestore', name:'Online Store', cost:15000, revPerEmp:26000, risk:0.06},
   {key:'gym', name:'Gym', cost:45000, revPerEmp:28000, risk:0.035},
   {key:'bar', name:'Bar', cost:35000, revPerEmp:27000, risk:0.055},
@@ -3846,6 +3902,12 @@ const BUSINESS_TYPES = [
   {key:'photography', name:'Photography Studio', cost:15000, revPerEmp:28000, risk:0.04},
   {key:'music', name:'Record Label', cost:25000, revPerEmp:32000, risk:0.05},
   {key:'art', name:'Art Studio & Gallery', cost:18000, revPerEmp:26000, risk:0.045},
+  {key:'coffee', name:'Coffee Shop', cost:12000, revPerEmp:24000, risk:0.05},
+  {key:'salon', name:'Hair Salon', cost:10000, revPerEmp:25000, risk:0.04},
+  {key:'brewery', name:'Craft Brewery', cost:60000, revPerEmp:33000, risk:0.05},
+  {key:'appstudio', name:'App Studio', cost:30000, revPerEmp:45000, risk:0.07},
+  {key:'logistics', name:'Logistics Company', cost:120000, revPerEmp:54000, risk:0.035},
+  {key:'hotel', name:'Boutique Hotel', cost:300000, revPerEmp:75000, risk:0.04},
 ];
 // hobby mastery (level 70+) gives a founding bonus when starting the matching business
 const HOBBY_BUSINESS = {photography:'photography', music:'music', art:'art', cooking:'restaurant', cars:'dealership'};
@@ -3861,7 +3923,7 @@ function startBusiness(typeKey){
   state.money -= bizCost(t);
   const hobbyKey = Object.keys(HOBBY_BUSINESS).find(k => HOBBY_BUSINESS[k] === typeKey);
   const mastered = hobbyKey && state.hobbies[hobbyKey] && state.hobbies[hobbyKey].level >= 70;
-  state.business = {type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: Math.round(bizCost(t) * (mastered ? 1.3 : 1)), startAge:state.age, lastProfit:null};
+  state.business = bizNormalize({type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: Math.round(bizCost(t) * (mastered ? 1.3 : 1)), startAge:state.age, lastProfit:null});
   pushEntry(state.age, `${state.name} opens a ${t.name.toLowerCase()}${mastered ? ', putting years of hard-won expertise to work' : ''}.`, {happy:6});
   render();
 }
@@ -3915,6 +3977,7 @@ function closeBusiness(ok){
   if(ok !== true) return askConfirm(`Sell the business for ${fmt(Math.round(b.value * 0.7))}?`, "Sell", () => closeBusiness(true));
   state.money += Math.round(b.value * 0.7);
   pushEntry(state.age, `${state.name} sells the business for ${fmt(Math.round(b.value*0.7))}.`, {happy:-2});
+  state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
   state.business = null;
   render();
 }
@@ -3936,32 +3999,220 @@ function ipoBusiness(){
   render();
 }
 function businessYear(a){
-  const b = state.business; if(!b) return 0;
-  const t = bizType(b.type);
+  const b = bizNormalize(state.business); if(!b) return 0;
+  const t = bizType(b.type), U = b.upgrades, cum = state.econ.cumInflation;
   b.marketing = Math.max(0, b.marketing * 0.6);
-  const priceMult = b.price === 'low' ? 0.85 : b.price === 'high' ? 1.25 : 1;
-  const repDrift = b.price === 'low' ? 1 : b.price === 'high' ? -1 : 0;
-  b.reputation = clampRep(b.reputation + repDrift + (Math.random()*4 - 2));
-  const cum = state.econ.cumInflation;
-  const revenue = b.employees * t.revPerEmp * cum * (1 + 0.15*(b.locations-1)) * priceMult * (1 + b.marketing) * (0.5 + b.reputation/100) * (state.econ.recession ? 0.85 : 1);
-  const overhead = (b.employees * BIZ_OVERHEAD_PER_EMP + b.locations * BIZ_OVERHEAD_PER_LOC) * cum;
-  const profit = Math.round(revenue - overhead);
-  b.lastProfit = profit;
-  b.value = Math.max(1000, b.value + profit * 0.6 + (Math.random()*0.1 - 0.05) * b.value);
+  b.trend = Math.max(-0.25, Math.min(0.25, b.trend * 0.6 + (Math.random() * 0.2 - 0.1)));     // industry booms and slumps
+  b.growth *= 0.97;
+  b.morale = clampRep(b.morale + WAGE_MORALE[b.wages] + (U.manager ? 1 : 0) + (b.morale < 50 ? 1 : -1) + rint(-3, 3));
+  b.reputation = clampRep(b.reputation + (b.price === 'low' ? 1 : b.price === 'high' ? -1 : 0) + (U.loyalty ? 1 : 0) + (Math.random()*4 - 2));
+  const revenue = Math.round(b.employees * t.revPerEmp * cum * bizRevenueMult(b));
+  const royalties = Math.round(b.franchises * inflR(12000, 100) * (b.reputation / 70));
+  const costs = Math.round(b.employees * empCost(b) + b.locations * BIZ_OVERHEAD_PER_LOC * cum + (U.manager ? managerCost() : 0));
+  const profit = revenue + royalties - costs;
+  b.lastRevenue = revenue + royalties; b.lastCosts = costs; b.lastProfit = profit;
+  b.history.push(profit); if(b.history.length > 12) b.history.shift();
+  // profits kept in the business grow it; the rest is paid out to the owner
+  const kept = profit > 0 ? Math.round(profit * b.reinvest) : 0;
+  b.growth = Math.min(0.6, b.growth + kept / Math.max(1, revenue) * 0.6);
+  // valued on recent earnings, never below what its locations are worth
+  const recent = b.history.slice(-5), avg = recent.reduce((x, y) => x + y, 0) / recent.length;
+  const target = Math.max(bizCost(t) * 0.5 * b.locations, Math.max(0, avg) * (3 + b.reputation / 25)) + b.franchises * inflR(60000, 1000) + kept;
+  b.value = Math.max(1000, Math.round(b.value + (target - b.value) * 0.35 + (Math.random() * 0.1 - 0.05) * b.value));
+  if(!U.manager && state.job) applyDelta({happy:-2});
 
   const leverage = totalDebt() > 0 ? Math.min(0.08, totalDebt() / Math.max(1,b.value) * 0.05) : 0;
-  const failChance = t.risk * (state.econ.recession ? 1.8 : 1) * (b.reputation < 30 ? 1.6 : 1) + leverage;
+  const failChance = t.risk * (state.econ.recession ? 1.8 : 1) * (b.reputation < 30 ? 1.6 : 1) * (b.morale < 25 ? 1.3 : 1) * (U.loyalty ? 0.8 : 1) * (U.manager ? 0.85 : 1) * (b.employees === 0 ? 0.5 : 1) * (profit > 0 ? 0.7 : 1.2) + leverage;
   if(Math.random() < failChance){
     if(profit > 0 && b.reputation >= 60 && Math.random() < 0.6){
       pushEntry(a, `${state.name}'s business hits a rough patch but its loyal customers carry it through.`, {happy:-3, biz:-15});
-      return profit;
+      return profit - kept;
     }
     pushEntry(a, `${state.name}'s business fails and shuts its doors.${totalDebt()>0 ? ' Any business loans remain due.' : ''}`, {happy:-12});
+    state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
     state.business = null;
     return 0;
   }
-  return profit;
+  return profit - kept;
 }
+// ---- running the business: staff, upgrades, growth and yearly decisions ----
+const WAGE_MULT = {low:0.85, market:1, high:1.2}, WAGE_MORALE = {low:-4, market:0, high:3};
+const BIZ_UPGRADES = [
+  {key:'website', label:'Website & online sales', share:0.3, blurb:'+10% revenue (+20% for online-first businesses)'},
+  {key:'equipment', label:'Better equipment', share:0.5, blurb:'+12% revenue'},
+  {key:'loyalty', label:'Loyalty program', share:0.25, blurb:'reputation grows and the business is harder to sink'},
+];
+const ONLINE_FIRST = ['onlinestore', 'tech', 'agency', 'appstudio', 'music'];
+const managerCost = () => inflR(70000, 1000);
+// a worker costs a fixed share of what they bring in, so every kind of business can turn a profit when run well
+const empCost = b => bizType(b.type).revPerEmp * 0.8 * WAGE_MULT[b.wages] * state.econ.cumInflation;
+const upgradeCost = (u, b) => Math.round(bizCost(bizType(b.type)) * u.share / 100) * 100;
+const acquireCost = b => Math.round((bizCost(bizType(b.type)) * 1.8 + b.value * 0.15) / 100) * 100;
+const franchiseFee = () => inflR(40000, 1000);
+function bizNormalize(b){
+  if(!b) return b;
+  const d = {wages:'market', morale:60, upgrades:{}, reinvest:0, growth:0, history:[], franchises:0, trend:0, lastRevenue:0, lastCosts:0};
+  for(const k in d) if(b[k] === undefined) b[k] = d[k];
+  return b;
+}
+function bizRevenueMult(b){
+  const t = bizType(b.type), U = b.upgrades;
+  return (1 + 0.15 * (b.locations - 1)) * (b.price === 'low' ? 0.85 : b.price === 'high' ? 1.25 : 1) * (1 + b.marketing) * (0.5 + b.reputation / 100) *
+    (0.8 + b.morale / 250) * (1 + b.growth) * (1 + b.trend) * (U.website ? (ONLINE_FIRST.includes(t.key) ? 1.2 : 1.1) : 1) * (U.equipment ? 1.12 : 1) *
+    (state.econ.recession ? 0.85 : 1) * (!U.manager && state.job ? 0.85 : 1);
+}
+function setWages(w){ const b = state.business; if(!b) return; b.wages = w; renderPanel(); }
+function setReinvest(p){ const b = state.business; if(!b) return; b.reinvest = p; renderPanel(); }
+function buyBizUpgrade(key){
+  const b = bizNormalize(state.business), u = BIZ_UPGRADES.find(x => x.key === key); if(!b || !u || b.upgrades[key]) return;
+  const cost = upgradeCost(u, b); if(!ensureCash(cost)) return;
+  state.money -= cost; b.upgrades[key] = true; b.value += Math.round(cost * 0.6);
+  pushEntry(state.age, `${state.name} invests ${fmt(cost)} in ${u.label.toLowerCase()} for the business.`, {happy:2});
+  render();
+}
+function toggleManager(){
+  const b = bizNormalize(state.business); if(!b) return;
+  b.upgrades.manager = !b.upgrades.manager;
+  pushEntry(state.age, b.upgrades.manager ? `${state.name} hires a general manager to run the business day to day.` : `${state.name} lets the general manager go and takes the reins again.`, {});
+  render();
+}
+function acquireCompetitor(){
+  const b = bizNormalize(state.business); if(!b || state.done.acquire) return;
+  const cost = acquireCost(b); if(!ensureCash(cost)) return;
+  state.money -= cost; state.done.acquire = true;
+  const staff = rint(2, 6);
+  b.locations++; b.employees += staff; b.morale = clampRep(b.morale - 6);
+  b.reputation = clampRep(Math.round((b.reputation * 2 + rint(35, 70)) / 3));
+  b.value += Math.round(cost * 0.8);
+  pushEntry(state.age, `${state.name} buys out a competitor for ${fmt(cost)}, gaining a location and ${staff} staff.`, {happy:4});
+  render();
+}
+function sellFranchise(){
+  const b = bizNormalize(state.business); if(!b || state.done.franchise || b.locations < 3 || b.reputation < 65) return;
+  state.done.franchise = true; b.franchises++;
+  pushEntry(state.age, `${state.name} sells a franchise of the business for ${fmt(franchiseFee())}. Royalties will follow every year.`, {money:franchiseFee(), happy:5});
+  render();
+}
+function hireFamily(id){
+  const b = bizNormalize(state.business), r = findRel(id); if(!b || !r || r.familyBiz || r.age < 16) return;
+  r.familyBiz = true; b.employees++; bump(r, 8);
+  pushEntry(state.age, `${state.name} brings ${r.name} into the family business.`, {happy:3});
+  render();
+}
+function familyHires(){
+  return state.relationships.filter(r => ["Child","Spouse","Partner","Sibling"].includes(r.type) && r.age >= 16 && !r.familyBiz && !r.job && !r.inCollege);
+}
+function profitChart(hist){
+  if(hist.length < 2) return "";
+  const max = Math.max(1, ...hist.map(Math.abs)), w = 100 / hist.length;
+  const bars = hist.map((v, i) => { const h = Math.abs(v) / max * 20; return `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${v >= 0 ? 22 - h : 22}" width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.6, h).toFixed(2)}" rx="0.6" fill="var(--${v >= 0 ? 'green' : 'red'})"/>`; }).join("");
+  return `<svg viewBox="0 0 100 44" preserveAspectRatio="none" style="width:100%;height:52px;display:block" role="img" aria-label="Profit over the last ${hist.length} years"><line x1="0" x2="100" y1="22" y2="22" stroke="var(--line)" stroke-width="0.4"/>${bars}</svg>`;
+}
+// yearly business decisions; returns true if one was asked
+function bizEventYear(a){
+  const b = bizNormalize(state.business), n = state.name;
+  if(!b || b.employees < 1 || state.crime.prison || Math.random() > 0.3) return false;
+  const pool = ['contract', 'buyout', 'inspection', 'supply', 'review', 'poach'];
+  if(b.morale < 35) pool.push('strike', 'strike', 'strike');
+  const kind = pick(pool), cum = state.econ.cumInflation;
+  if(kind === 'contract'){
+    const pay = Math.round(b.lastRevenue * (0.15 + Math.random() * 0.2) / 100) * 100 || inflR(20000, 100), staff = rint(2, 5);
+    presentCustom(`A large client offers the business a contract worth ${fmt(pay)}, but it needs ${staff} more staff.`, [
+      {label:`Take it and hire ${staff} people`, run:() => { b.employees += staff; b.reputation = clampRep(b.reputation + 4); pushEntry(state.age, `${n}'s business lands a big contract and grows its team.`, {money:pay, happy:5}); }},
+      {label:"Turn it down", run:() => pushEntry(state.age, `${n} passes on the big contract.`, {})},
+    ]);
+  } else if(kind === 'buyout'){
+    const offer = Math.round(b.value * (1.1 + Math.random() * 0.5) / 100) * 100;
+    presentCustom(`A rival company offers to buy ${n}'s business outright for ${fmt(offer)}.`, [
+      {label:`Sell for ${fmt(offer)}`, run:() => { state.business = null; pushEntry(state.age, `${n} sells the business to a rival for ${fmt(offer)}.`, {money:offer, happy:8}); }},
+      {label:"Keep building it", run:() => pushEntry(state.age, `${n} turns down the buyout offer.`, {happy:1})},
+    ]);
+  } else if(kind === 'inspection'){
+    const fine = inflR(rint(2, 12) * 1000, 100), fix = Math.round(fine * 1.5 / 100) * 100;
+    presentCustom(`An inspector finds problems at ${n}'s business and issues a ${fmt(fine)} fine.`, [
+      {label:`Pay the fine (${fmt(fine)})`, run:() => pushEntry(state.age, `${n} pays the inspection fine.`, {money:-fine, happy:-1})},
+      {label:`Pay it and fix everything properly (${fmt(fine + fix)})`, run:() => { b.reputation = clampRep(b.reputation + 6); pushEntry(state.age, `${n} pays the fine and overhauls the business.`, {money:-(fine + fix)}); }},
+      {label:`Slip the inspector ${fmt(Math.round(fine / 2))} to look away`, run:() => {
+        if(Math.random() < 0.7) pushEntry(state.age, `${n} quietly pays off the inspector.`, {money:-Math.round(fine / 2)});
+        else { addRecord({charge:'bribery', felony:false}, false, "fined " + fmt(fine * 3)); b.reputation = clampRep(b.reputation - 15); pushEntry(state.age, `${n} is caught bribing an inspector and fined ${fmt(fine * 3)}.`, {money:-fine * 3, happy:-6}); }
+      }},
+    ]);
+  } else if(kind === 'supply'){
+    const premium = Math.round(b.lastCosts * 0.06 / 100) * 100 || inflR(5000, 100);
+    presentCustom(`A supply shortage hits ${n}'s business.`, [
+      {label:`Pay a premium to keep quality (${fmt(premium)})`, run:() => pushEntry(state.age, `${n} pays extra to keep the shelves stocked.`, {money:-premium})},
+      {label:"Use cheaper substitutes", run:() => { b.reputation = clampRep(b.reputation - 8); pushEntry(state.age, `${n} cuts corners on supplies, and customers notice.`, {}); }},
+    ]);
+  } else if(kind === 'review'){
+    if(Math.random() < 0.5){ b.reputation = clampRep(b.reputation + 10); pushEntry(a, `A glowing review of ${n}'s business goes viral.`, {happy:5}); return false; }
+    presentCustom(`A scathing review of ${n}'s business is going viral.`, [
+      {label:"Respond graciously and make it right", run:() => { const ok = Math.random() < 0.65; b.reputation = clampRep(b.reputation + (ok ? 3 : -6)); pushEntry(state.age, ok ? `${n}'s gracious reply wins people over.` : `${n}'s reply doesn't land, and the pile-on continues.`, {}); }},
+      {label:"Fire back at the reviewer", run:() => { b.reputation = clampRep(b.reputation - 12); pushEntry(state.age, `${n} argues with the reviewer online. It goes badly.`, {happy:-3}); }},
+      {label:"Ignore it", run:() => { b.reputation = clampRep(b.reputation - 5); pushEntry(state.age, `${n} lets the bad review blow over.`, {}); }},
+    ]);
+  } else if(kind === 'poach'){
+    const counter = inflR(15000, 500);
+    presentCustom(`A competitor is trying to poach ${n}'s best employee.`, [
+      {label:`Make a counteroffer (${fmt(counter)})`, run:() => { b.morale = clampRep(b.morale + 4); pushEntry(state.age, `${n} keeps their star employee with a raise.`, {money:-counter}); }},
+      {label:"Let them go", run:() => { b.employees = Math.max(0, b.employees - 1); b.morale = clampRep(b.morale - 5); pushEntry(state.age, `${n}'s best employee leaves for a competitor.`, {happy:-2}); }},
+    ]);
+  } else if(kind === 'strike'){
+    presentCustom(`Fed up with conditions, ${n}'s staff threaten to strike.`, [
+      {label:"Raise wages", run:() => { b.wages = 'high'; b.morale = clampRep(b.morale + 25); pushEntry(state.age, `${n} gives the staff a raise and the strike is called off.`, {}); }},
+      {label:"Refuse and ride it out", run:() => { const loss = Math.round(b.lastRevenue * 0.25 / 100) * 100; b.morale = clampRep(b.morale - 10); pushEntry(state.age, `The staff walk out, costing the business ${fmt(loss)}.`, {money:-loss, happy:-4}); }},
+      {label:"Fire the organizers", run:() => { b.employees = Math.max(0, b.employees - 2); b.morale = clampRep(b.morale - 15); b.reputation = clampRep(b.reputation - 6); pushEntry(state.age, `${n} fires the strike organizers. The rest go back to work, resentful.`, {happy:-2}); }},
+    ]);
+  }
+  return true;
+}
+function bizPanelHtml(){
+  const b = bizNormalize(state.business), t = bizType(b.type), cum = state.econ.cumInflation, U = b.upgrades;
+  const pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  const meter = (v, col) => `<div class="stat-track" style="margin:4px 0 2px;"><div class="stat-fill" style="width:${v}%;background:var(--${col})"></div></div>`;
+  const p = b.lastProfit, hasYear = b.history.length > 0;
+  let h = `<div class="status"><b>${t.name}</b>${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
+    ${b.employees} employee${b.employees === 1 ? '' : 's'} · ${b.locations} location${b.locations === 1 ? '' : 's'} · valued at <b>${fmt(Math.round(b.value))}</b>` +
+    (hasYear ? `<br>Last year: revenue ${fmt(b.lastRevenue)} · costs ${fmt(b.lastCosts)} · <span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? 'profit' : 'loss'} ${fmt(Math.abs(p))}</span>` : '') +
+    (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
+    (b.employees === 0 ? '<br>Hire staff to start bringing in revenue.' : '') +
+    (!U.manager && state.job ? '<br><span class="down">Running it on top of a job: revenue −15% and it wears on you. A manager fixes this.</span>' : '') + `</div>`;
+  if(b.history.length >= 2) h += '<div class="invrow"><div class="owned">Profit, last ' + b.history.length + ' years</div>' + profitChart(b.history) + '</div>';
+  h += '<div class="invrow"><div class="itop"><span>Reputation</span><span class="price">' + b.reputation + '/100</span></div>' + meter(b.reputation, 'gold') +
+       '<div class="itop"><span>Staff morale</span><span class="price ' + (b.morale < 35 ? 'down' : '') + '">' + b.morale + '/100</span></div>' + meter(b.morale, b.morale < 35 ? 'red' : 'green') + '</div>';
+
+  h += '<div class="plabel">Staff</div>';
+  h += bankRow('Employees', `Each costs about ${fmt(empCost(b))} a year and brings in about ${fmt(t.revPerEmp * cum * bizRevenueMult(b) / Math.max(1, 1 + 0.15 * (b.locations - 1)))}.`, `
+    <button onclick="hireEmployee()">Hire</button><button onclick="hireEmployee(5)">Hire 5</button><button onclick="fireEmployee()" ${b.employees <= 0 ? 'disabled' : ''}>Fire</button>`);
+  h += '<div class="invrow"><div class="owned">Wages: low pay saves money but hurts morale; high pay keeps staff happy and productive.</div><div class="sortrow">' +
+       pill('Low', b.wages === 'low', "setWages('low')") + pill('Market', b.wages === 'market', "setWages('market')") + pill('High', b.wages === 'high', "setWages('high')") + '</div></div>';
+  h += bankRow('General manager', U.manager ? `Runs the business day to day for ${fmt(managerCost())} a year.` : `Lets the business run without you for ${fmt(managerCost())} a year. Worth it if you also have a job.`,
+       `<button onclick="toggleManager()">${U.manager ? 'Let them go' : 'Hire a manager'}</button>`);
+  const fam = familyHires();
+  if(fam.length) h += bankRow('Family', 'Bring a relative into the business. They become an employee and you grow closer.', fam.slice(0, 4).map(r => `<button onclick="hireFamily('${r.id}')">Hire ${r.name}</button>`).join(''));
+
+  h += '<div class="plabel">Strategy</div><div class="invrow"><div class="owned">Prices</div><div class="sortrow">' +
+       ['low','normal','high'].map(x => pill(x[0].toUpperCase() + x.slice(1), b.price === x, `setBizPrice('${x}')`)).join('') + '</div>' +
+       '<div class="owned">Reinvest profits: what you keep in the business grows it, and the rest is paid to you.</div><div class="sortrow">' +
+       [0, 0.25, 0.5, 0.75].map(x => pill(x ? Math.round(x * 100) + '%' : 'None', b.reinvest === x, `setReinvest(${x})`)).join('') + '</div></div>';
+  h += bankRow('Advertise', `Spend ${fmt(adCost())} on a campaign to boost revenue and reputation.`, `<button onclick="advertiseBiz()" ${state.money < adCost() ? 'disabled' : ''}>Run campaign</button>`);
+
+  h += '<div class="plabel">Upgrades</div>';
+  BIZ_UPGRADES.forEach(u => { const c = upgradeCost(u, b); h += bankRow(u.label + (U[u.key] ? ' <span class="tick">OWNED</span>' : ''), u.blurb + '.', U[u.key] ? '' : `<button onclick="buyBizUpgrade('${u.key}')" ${canPay(c) ? '' : 'disabled'}>Buy (${fmt(c)})</button>`); });
+
+  h += '<div class="plabel">Growth</div>';
+  h += bankRow('Locations', `${b.locations} open. More locations scale revenue and costs together.`, `<button onclick="expandLocation()" ${state.money < expandCost(b) ? 'disabled' : ''}>Open a location (${fmt(expandCost(b))})</button>`);
+  h += bankRow('Buy a competitor', 'Absorb a rival: a new location, their staff and their customers.', `<button onclick="acquireCompetitor()" ${state.done.acquire || !canPay(acquireCost(b)) ? 'disabled' : ''}>${state.done.acquire ? 'Done this year' : 'Acquire (' + fmt(acquireCost(b)) + ')'}</button>`);
+  const canFr = b.locations >= 3 && b.reputation >= 65;
+  h += bankRow('Franchise', canFr ? `Sell the right to open under your name: ${fmt(franchiseFee())} now, plus yearly royalties.` : 'Needs at least 3 locations and a reputation of 65.', `<button onclick="sellFranchise()" ${!canFr || state.done.franchise ? 'disabled' : ''}>${state.done.franchise ? 'Sold one this year' : 'Sell a franchise'}</button>`);
+  h += bankRow('Business loan', 'Borrow to fund growth. The debt stays with you even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt ? 'disabled' : ''}>Apply</button>`);
+
+  h += '<div class="plabel">Exit</div>';
+  if(b.value >= ipoMin() && b.employees >= 5) h += bankRow('Take it public (IPO)', 'Sell 40% to the public for cash and keep 60% as stock in your portfolio.', `<button onclick="ipoBusiness()">IPO</button>`);
+  else h += bankRow('IPO not available yet', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
+  h += bankRow('Sell the business', 'Cash out now at a discount to its full value.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value * 0.7))}</button>`);
+  return h;
+}
+
 function fileBankruptcy(ok){
   if(state.money > -3000 || state.bankrupt) return;
   if(ok !== true) return askConfirm("File for bankruptcy? Your credit will be wrecked for years.", "File", () => fileBankruptcy(true));
@@ -4923,10 +5174,23 @@ function renderPanel(){
         [['default','Default'],['gainers','Gainers'],['losers','Losers'],['name','A–Z']]
           .map(([m,l]) => `<button class="sortbtn${state.invSort===m?' active':''}" onclick="setSort('${m}')">${l}</button>`).join('') +
         '</div>';
-      h += '<div class="plabel">STOCKS</div>';
-      sortedList(STOCKS).forEach(x => h += investRow(x));
-      h += '<div class="plabel">CRYPTO</div>';
-      sortedList(CRYPTO).forEach(x => h += investRow(x));
+      if(state.marketNews && state.marketNews.length) h += '<div class="plabel">MARKET NEWS</div><div class="invrow"><div class="owned">' +
+        state.marketNews.map(n => '<span class="' + (n.up ? 'up' : 'down') + '">' + (n.up ? '▲' : '▼') + '</span> ' + n.text + (n.key ? ' <span class="tick">' + n.key + '</span>' : '')).join('<br>') + '</div></div>';
+      const f = state.invFilter || 'all', owns = x => (state.portfolio[x.key] || 0) > 0;
+      h += '<div class="plabel">SHOW</div><div class="sortrow">' +
+        [['all','All'],['owned','Owned'],['stocks','Stocks'],['funds','Funds'],['crypto','Crypto']].map(([m,l]) => `<button class="sortbtn${f===m?' active':''}" onclick="state.invFilter='${m}';renderPanel()">${l}</button>`).join('') + '</div>';
+      const stocks = STOCKS.filter(x => !FUND_SECTORS.includes(x.sector)), funds = STOCKS.filter(x => FUND_SECTORS.includes(x.sector));
+      const groups = [['STOCKS', stocks, ['all','stocks','owned']], ['FUNDS', funds, ['all','funds','owned']], ['CRYPTO', CRYPTO, ['all','crypto','owned']]];
+      let shown = 0;
+      groups.forEach(([label, list, modes]) => {
+        if(!modes.includes(f)) return;
+        const rows = sortedList(f === 'owned' ? list.filter(owns) : list);
+        if(!rows.length) return;
+        shown += rows.length;
+        h += '<div class="plabel">' + label + ' (' + rows.length + ')</div>';
+        rows.forEach(x => h += investRow(x));
+      });
+      if(!shown) h += '<div class="status">' + (f === 'owned' ? "You don't own any investments yet." : 'Nothing to show.') + '</div>';
     }
   } else if(state.panel === 'ast'){
     const av = assetsValue();
@@ -4988,33 +5252,7 @@ function renderPanel(){
     else if(!b){
       h += '<div class="status">Pick a business to start. Each requires upfront capital.</div>';
       BUSINESS_TYPES.forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
-    } else {
-      const t = bizType(b.type);
-      const cum = state.econ.cumInflation, overhead = (b.employees*BIZ_OVERHEAD_PER_EMP + b.locations*BIZ_OVERHEAD_PER_LOC) * cum;
-      h += `<div class="status"><b>${t.name}</b><br>
-        ${b.employees} employee${b.employees===1?'':'s'} · ${b.locations} location${b.locations===1?'':'s'}<br>
-        Price: ${b.price} · Reputation ${b.reputation}/100${b.marketing>0?' · Marketing boost active':''}<br>
-        Est. yearly overhead ${fmt(overhead)} · Business valuation ${fmt(Math.round(b.value))}${b.lastProfit !== null && b.lastProfit !== undefined ? `<br>Last year: <span class="${b.lastProfit >= 0 ? 'up' : 'down'}">${b.lastProfit >= 0 ? 'profit' : 'loss'} of ${fmt(Math.abs(b.lastProfit))}</span>` : ''}${b.employees === 0 ? '<br>Hire staff to start bringing in revenue.' : ''}</div>`;
-
-      h += '<div class="plabel">STAFF & LOCATIONS</div>';
-      h += bankRow('Employees', `${b.employees} on payroll — each costs ~${fmt(BIZ_OVERHEAD_PER_EMP * cum)}/yr and brings in about ${fmt(t.revPerEmp * cum * (0.5 + b.reputation/100))} at normal prices.`, `
-        <button onclick="hireEmployee()">Hire</button>
-        <button onclick="hireEmployee(5)">Hire 5</button>
-        <button onclick="fireEmployee()" ${b.employees<=0?'disabled':''}>Fire</button>`);
-      h += bankRow('Locations', `${b.locations} open — more locations scale revenue and overhead together.`, `<button onclick="expandLocation()" ${state.money < expandCost(b) ? 'disabled':''}>Open New Location (${fmt(expandCost(b))})</button>`);
-
-      h += '<div class="plabel">STRATEGY</div><div class="sortrow">' +
-        ['low','normal','high'].map(p => `<button class="sortbtn${b.price===p?' active':''}" onclick="setBizPrice('${p}')">${p[0].toUpperCase()+p.slice(1)} Prices</button>`).join('') + '</div>';
-      h += bankRow('Advertise', `Spend ${fmt(adCost())} on a campaign to boost revenue and reputation.`, `<button onclick="advertiseBiz()" ${state.money<adCost()?'disabled':''}>Run Campaign</button>`);
-      h += bankRow('Business Loan', 'Finance expansion — survives even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt?'disabled':''}>Apply</button>`);
-
-      h += '<div class="plabel">EXIT</div>';
-      if(b.value >= ipoMin() && b.employees >= 5)
-        h += bankRow('Take Public (IPO)', 'Sell 40% to the public for cash, keep 60% as tradeable stock in your portfolio.', `<button onclick="ipoBusiness()">IPO</button>`);
-      else
-        h += bankRow('IPO Not Yet Available', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
-      h += bankRow('Sell the Business', 'Cash out now at a discount to its full valuation.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value*0.7))}</button>`);
-    }
+    } else h += bizPanelHtml();
   } else {
     if(a < 12){ h = '<div class="status">Too young to work.</div>'; }
     else {
