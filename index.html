@@ -292,6 +292,7 @@
         <input type="range" id="musicVol" min="0" max="100" value="55" oninput="setVol('music', this.value)" aria-label="Music volume">
         <label class="aud-row"><span>Sound effects</span><input type="checkbox" id="sfxOn" onchange="setSfx(this.checked)"></label>
         <input type="range" id="sfxVol" min="0" max="100" value="70" oninput="setVol('sfx', this.value)" aria-label="Sound effects volume">
+        <button class="audio-link" onclick="restartLife()">Start a new life</button>
       </div>
       <div class="id-row">
         <div class="photo-frame" id="avatarBox"></div>
@@ -353,7 +354,7 @@
     <h2 id="goTitle">The record ends here</h2>
     <p class="epitaph" id="goText"></p>
     <div id="heirBox"></div>
-    <button class="btn-primary" onclick="location.reload()">Begin a new record</button>
+    <button class="btn-primary" onclick="newRecord()">Begin a new record</button>
   </section>
 </div>
 
@@ -369,11 +370,10 @@ function stageFor(age){
   return STAGES.find(s => age >= s[0] && age <= s[1])[2];
 }
 
-function startLife(heir){
-  const name = heir ? heir.kid.name : (document.getElementById('nameInput').value.trim() || 'Unnamed');
+function freshState(name){
   const SKINS = ['#f1c8a0','#e0ab7d','#c68a5c','#9c6a41','#6e4a2c'];
   const HAIRS = ['#1b1410','#3d2a1a','#6b4423','#9c7a3c','#c9a227','#7a7a7a','#2b2b2b'];
-  state = {
+  return {
     name, age:0,
     stats:{
       health: 60 + Math.floor(Math.random()*30),
@@ -400,8 +400,15 @@ function startLife(heir){
     social:freshSocial(),
     hobbies:{}, retired:false, pension:0, peakSalary:0, workYears:0, recent:[],
     estates:[], estateSeq:0, will:'family', trust:false, famEstate:0, inheritedTotal:0, evTarget:null, openRel:null, socMenu:null,
-    generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null
+    generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null,
+    ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null
   };
+}
+function startLife(heir){
+  const name = heir ? heir.kid.name : (document.getElementById('nameInput').value.trim() || 'Unnamed');
+  state = freshState(name);
+  if(heir) state.ipos = (heir.old.ipos || []).slice();
+  syncIpos();
   if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; }
   else state.relationships = initFamily();
   document.getElementById('setup').style.display = 'none';
@@ -417,6 +424,55 @@ function startLife(heir){
   } else pushEntry(0, `${name} is born. The record begins.`, {});
   render();
   audioStartLife();
+}
+
+// ---------- Saving: the record survives closing the app ----------
+const SAVE_KEY = "ledger-save-v1";
+let saveTimer = null, yearStart = null;
+const serialize = () => JSON.stringify(state, (k, v) => (k === "recent" || k === "evTarget") ? undefined : v);
+function saveGame(){
+  clearTimeout(saveTimer); saveTimer = null;
+  if(!state) return;
+  // a decision can't be stored mid-way, so while one is open the save holds the start of this year instead
+  const data = document.querySelector('#choices .choice-btn') ? yearStart : serialize();
+  if(data) try{ localStorage.setItem(SAVE_KEY, data); } catch(e){}
+}
+function queueSave(){ if(!saveTimer) saveTimer = setTimeout(saveGame, 300); }
+function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); } catch(e){} }
+// fill in anything a save from an older version of the game does not have yet
+function upgradeSave(saved){
+  const base = freshState(saved.name);
+  for(const k in base){
+    const b = base[k], v = saved[k];
+    if(v === undefined) continue;
+    base[k] = (b && v && typeof b === "object" && !Array.isArray(b) && typeof v === "object" && !Array.isArray(v)) ? Object.assign(b, v) : v;
+  }
+  base.recent = [];
+  return base;
+}
+function showScreen(id){
+  ["setup", "game", "gameover"].forEach(x => document.getElementById(x).style.display = x === id ? "block" : "none");
+}
+function resumeGame(){
+  let saved = null;
+  try{ saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null"); } catch(e){}
+  if(!saved || typeof saved.name !== "string" || !saved.stats || !Array.isArray(saved.relationships)) return false;
+  try{
+    state = upgradeSave(saved);
+    syncIpos();
+    document.getElementById('nameTag').textContent = state.name + (state.generation > 1 ? ' · generation ' + state.generation : '');
+    if(state.alive){
+      showScreen("game");
+      document.getElementById('choices').innerHTML = ''; document.getElementById('ageBtn').disabled = false;
+      render();
+    } else showGameOver();
+    return true;
+  } catch(e){ state = null; showScreen("setup"); return false; }
+}
+function newRecord(){ clearSave(); state = null; location.reload(); }
+function restartLife(){
+  if(state && state.alive && !confirm("Start over? " + state.name + "'s life will be lost.")) return;
+  newRecord();
 }
 
 function clamp(v){ return Math.max(0, Math.min(100, v)); }
@@ -483,6 +539,7 @@ function coverOverdraft(){ if(state.money < 0) ensureCash(0); }
 function pushEntry(age, text, delta){
   const applied = applyDelta(delta);
   state.log.push({age, text, dtext: deltaText(applied)});
+  if(state.log.length > 400) state.log.splice(0, state.log.length - 400);
   coverOverdraft();
   audioEntry(text, delta);
 }
@@ -1239,6 +1296,7 @@ function mortalityChance(age, health){
 
 function ageUp(){
   if(!state.alive) return;
+  yearStart = serialize();
   state.age += 1;
   const a = state.age;
 
@@ -1315,7 +1373,7 @@ function presentChoice(ev){
 }
 
 const fmt = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
-const EDU_RANK = {'None':0, 'High School':1, 'Bachelor':2};
+const EDU_RANK = {'None':0, 'High School':1, 'Bachelor':2, 'Master':3};
 
 // [title, minAge, education required, min smarts, salary/yr]
 // Each career is a ladder of ranks: {title, minAge, edu, minSmarts, salary, hours, stress, promo}
@@ -1397,6 +1455,10 @@ const ACTIVITIES = [
   {key:'doctor', label:'See a doctor', min:1, cost:150, delta:{health:8}, text:n=>`${n} gets a full checkup and a clean-ish bill of health.`},
   {key:'vacation', label:'Take a vacation', min:18, cost:2000, delta:{happy:12,health:2}, text:n=>`${n} escapes on a proper vacation.`},
   {key:'gamble', label:'Gamble at the casino', min:21, cost:200, delta:{}, text:n=>`${n} tries their luck at the casino`},
+  {key:'meditate', label:'Meditate', min:10, cost:0, delta:{happy:3,health:1}, text:n=>`${n} sits with their thoughts for a while and comes out calmer.`},
+  {key:'gym', label:'Train at the gym', min:14, cost:40, delta:{health:4,looks:2,happy:1}, text:n=>`${n} puts in a solid season at the gym.`},
+  {key:'volunteer', label:'Volunteer', min:12, cost:0, delta:{happy:5,smarts:1}, text:n=>`${n} volunteers and meets some good people.`},
+  {key:'surgery', label:'Cosmetic surgery', min:18, cost:6000, delta:{}, text:n=>`${n} goes under the knife`},
 ];
 
 // ---------- Investing: stocks & crypto ----------
@@ -1411,6 +1473,7 @@ const STOCKS = [
   {key:'GROC', name:'Groundwork Grocers', sector:'Retail', base:28, drift:0.03, vol:0.08, div:0.035},
   {key:'SOLR', name:'Solaris Power', sector:'Energy', base:50, drift:0.09, vol:0.32, div:0.01},
   {key:'TELX', name:'Telex Communications', sector:'Telecom', base:40, drift:0.03, vol:0.10, div:0.04},
+  {key:'IDXF', name:'Total Market Index Fund', sector:'Index', base:100, drift:0.065, vol:0.13, div:0.015},
 ];
 const CRYPTO = [
   {key:'BYTE', name:'ByteCoin', base:4200, drift:0.15, vol:0.55},
@@ -1422,6 +1485,14 @@ const CRYPTO = [
   {key:'ASHC', name:'AshCoin', base:0.002, drift:-0.02, vol:1.30},
 ];
 const ALL_INSTR = STOCKS.map(x=>Object.assign({type:'stock'},x)).concat(CRYPTO.map(x=>Object.assign({type:'crypto'},x)));
+// companies taken public live in the save; this keeps the instrument lists in step with the current life
+function syncIpos(){
+  for(const list of [STOCKS, ALL_INSTR]) for(let i = list.length - 1; i >= 0; i--) if(list[i].sector === 'IPO' && !state.ipos.some(x => x.key === list[i].key)){ delete state.market[list[i].key]; list.splice(i, 1); }
+  state.ipos.forEach(x => {
+    if(!STOCKS.some(y => y.key === x.key)){ STOCKS.push(x); ALL_INSTR.push(Object.assign({type:'stock'}, x)); }
+    if(!state.market[x.key]) state.market[x.key] = {price:x.base, prev:x.base};
+  });
+}
 
 function buildMarket(){
   const m = {};
@@ -1786,6 +1857,17 @@ function buyAsset(key, financed){
   }
   render();
 }
+const renoCost = x => Math.round(x.value * 0.06 / 100) * 100;
+function renovate(id){
+  const x = state.assets.find(y => y.id === id); if(!x || (x.category !== 'Homes' && x.category !== 'Real Estate')) return;
+  if(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) return;
+  const cost = renoCost(x); if(!ensureCash(cost)) return;
+  state.money -= cost; x.renovatedAge = state.age;
+  const added = Math.round(x.value * (0.07 + Math.random() * 0.08));
+  x.value += added;
+  pushEntry(state.age, `${state.name} spends ${fmt(cost)} renovating the ${x.name}, adding about ${fmt(added)} in value.`, {happy: x.category === 'Homes' ? 5 : 1});
+  render();
+}
 function sellAsset(id){
   const i = state.assets.findIndex(x => x.id === id);
   if(i < 0) return;
@@ -1838,7 +1920,7 @@ function ownedAssetRow(x){
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
-    <div class="assetbuy"><button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button></div>
+    <div class="assetbuy"><button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -2683,7 +2765,7 @@ function totalDebt(){
   return (state.creditCard ? state.creditCard.balance : 0) + state.loans.reduce((s,l) => s + l.balance, 0);
 }
 function netWorth(){
-  return state.money + state.savings + (state.trustFund || 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value : 0) - totalDebt();
+  return state.money + state.savings + (state.trustFund || 0) + (state.retirement ? state.retirement.balance : 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value : 0) - totalDebt();
 }
 function toSavings(amt){ if(state.money < amt) return; state.money -= amt; state.savings += amt; render(); }
 function toChecking(amt){ if(state.savings < amt) return; state.savings -= amt; state.money += amt; render(); }
@@ -2908,7 +2990,7 @@ function applyCard(){
   if(state.creditCard || state.age < 18 || state.bankrupt || state.done.cardApp) return;
   state.done.cardApp = true;
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a credit card but gets denied.`, {happy:-2}); render(); return; }
-  const limit = Math.max(500, Math.round((state.creditScore-500)*15/100)*100);
+  const limit = inflR(Math.max(500, Math.round((state.creditScore-500)*15/100)*100), 100);
   const apr = Math.max(0.12, 0.30 - state.creditScore/4000);
   state.creditCard = {limit, apr, balance:0};
   pushEntry(state.age, `${state.name} is approved for a credit card with a ${fmt(limit)} limit.`, {happy:3});
@@ -2921,16 +3003,44 @@ function chargeCard(amt){
 }
 function payCard(amt){
   const c = state.creditCard; if(!c) return;
+  if(amt === 'all') amt = c.balance;
   const pay = Math.min(amt, c.balance, state.money); if(pay <= 0) return;
   c.balance -= pay; state.money -= pay;
   render();
 }
 function creditCardYear(a){
   const c = state.creditCard; if(!c || c.balance <= 0) return;
+  if(state.cardAutopay && ensureCash(c.balance)){             // paid in full: no interest, steady credit gains
+    state.money -= c.balance; c.balance = 0; adjustCredit(3); return;
+  }
   c.balance += c.balance * c.apr;
   const minPay = Math.min(c.balance, Math.max(25, c.balance * 0.03));
   if(ensureCash(minPay)){ state.money -= minPay; c.balance -= minPay; adjustCredit(1); }
   else { adjustCredit(-30); pushEntry(a, `${state.name} misses a credit card payment — balance and damage pile up.`, {}); }
+}
+// ---- retirement account ----
+function retirementYear(){
+  const R = state.retirement; if(!(R.balance > 0)) return;
+  const noise = (Math.random() + Math.random() - 1) * 0.12;
+  R.balance = Math.max(0, Math.round(R.balance * (1 + 0.06 + noise - (state.econ.recession ? 0.08 : 0))));
+}
+function setRetirePct(p){ state.retirement.pct = p; renderPanel(); }
+function withdrawRetirement(){
+  const R = state.retirement; if(!(R.balance > 0)) return;
+  const early = state.age < 60, tax = Math.round(R.balance * (early ? 0.30 : 0.15)), got = R.balance - tax;
+  R.balance = 0; R.contributed = 0;
+  pushEntry(state.age, early ? `${state.name} cashes out their retirement account early, losing ${fmt(tax)} to taxes and penalties.`
+                             : `${state.name} withdraws ${fmt(got)} from their retirement account after ${fmt(tax)} in tax.`, {money:got, happy: early ? -2 : 3});
+  render();
+}
+function setAutoInvest(p){ state.autoInvest = p; renderPanel(); }
+function retirementHtml(){
+  const R = state.retirement, pill = (label, active, js) => '<button class="sortbtn' + (active ? " active" : "") + '" onclick="' + js + '">' + label + "</button>";
+  let h = '<div class="plabel">RETIREMENT ACCOUNT</div><div class="invrow"><div class="itop"><span><b>Balance</b></span><span class="price">' + fmt(R.balance) + "</span></div>" +
+    '<div class="owned">Contributions come out of your salary before tax and your employer adds half of them, up to 3% of salary. It grows with the market. Withdrawals are taxed at 15% from age 60; earlier they lose 30%.' + (state.job ? "" : " You need a job to contribute.") + "</div>" +
+    '<div class="sortrow">' + [0, 0.03, 0.06, 0.1, 0.15].map(p => pill(p ? Math.round(p * 100) + "% of salary" : "Off", R.pct === p, "setRetirePct(" + p + ")")).join("") + "</div>" +
+    (R.balance > 0 ? '<div class="assetbuy"><button onclick="withdrawRetirement()">' + (state.age < 60 ? "Cash out early" : "Withdraw " + fmt(Math.round(R.balance * 0.85))) + "</button></div>" : "") + "</div>";
+  return h;
 }
 function toggleInsurance(kind){ state.insurance[kind] = !state.insurance[kind]; render(); }
 // ---------- Entrepreneurship: run a real business, or ride it to an IPO ----------
@@ -2953,20 +3063,24 @@ const BUSINESS_TYPES = [
 const HOBBY_BUSINESS = {photography:'photography', music:'music', art:'art', cooking:'restaurant', cars:'dealership'};
 const BIZ_OVERHEAD_PER_EMP = 30000, BIZ_OVERHEAD_PER_LOC = 8000;
 function bizType(key){ return BUSINESS_TYPES.find(t => t.key === key); }
+const bizCost = t => inflR(t.cost, 100);
+const adCost = () => inflR(5000, 100);
+const expandCost = b => Math.round(bizCost(bizType(b.type)) * 0.6 * b.locations);
+const ipoMin = () => inflR(500000, 1000);
 function startBusiness(typeKey){
   const t = bizType(typeKey);
-  if(!t || state.business || state.money < t.cost || state.age < 21) return;
-  state.money -= t.cost;
+  if(!t || state.business || state.money < bizCost(t) || state.age < 21) return;
+  state.money -= bizCost(t);
   const hobbyKey = Object.keys(HOBBY_BUSINESS).find(k => HOBBY_BUSINESS[k] === typeKey);
   const mastered = hobbyKey && state.hobbies[hobbyKey] && state.hobbies[hobbyKey].level >= 70;
-  state.business = {type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: mastered ? Math.round(t.cost*1.3) : t.cost, startAge:state.age};
+  state.business = {type:typeKey, employees:0, locations:1, price:'normal', marketing:0, reputation: mastered ? 70 : 55, value: Math.round(bizCost(t) * (mastered ? 1.3 : 1)), startAge:state.age, lastProfit:null};
   pushEntry(state.age, `${state.name} opens a ${t.name.toLowerCase()}${mastered ? ', putting years of hard-won expertise to work' : ''}.`, {happy:6});
   render();
 }
-function hireEmployee(){
+function hireEmployee(n){
   const b = state.business; if(!b) return;
-  b.employees++;
-  pushEntry(state.age, `${state.name} hires another employee.`, {});
+  n = n || 1; b.employees += n;
+  pushEntry(state.age, n > 1 ? `${state.name} hires ${n} new employees.` : `${state.name} hires another employee.`, {});
   render();
 }
 function fireEmployee(){
@@ -2982,8 +3096,8 @@ function setBizPrice(level){
   render();
 }
 function advertiseBiz(){
-  const b = state.business; if(!b || state.money < 5000) return;
-  state.money -= 5000;
+  const b = state.business; if(!b || state.money < adCost()) return;
+  state.money -= adCost();
   b.marketing = Math.min(1, b.marketing + 0.3);
   b.reputation = clampRep(b.reputation + 2);
   pushEntry(state.age, `${state.name} runs an ad campaign for the business.`, {});
@@ -2991,8 +3105,7 @@ function advertiseBiz(){
 }
 function expandLocation(){
   const b = state.business; if(!b) return;
-  const t = bizType(b.type);
-  const cost = Math.round(t.cost * 0.6 * b.locations);
+  const cost = expandCost(b);
   if(state.money < cost) return;
   state.money -= cost;
   b.locations++;
@@ -3017,7 +3130,7 @@ function closeBusiness(){
   render();
 }
 function ipoBusiness(){
-  const b = state.business; if(!b || b.value < 500000 || b.employees < 5) return;
+  const b = state.business; if(!b || b.value < ipoMin() || b.employees < 5) return;
   const t = bizType(b.type);
   const baseTicker = t.name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase();
   let ticker = baseTicker, n = 2;
@@ -3025,9 +3138,8 @@ function ipoBusiness(){
   const totalShares = 1000000, ipoPrice = +(b.value / totalShares).toFixed(2), sharesRetained = 600000;
   const cashRaised = Math.round((totalShares - sharesRetained) * ipoPrice);
   const newStock = {key:ticker, name:t.name + ' Inc.', sector:'IPO', base:ipoPrice, drift:0.07, vol:0.35, div:0};
-  STOCKS.push(newStock);
-  ALL_INSTR.push(Object.assign({type:'stock'}, newStock));
-  state.market[ticker] = {price:ipoPrice, prev:ipoPrice};
+  state.ipos.push(newStock);
+  syncIpos();
   state.portfolio[ticker] = (state.portfolio[ticker] || 0) + sharesRetained;
   state.money += cashRaised;
   pushEntry(state.age, `${state.name} takes the business public! ${ticker} starts trading at ${fmt(ipoPrice)}/share, raising ${fmt(cashRaised)}.`, {happy:15});
@@ -3041,14 +3153,20 @@ function businessYear(a){
   const priceMult = b.price === 'low' ? 0.85 : b.price === 'high' ? 1.25 : 1;
   const repDrift = b.price === 'low' ? 1 : b.price === 'high' ? -1 : 0;
   b.reputation = clampRep(b.reputation + repDrift + (Math.random()*4 - 2));
-  const revenue = b.employees * t.revPerEmp * (1 + 0.15*(b.locations-1)) * priceMult * (1 + b.marketing) * (0.5 + b.reputation/100);
-  const overhead = b.employees * BIZ_OVERHEAD_PER_EMP + b.locations * BIZ_OVERHEAD_PER_LOC;
+  const cum = state.econ.cumInflation;
+  const revenue = b.employees * t.revPerEmp * cum * (1 + 0.15*(b.locations-1)) * priceMult * (1 + b.marketing) * (0.5 + b.reputation/100) * (state.econ.recession ? 0.85 : 1);
+  const overhead = (b.employees * BIZ_OVERHEAD_PER_EMP + b.locations * BIZ_OVERHEAD_PER_LOC) * cum;
   const profit = Math.round(revenue - overhead);
+  b.lastProfit = profit;
   b.value = Math.max(1000, b.value + profit * 0.6 + (Math.random()*0.1 - 0.05) * b.value);
 
   const leverage = totalDebt() > 0 ? Math.min(0.08, totalDebt() / Math.max(1,b.value) * 0.05) : 0;
   const failChance = t.risk * (state.econ.recession ? 1.8 : 1) * (b.reputation < 30 ? 1.6 : 1) + leverage;
   if(Math.random() < failChance){
+    if(profit > 0 && b.reputation >= 60 && Math.random() < 0.6){
+      pushEntry(a, `${state.name}'s business hits a rough patch but its loyal customers carry it through.`, {happy:-3, biz:-15});
+      return profit;
+    }
     pushEntry(a, `${state.name}'s business fails and shuts its doors.${totalDebt()>0 ? ' Any business loans remain due.' : ''}`, {happy:-12});
     state.business = null;
     return 0;
@@ -3090,12 +3208,19 @@ function negotiateRaise(){
   }
   render();
 }
+const lottoCost = () => inflR(20, 1);
 function buyLottery(){
-  if(state.done.lotto || state.money < 20) return;
+  if(state.done.lotto || state.money < lottoCost() || state.age < 18) return;
   state.done.lotto = true;
-  state.money -= 20;
-  if(Math.random() < 0.002){
-    pushEntry(state.age, `${state.name} wins the lottery!`, {money:50000, happy:20});
+  state.money -= lottoCost();
+  const r = Math.random();
+  if(r < 0.0005){
+    const prize = inflR(rint(2, 20) * 1000000, 1000);
+    pushEntry(state.age, `${state.name} hits the jackpot and wins ${fmt(prize)}!`, {money:prize, happy:30});
+  } else if(r < 0.004){
+    pushEntry(state.age, `${state.name} wins the lottery!`, {money:inflR(50000, 100), happy:20});
+  } else if(r < 0.06){
+    pushEntry(state.age, `${state.name} matches a few numbers on a lottery ticket.`, {money:inflR(rint(2, 10) * 10, 5), happy:2});
   } else {
     pushEntry(state.age, `${state.name} buys a lottery ticket. No luck this time.`, {});
   }
@@ -3105,7 +3230,14 @@ function yearlyFinances(a){
   const e = state.edu, econ = state.econ;
   let income = 0;
   if(a >= 8 && a < 18) income += Math.round(300 * econ.cumInflation);
-  if(state.job) income += Math.round(state.job.salary - incomeTax(state.job.salary));
+  if(state.job){
+    // retirement contributions come out before tax, and the employer matches half of them up to 3% of salary
+    const R = state.retirement, contrib = Math.round(state.job.salary * R.pct), match = Math.round(Math.min(contrib, state.job.salary * 0.06) / 2);
+    const taxable = state.job.salary - contrib;
+    income += Math.round(taxable - incomeTax(taxable));
+    if(contrib > 0){ R.balance += contrib + match; R.contributed += contrib; }
+  }
+  retirementYear();
   state.assets.forEach(x => { if(x.category === 'Real Estate'){ const t = findCatalog(x.key); income += Math.round(x.value * (t.rentalYield || 0)); } });
   income += businessYear(a);
   if(a >= 65 && !state.job && !state.retired) retire(true);
@@ -3140,12 +3272,16 @@ function yearlyFinances(a){
   if(a >= 65) expenses = Math.round(expenses * 0.85);                     // downsized, simpler living
   const net = income - expenses;
   if(net !== 0) pushEntry(a, net >= 0 ? 'A decent year financially — income covers the bills with some left over.' : 'Bills and living costs outpace income this year.', {money:net});
-  state.lastAutoSaved = 0;
+  state.lastAutoSaved = 0; state.lastAutoInvested = 0;
   if(state.autoSave > 0 && net > 0 && state.money > 0){
     const amt = Math.min(state.money, Math.round(net * state.autoSave));
     if(amt > 0){ state.money -= amt; state.savings += amt; state.lastAutoSaved = amt; checkGoal(a); }
   }
 
+  if(state.autoInvest > 0 && net > 0 && state.money > 0 && a >= 18){
+    const amt = Math.min(state.money, Math.round(net * state.autoInvest));
+    if(amt >= 10 && execBuy('IDXF', amt)) state.lastAutoInvested = amt;
+  }
   if(state.bankrupt && a >= state.bankruptUntilAge) state.bankrupt = false;
   if(state.money <= -20000 && !state.bankrupt){
     state.creditCard = null;
@@ -3283,7 +3419,7 @@ const POST_TYPES = [
 
 function postBlock(t, platKey){
   if(t.req && !t.req(platKey)) return t.reqText;
-  if(t.cost && state.money < t.cost) return "needs " + fmt(t.cost);
+  if(t.cost && state.money < inflR(t.cost, 10)) return "needs " + fmt(inflR(t.cost, 10));
   return "";
 }
 function joinPlatform(k){
@@ -3324,7 +3460,7 @@ function postSocial(typeKey, platKey){
   const backfireChance = (t.risk + plat.risk) * (sm.reputation < 30 ? 2 : sm.reputation > 75 ? 0.6 : 1);
 
   const r = Math.random(), delta = {};
-  if(t.cost) delta.money = -t.cost;
+  if(t.cost) delta.money = -inflR(t.cost, 10);
   let kind, gain, repDelta = 0;
   if(r < viralChance){
     kind = "viral"; gain = base * rint(8,30); repDelta = rint(1,6); delta.happy = 8;
@@ -3361,7 +3497,7 @@ function makeOffer(){
   if(r < 0.40) return {id, kind:"brand", brand, label: brand + " brand deal", body:"Pays " + fmt(pay) + ". A small authenticity cost.", pay};
   if(r < 0.60) return {id, kind:"collab", label:"Collab invite", body:"A bigger creator wants to team up. Big audience boost, some drama risk.", pay:0};
   if(r < 0.75) return {id, kind:"podcast", label:"Podcast interview", body:"Free exposure and a reputation lift.", pay:0};
-  if(r < 0.87) return {id, kind:"charity", label:"Charity livestream", body:"Costs $500 to host. Big reputation gain.", pay:0};
+  if(r < 0.87) return {id, kind:"charity", label:"Charity livestream", body:"Costs " + fmt(mediaCost("charity")) + " to host. Big reputation gain.", pay:0};
   if(f >= 5000) return {id, kind:"shady", brand, label: brand + ", a questionable sponsor", body:"Pays " + fmt(pay*3) + ", but it could blow up in your face.", pay: pay*3};
   return {id, kind:"brand", brand, label: brand + " brand deal", body:"Pays " + fmt(pay) + ". A small authenticity cost.", pay};
 }
@@ -3369,7 +3505,7 @@ function acceptOffer(id){
   const sm = state.social;
   const i = sm.offers.findIndex(o => o.id === id); if(i < 0) return;
   const o = sm.offers[i];
-  if(o.kind === "charity" && state.money < 500) return;
+  if(o.kind === "charity" && state.money < mediaCost("charity")) return;
   sm.offers.splice(i, 1);
   const n = state.name, top = topPlatform();
   if(o.kind === "brand"){
@@ -3397,7 +3533,7 @@ function acceptOffer(id){
     pushEntry(state.age, n + " does a well-received podcast interview.", {happy:4});
   } else if(o.kind === "charity"){
     sm.reputation = clampRep(sm.reputation + rint(8,15));
-    pushEntry(state.age, n + " hosts a charity livestream and raises real goodwill.", {money:-500, happy:6});
+    pushEntry(state.age, n + " hosts a charity livestream and raises real goodwill.", {money:-mediaCost("charity"), happy:6});
   }
   render();
 }
@@ -3413,28 +3549,30 @@ function declineOffer(id){
   render();
 }
 
+const MEDIA_COST = {ads:300, fake:500, gear:1500, merch:3000, pr:4000, prFee:1500, charity:500};
+const mediaCost = k => inflR(MEDIA_COST[k], 10);
 function runAds(){
   const sm = state.social, k = sm.sel;
-  if(!sm.account || !k || state.done["ads_" + k] || state.money < 300) return;
+  if(!sm.account || !k || state.done["ads_" + k] || state.money < mediaCost("ads")) return;
   state.done["ads_" + k] = true;
   const f = sm.platforms[k];
   const gain = Math.round((200 + rint(0,500)) * PLATFORMS[k].growth / (1 + f/20000));
   sm.platforms[k] = f + gain; syncFollowers();
-  pushEntry(state.age, state.name + " pays to promote their " + PLATFORMS[k].name + " page (+" + fmtFollowers(gain) + " followers).", {money:-300});
+  pushEntry(state.age, state.name + " pays to promote their " + PLATFORMS[k].name + " page (+" + fmtFollowers(gain) + " followers).", {money:-mediaCost("ads")});
   render();
 }
 function buyFollowers(){
   const sm = state.social, k = sm.sel;
-  if(!sm.account || !k || state.done.fakeFollowers || state.money < 500) return;
+  if(!sm.account || !k || state.done.fakeFollowers || state.money < mediaCost("fake")) return;
   state.done.fakeFollowers = true;
   const fake = rint(1500,3000);
   if(Math.random() < 0.3){
     sm.reputation = clampRep(sm.reputation - rint(12,22));
     scalePlat(k, -0.1); syncFollowers();
-    pushEntry(state.age, state.name + " is exposed for buying followers on " + PLATFORMS[k].name + ". The backlash is brutal.", {money:-500, happy:-6});
+    pushEntry(state.age, state.name + " is exposed for buying followers on " + PLATFORMS[k].name + ". The backlash is brutal.", {money:-mediaCost("fake"), happy:-6});
   } else {
     sm.platforms[k] += fake; syncFollowers();
-    pushEntry(state.age, state.name + " quietly buys " + fmtFollowers(fake) + " followers on " + PLATFORMS[k].name + ".", {money:-500});
+    pushEntry(state.age, state.name + " quietly buys " + fmtFollowers(fake) + " followers on " + PLATFORMS[k].name + ".", {money:-mediaCost("fake")});
   }
   render();
 }
@@ -3454,12 +3592,12 @@ function postApology(){
 function buyUpgrade(kind){
   const sm = state.social;
   if(!sm.account) return;
-  if(kind === "gear" && !sm.gear && state.money >= 1500){
-    sm.gear = true; pushEntry(state.age, state.name + " invests in a real camera and mic.", {money:-1500, happy:2});
-  } else if(kind === "merch" && !sm.merch && state.money >= 3000 && sm.followers >= 5000){
-    sm.merch = true; pushEntry(state.age, state.name + " launches a merch store.", {money:-3000, happy:4});
-  } else if(kind === "pr" && !sm.pr && state.money >= 4000){
-    sm.pr = true; pushEntry(state.age, state.name + " hires a PR manager.", {money:-4000, happy:2});
+  if(kind === "gear" && !sm.gear && state.money >= mediaCost("gear")){
+    sm.gear = true; pushEntry(state.age, state.name + " invests in a real camera and mic.", {money:-mediaCost("gear"), happy:2});
+  } else if(kind === "merch" && !sm.merch && state.money >= mediaCost("merch") && sm.followers >= 5000){
+    sm.merch = true; pushEntry(state.age, state.name + " launches a merch store.", {money:-mediaCost("merch"), happy:4});
+  } else if(kind === "pr" && !sm.pr && state.money >= mediaCost("pr")){
+    sm.pr = true; pushEntry(state.age, state.name + " hires a PR manager.", {money:-mediaCost("pr"), happy:2});
   } else return;
   render();
 }
@@ -3503,7 +3641,7 @@ function socialMediaYear(a){
   if(sm.merch) gross += sm.followers * 0.01 * (sm.reputation / 60);
   if(sm.canceled) gross *= 0.3;
   gross = Math.round(gross);
-  const fee = sm.pr ? 1500 : 0;
+  const fee = sm.pr ? mediaCost("prFee") : 0;
   if(gross > 0 || fee > 0){
     if(gross > 0) earnSocial(gross);
     pushEntry(a, gross > 0
@@ -3563,7 +3701,7 @@ function mediaPanelHtml(){
     const fit = aff >= 1.3 ? 'great fit' : aff >= 0.9 ? 'decent fit' : 'poor fit';
     const hot = sm.trend === t.key ? ', trending' : '';
     h += bankRow(t.label, why ? why : t.blurb + ' · ' + fit + hot,
-      '<button onclick="postSocial(\'' + t.key + '\')" ' + ((why || used >= POST_LIMIT) ? 'disabled' : '') + '>Post' + (t.cost ? ' (' + fmt(t.cost) + ')' : '') + '</button>');
+      '<button onclick="postSocial(\'' + t.key + '\')" ' + ((why || used >= POST_LIMIT) ? 'disabled' : '') + '>Post' + (t.cost ? ' (' + fmt(inflR(t.cost, 10)) + ')' : '') + '</button>');
   });
   if(sm.offers.length){
     h += '<div class="plabel">Offers (they expire at year end)</div>';
@@ -3572,13 +3710,13 @@ function mediaPanelHtml(){
     });
   }
   h += '<div class="plabel">Growth</div>';
-  h += bankRow('Promote ' + PLATFORMS[sel].name, 'Pay for reach: roughly +200 to +700 followers. $300, once a year per platform.', '<button onclick="runAds()" ' + ((state.done['ads_' + sel] || state.money < 300) ? 'disabled' : '') + '>Run ads</button>');
-  h += bankRow('Buy followers', 'Fast but shady: $500 for 1.5K to 3K followers, with a 30% chance of getting exposed.', '<button onclick="buyFollowers()" ' + ((state.done.fakeFollowers || state.money < 500) ? 'disabled' : '') + '>Buy</button>');
+  h += bankRow('Promote ' + PLATFORMS[sel].name, 'Pay for reach: roughly +200 to +700 followers. ' + fmt(mediaCost("ads")) + ', once a year per platform.', '<button onclick="runAds()" ' + ((state.done['ads_' + sel] || state.money < mediaCost("ads")) ? 'disabled' : '') + '>Run ads</button>');
+  h += bankRow('Buy followers', 'Fast but shady: ' + fmt(mediaCost("fake")) + ' for 1.5K to 3K followers, with a 30% chance of getting exposed.', '<button onclick="buyFollowers()" ' + ((state.done.fakeFollowers || state.money < mediaCost("fake")) ? 'disabled' : '') + '>Buy</button>');
   if(sm.canceled || sm.reputation < 30) h += bankRow('Post an apology', 'A sincere apology can turn things around, but there are no guarantees.', '<button onclick="postApology()" ' + (state.done.apology ? 'disabled' : '') + '>Apologize</button>');
   h += '<div class="plabel">Upgrades</div>';
-  h += bankRow('Better gear', sm.gear ? 'Owned: every post gets a quality boost.' : 'A real camera and mic. +10 appeal on every post. $1,500.', sm.gear ? '' : '<button onclick="buyUpgrade(\'gear\')" ' + (state.money < 1500 ? 'disabled' : '') + '>Buy</button>');
-  h += bankRow('Merch store', sm.merch ? 'Owned: passive yearly income from your fans.' : 'Passive yearly income from fans. Needs 5K+ followers. $3,000.', sm.merch ? '' : '<button onclick="buyUpgrade(\'merch\')" ' + ((state.money < 3000 || sm.followers < 5000) ? 'disabled' : '') + '>Open</button>');
-  h += bankRow('PR manager', sm.pr ? 'Hired: fewer cancellations and extra offers. $1,500 a year.' : 'Cuts cancellation risk and brings extra offers. $4,000 to hire, then $1,500 a year.', sm.pr ? '' : '<button onclick="buyUpgrade(\'pr\')" ' + (state.money < 4000 ? 'disabled' : '') + '>Hire</button>');
+  h += bankRow('Better gear', sm.gear ? 'Owned: every post gets a quality boost.' : 'A real camera and mic. +10 appeal on every post. ' + fmt(mediaCost("gear")) + '.', sm.gear ? '' : '<button onclick="buyUpgrade(\'gear\')" ' + (state.money < mediaCost("gear") ? 'disabled' : '') + '>Buy</button>');
+  h += bankRow('Merch store', sm.merch ? 'Owned: passive yearly income from your fans.' : 'Passive yearly income from fans. Needs 5K+ followers. ' + fmt(mediaCost("merch")) + '.', sm.merch ? '' : '<button onclick="buyUpgrade(\'merch\')" ' + ((state.money < mediaCost("merch") || sm.followers < 5000) ? 'disabled' : '') + '>Open</button>');
+  h += bankRow('PR manager', sm.pr ? 'Hired: fewer cancellations and extra offers. ' + fmt(mediaCost("prFee")) + ' a year.' : 'Cuts cancellation risk and brings extra offers. ' + fmt(mediaCost("pr")) + ' to hire, then ' + fmt(mediaCost("prFee")) + ' a year.', sm.pr ? '' : '<button onclick="buyUpgrade(\'pr\')" ' + (state.money < mediaCost("pr") ? 'disabled' : '') + '>Hire</button>');
   h += bankRow('Delete all accounts', 'Walk away from it all.', '<button onclick="deleteSocialAccount()">Delete</button>');
   return h;
 }
@@ -3596,15 +3734,17 @@ function schoolYear(a){
     pushEntry(a, `${state.name} graduates high school (GPA ${Math.round(e.gpa)}).`, {happy:6});
     presentCustom(`${state.name} has graduated. What's next?`, [
       {label:'Go to college (4 years)', run:()=> presentCustom('How will they pay for college?', [
+        e.gpa >= 85 ? {label:'Accept a full scholarship', run:()=>enrollCollege('paid')}
+          : e.gpa >= 72 ? {label:'Accept a half scholarship and pay the rest', run:()=>enrollCollege('half')} : null,
         {label:'Pay cash as they go', run:()=>enrollCollege('cash')},
         {label:'Take out student loans', run:()=>enrollCollege('loan')},
-      ])},
+      ].filter(Boolean))},
       {label:'Skip college and start working', run:()=>pushEntry(state.age, `${state.name} skips college and heads into the workforce.`, {})},
     ]);
     return true;
   }
-  if(e.school === 'College'){
-    const tuition = Math.round(9000 * state.econ.cumInflation);
+  if(e.school === 'College' || e.school === 'Graduate School'){
+    const tuition = Math.round((e.school === 'College' ? 9000 : 15000) * state.econ.cumInflation * (e.financeMethod === 'half' ? 0.5 : 1));
     if(e.financeMethod === 'loan'){
       let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
       if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, state.econ.rate - 0.005), {deferred:true});
@@ -3614,9 +3754,10 @@ function schoolYear(a){
     }
   }
   if(e.school && e.endAge && a === e.endAge){
-    e.level = 'Bachelor'; e.school = null;
+    const grad = e.school === 'Graduate School';
+    e.level = grad ? 'Master' : 'Bachelor'; e.school = null;
     activateStudentLoan();
-    pushEntry(a, `${state.name} graduates college with a Bachelor's degree (GPA ${Math.round(e.gpa)}).`, {smarts:3,happy:8});
+    pushEntry(a, grad ? `${state.name} earns a Master's degree (GPA ${Math.round(e.gpa)}).` : `${state.name} graduates college with a Bachelor's degree (GPA ${Math.round(e.gpa)}).`, {smarts: grad ? 4 : 3, happy:8});
   }
   if(e.school){
     e.gpa = clamp(e.gpa + (state.stats.smarts - 50) / 10 + (Math.random()*8 - 4));
@@ -3670,7 +3811,7 @@ function workYear(a){
   if(j.rank < track.length - 1){
     const next = track[j.rank + 1];
     const eligible = state.age >= next.minAge && EDU_RANK[state.edu.level] >= EDU_RANK[next.edu] && state.stats.smarts >= next.minSmarts;
-    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0)) * (state.econ.recession ? 0.5 : 1);
+    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + (state.edu.level === 'Master' ? 0.05 : 0)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
       j.rank++; j.title = next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, inflR(next.salary, 100));
@@ -3694,7 +3835,14 @@ function doActivity(i){
   if(x.key === 'gamble'){
     if(Math.random() < 0.45){ delta = {money:inflR(400,10), happy:6}; text += ' and walks out a winner.'; }
     else { delta = {money:-inflR(200,10), happy:-4}; text += ' and loses it all.'; }
+  } else if(x.key === 'surgery'){
+    delta = {money:-actCost(x)};
+    if(Math.random() < 0.85){ delta.looks = rint(8, 14); delta.happy = 5; text += ' and loves the result.'; }
+    else { delta.looks = -rint(5, 10); delta.happy = -8; delta.health = -4; text += ', and it goes badly wrong.'; }
   } else if(x.cost){ delta.money = -actCost(x); }
+  if(x.key === 'volunteer' && Math.random() < 0.3 && state.relationships.length < 60){
+    const f = newRel('Friend', {closeness: rint(30, 45), origin:'volunteering'}); text += ' One of them, ' + f.name + ', becomes a friend.';
+  }
   pushEntry(state.age, text, delta);
   render();
 }
@@ -3734,6 +3882,21 @@ function practiceHobby(key){
   pushEntry(state.age, milestone
     ? `${state.name} keeps at ${h.name.toLowerCase()} and levels up to ${hobbyTier(hb.level)}.`
     : `${state.name} spends time on ${h.name.toLowerCase()}.`, {});
+  render();
+}
+const compFee = () => inflR(100, 5);
+function enterCompetition(key){
+  const h = HOBBY_LIST.find(x => x.key === key), hb = state.hobbies[key];
+  if(!h || !hb || hb.level < 50 || state.done['comp_' + key] || state.money < compFee()) return;
+  state.done['comp_' + key] = true; state.money -= compFee();
+  const r = Math.random(), win = (hb.level - 30) / 110;
+  if(r < win * 0.35){
+    const prize = inflR(1000 + hb.level * 60, 50);
+    pushEntry(state.age, `${state.name} wins first place in a ${h.name.toLowerCase()} competition and takes home ${fmt(prize)}.`, {money:prize, happy:10, fans:8});
+  } else if(r < win){
+    pushEntry(state.age, `${state.name} places in a ${h.name.toLowerCase()} competition.`, {money:inflR(200 + hb.level * 10, 10), happy:5});
+  } else pushEntry(state.age, `${state.name} enters a ${h.name.toLowerCase()} competition but doesn't place.`, {happy:-2});
+  hb.level = Math.min(100, hb.level + 2);
   render();
 }
 function freelanceGig(key){
@@ -3780,7 +3943,16 @@ function dropOut(){
 function enrollCollege(method){
   const e = state.edu;
   e.school = 'College'; e.gpa = 60; e.endAge = state.age + 4; e.financeMethod = method || 'cash';
-  pushEntry(state.age, `${state.name} enrolls in college${method === 'loan' ? ', financed with student loans' : ', paying tuition out of pocket'}.`, {happy:3});
+  const how = {loan:', financed with student loans', paid:' on a full scholarship', half:' on a half scholarship'}[method] || ', paying tuition out of pocket';
+  pushEntry(state.age, `${state.name} enrolls in college${how}.`, {happy: method === 'paid' ? 6 : 3});
+}
+function enrollGrad(method){
+  const e = state.edu;
+  if(e.school || e.level !== 'Bachelor' || state.age < 21) return;
+  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  e.school = 'Graduate School'; e.gpa = Math.max(60, e.gpa); e.endAge = state.age + 2; e.financeMethod = method;
+  pushEntry(state.age, `${state.name} starts a two-year Master's program${method === 'loan' ? ' on student loans' : ''}.`, {happy:3});
+  render();
 }
 function applyJob(trackName){
   const track = CAREERS[trackName];
@@ -3795,7 +3967,7 @@ function applyJob(trackName){
       convertCoworkersToFriends();
       pushEntry(state.age, `${state.name} leaves their job as ${state.job.title} for a new career.`, {});
     }
-    state.job = {track:trackName, rank:0, title:rank0.title, salary:inflR(rank0.salary, 100), years:0};
+    state.job = {track:trackName, rank:0, title:rank0.title, salary:inflR(rank0.salary * (state.edu.level === 'Master' ? 1.1 : 1), 100), years:0};
     if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(0, state.age+rint(-8,8)), closeness:35+rint(0,20), origin:'through work'});
     pushEntry(state.age, `${state.name} lands an entry-level role as ${rank0.title} in ${trackName}.`, {happy:6});
   } else {
@@ -3808,6 +3980,18 @@ function quitJob(){
   state.job = null;
   convertCoworkersToFriends();
   pushEntry(state.age, `${state.name} quits their job as ${j.title}.`, {happy:2});
+  render();
+}
+function jobHunt(){
+  const j = state.job; if(!j || state.done.hunt || j.years < 1) return;
+  state.done.hunt = true;
+  if(Math.random() < (state.econ.recession ? 0.2 : 0.4) + state.stats.smarts / 400 + (state.edu.level === 'Master' ? 0.08 : 0)){
+    const raise = Math.round(j.salary * (0.08 + Math.random() * 0.14) / 100) * 100;
+    convertCoworkersToFriends();
+    j.salary += raise; j.years = 0;
+    if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(18, state.age + rint(-8, 8)), closeness:35 + rint(0, 15), origin:'through work'});
+    pushEntry(state.age, `${state.name} lands a ${j.title} role at a new company, with a ${fmt(raise)} raise.`, {happy:6});
+  } else pushEntry(state.age, `${state.name} interviews around but no better offer comes through.`, {happy:-2});
   render();
 }
 function workHarder(){
@@ -3825,7 +4009,7 @@ function renderPanel(){
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis?'disabled':''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
   let h = '';
   if(state.panel === 'act'){
-    h += `<div class="btnrow-social"><button onclick="buyLottery()" ${(state.done.lotto || state.money < 20) ? 'disabled' : ''}>Buy Lottery Ticket ($20)</button></div>`;
+    if(a >= 18) h += `<div class="btnrow-social"><button onclick="buyLottery()" ${(state.done.lotto || state.money < lottoCost()) ? 'disabled' : ''}>Buy Lottery Ticket (${fmt(lottoCost())})</button></div>`;
     ACTIVITIES.forEach((x,i) => {
       if(a < x.min) return;
       const done = state.done[x.key];
@@ -3839,7 +4023,15 @@ function renderPanel(){
       h += opt('Drop out', '', 'dropOut()', false);
     } else {
       h += `<div class="status">${a < 5 ? 'Too young for school.' : 'Education: <b>' + (e.level === 'None' ? 'no diploma' : e.level) + '</b>. Not currently enrolled.'}</div>`;
-      if(a >= 18 && a < 45 && EDU_RANK[e.level] === 1) h += opt('Enroll in college (pay cash)', fmt(Math.round(9000*state.econ.cumInflation))+'/yr', `enrollCollege('cash');render()`, false);
+      if(a >= 18 && a < 45 && EDU_RANK[e.level] === 1){
+        h += opt('Enroll in college (pay cash)', fmt(Math.round(9000*state.econ.cumInflation))+'/yr', `enrollCollege('cash');render()`, false);
+        h += opt('Enroll in college (student loans)', 'repay after graduating', `enrollCollege('loan');render()`, false);
+      }
+      if(a >= 21 && a < 55 && e.level === 'Bachelor'){
+        h += opt("Master's degree (pay cash)", fmt(Math.round(15000*state.econ.cumInflation))+'/yr · 2 years, leaves your job', `enrollGrad('cash')`, false);
+        h += opt("Master's degree (student loans)", '2 years, leaves your job', `enrollGrad('loan')`, false);
+      }
+      if(e.level === 'Master') h += '<div class="status">A Master\'s degree raises starting salaries by 10% and helps with every promotion.</div>';
     }
   } else if(state.panel === 'inv'){
     if(a < 16){ h = '<div class="status">Too young to invest yet — come back at 16.</div>'; }
@@ -3847,6 +4039,8 @@ function renderPanel(){
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
+      h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
+        [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
         [['default','Default'],['gainers','Gainers'],['losers','Losers'],['name','A–Z']]
           .map(([m,l]) => `<button class="sortbtn${state.invSort===m?' active':''}" onclick="setSort('${m}')">${l}</button>`).join('') +
@@ -3876,14 +4070,18 @@ function renderPanel(){
       Interest Rate ${(econ.rate*100).toFixed(1)}% · Inflation ${(econ.inflation*100).toFixed(1)}%${econ.recession ? ' · <span style="color:var(--red)">Recession</span>' : ''}</div>`;
 
     h += trustHtml() + savingsPanelHtml();
+    if(a >= 16) h += retirementHtml();
 
     h += '<div class="plabel">CREDIT CARD</div>';
     if(!c){
       h += bankRow('No credit card', a < 18 ? 'Too young to apply.' : 'Approval depends on your credit score.', a >= 18 ? `<button onclick="applyCard()" ${(state.bankrupt || state.done.cardApp) ? 'disabled' : ''}>Apply</button>` : '');
     } else {
-      h += bankRow(`Limit ${fmt(c.limit)}`, `Balance ${fmt(c.balance)} · ${(c.apr*100).toFixed(1)}% APR`, `
-        <button onclick="chargeCard(500)" ${c.balance + 500 > c.limit ? 'disabled' : ''}>Charge $500</button>
-        <button onclick="payCard(500)" ${c.balance <= 0 || state.money < 500 ? 'disabled' : ''}>Pay $500</button>`);
+      const step = inflR(500, 50);
+      h += bankRow(`Limit ${fmt(c.limit)}`, `Balance ${fmt(c.balance)} · ${(c.apr*100).toFixed(1)}% APR${state.cardAutopay ? ' · autopay on: the balance is paid in full each year, so no interest' : ''}`, `
+        <button onclick="chargeCard(${step})" ${c.balance + step > c.limit ? 'disabled' : ''}>Charge ${fmt(step)}</button>
+        <button onclick="payCard(${step})" ${c.balance <= 0 || state.money <= 0 ? 'disabled' : ''}>Pay ${fmt(Math.min(step, Math.max(c.balance, 0)))}</button>
+        <button onclick="payCard('all')" ${c.balance <= 0 || state.money < c.balance ? 'disabled' : ''}>Pay in full</button>
+        <button onclick="state.cardAutopay=!state.cardAutopay;render()">${state.cardAutopay ? 'Turn autopay off' : 'Turn on autopay'}</button>`);
     }
 
     h += '<div class="plabel">LOANS</div>';
@@ -3911,31 +4109,32 @@ function renderPanel(){
     if(a < 21){ h = '<div class="status">Too young to start a business. Come back at 21.</div>'; }
     else if(!b){
       h += '<div class="status">Pick a business to start. Each requires upfront capital.</div>';
-      BUSINESS_TYPES.forEach(t => h += opt(t.name, fmt(t.cost) + ' to start', `startBusiness('${t.key}')`, state.money < t.cost));
+      BUSINESS_TYPES.forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
     } else {
       const t = bizType(b.type);
-      const overhead = b.employees*BIZ_OVERHEAD_PER_EMP + b.locations*BIZ_OVERHEAD_PER_LOC;
+      const cum = state.econ.cumInflation, overhead = (b.employees*BIZ_OVERHEAD_PER_EMP + b.locations*BIZ_OVERHEAD_PER_LOC) * cum;
       h += `<div class="status"><b>${t.name}</b><br>
         ${b.employees} employee${b.employees===1?'':'s'} · ${b.locations} location${b.locations===1?'':'s'}<br>
         Price: ${b.price} · Reputation ${b.reputation}/100${b.marketing>0?' · Marketing boost active':''}<br>
-        Est. yearly overhead ${fmt(overhead)} · Business valuation ${fmt(Math.round(b.value))}</div>`;
+        Est. yearly overhead ${fmt(overhead)} · Business valuation ${fmt(Math.round(b.value))}${b.lastProfit !== null && b.lastProfit !== undefined ? `<br>Last year: <span class="${b.lastProfit >= 0 ? 'up' : 'down'}">${b.lastProfit >= 0 ? 'profit' : 'loss'} of ${fmt(Math.abs(b.lastProfit))}</span>` : ''}${b.employees === 0 ? '<br>Hire staff to start bringing in revenue.' : ''}</div>`;
 
       h += '<div class="plabel">STAFF & LOCATIONS</div>';
-      h += bankRow('Employees', `${b.employees} on payroll — each costs ~${fmt(BIZ_OVERHEAD_PER_EMP)}/yr but drives revenue.`, `
+      h += bankRow('Employees', `${b.employees} on payroll — each costs ~${fmt(BIZ_OVERHEAD_PER_EMP * cum)}/yr and brings in about ${fmt(t.revPerEmp * cum * (0.5 + b.reputation/100))} at normal prices.`, `
         <button onclick="hireEmployee()">Hire</button>
+        <button onclick="hireEmployee(5)">Hire 5</button>
         <button onclick="fireEmployee()" ${b.employees<=0?'disabled':''}>Fire</button>`);
-      h += bankRow('Locations', `${b.locations} open — more locations scale revenue and overhead together.`, `<button onclick="expandLocation()" ${state.money < Math.round(t.cost*0.6*b.locations) ? 'disabled':''}>Open New Location (${fmt(Math.round(t.cost*0.6*b.locations))})</button>`);
+      h += bankRow('Locations', `${b.locations} open — more locations scale revenue and overhead together.`, `<button onclick="expandLocation()" ${state.money < expandCost(b) ? 'disabled':''}>Open New Location (${fmt(expandCost(b))})</button>`);
 
       h += '<div class="plabel">STRATEGY</div><div class="sortrow">' +
         ['low','normal','high'].map(p => `<button class="sortbtn${b.price===p?' active':''}" onclick="setBizPrice('${p}')">${p[0].toUpperCase()+p.slice(1)} Prices</button>`).join('') + '</div>';
-      h += bankRow('Advertise', 'Spend $5,000 on a campaign to boost revenue and reputation.', `<button onclick="advertiseBiz()" ${state.money<5000?'disabled':''}>Run Campaign</button>`);
+      h += bankRow('Advertise', `Spend ${fmt(adCost())} on a campaign to boost revenue and reputation.`, `<button onclick="advertiseBiz()" ${state.money<adCost()?'disabled':''}>Run Campaign</button>`);
       h += bankRow('Business Loan', 'Finance expansion — survives even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt?'disabled':''}>Apply</button>`);
 
       h += '<div class="plabel">EXIT</div>';
-      if(b.value >= 500000 && b.employees >= 5)
+      if(b.value >= ipoMin() && b.employees >= 5)
         h += bankRow('Take Public (IPO)', 'Sell 40% to the public for cash, keep 60% as tradeable stock in your portfolio.', `<button onclick="ipoBusiness()">IPO</button>`);
       else
-        h += bankRow('IPO Not Yet Available', 'Needs a $500,000 valuation and at least 5 employees.', '');
+        h += bankRow('IPO Not Yet Available', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
       h += bankRow('Sell the Business', 'Cash out now at a discount to its full valuation.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value*0.7))}</button>`);
     }
   } else if(state.panel === 'hob'){
@@ -3946,6 +4145,7 @@ function renderPanel(){
       const linkedBizKey = hobby.career ? HOBBY_BUSINESS[hobby.key] : null;
       let actions = `<button onclick="practiceHobby('${hobby.key}')" ${(state.done['hob_'+hobby.key] || state.money < hobCost(hobby)) ? 'disabled' : ''}>Practice${hobby.cost ? ' ('+fmt(hobCost(hobby))+')' : ''}</button>`;
       if(hobby.career) actions += `<button onclick="freelanceGig('${hobby.key}')" ${(state.done['free_'+hobby.key] || lvl < 35) ? 'disabled' : ''}>Freelance Gig</button>`;
+      if(lvl >= 50) actions += `<button onclick="enterCompetition('${hobby.key}')" ${(state.done['comp_'+hobby.key] || state.money < compFee()) ? 'disabled' : ''}>Compete (${fmt(compFee())})</button>`;
       const unlockNote = hobby.career
         ? (lvl >= 70
             ? ` · Mastery unlocks a founding bonus if you start a ${BUSINESS_TYPES.find(t=>t.key===linkedBizKey).name} in Business`
@@ -3971,6 +4171,7 @@ function renderPanel(){
         h += `<div class="invrow"><div class="owned">${track.map((r,i) => i === j.rank ? `<b>→ ${r.title}</b>` : (i < j.rank ? `✓ ${r.title}` : r.title)).join(' &nbsp;→&nbsp; ')}</div></div>`;
         h += opt('Work extra hard', '−2 health', 'workHarder()', state.done.work);
         h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
+        h += opt('Look for a better offer', j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1);
         h += opt('Quit job', '', 'quitJob()', false);
         if(a >= 60) h += opt('Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       } else if(state.retired){
@@ -4274,15 +4475,21 @@ function audioWire(){
 function die(){
   state.alive = false;
   audioDeath();
-  document.getElementById('game').style.display = 'none';
-  document.getElementById('gameover').style.display = 'block';
-  document.getElementById('goTitle').textContent = `${state.name}'s record closes at ${state.age}${state.generation > 1 ? ' (generation ' + state.generation + ')' : ''}`;
   const a = state.age;
   const causes = a < 18 ? ['after a sudden illness','in a tragic accident']
     : a < 55 ? ['after a sudden illness','in an unexpected accident']
     : a < 80 ? ['after a long illness','peacefully, after a good life']
     : ['peacefully, in their sleep','surrounded by family','after a remarkably long and full life'];
-  document.getElementById('goText').textContent = `They passed ${pick(causes)}${a >= 90 ? ', having lived to a remarkable age' : ''}. Final net worth: ${fmt(netWorth())} (about ${fmt(netWorth() / state.econ.cumInflation)} in today's money). ${legacyText()} Health: ${state.stats.health}, Happiness: ${state.stats.happy}.`;
+  state.obit = {title: `${state.name}'s record closes at ${state.age}${state.generation > 1 ? ' (generation ' + state.generation + ')' : ''}`,
+    text: `They passed ${pick(causes)}${a >= 90 ? ', having lived to a remarkable age' : ''}. Final net worth: ${fmt(netWorth())} (about ${fmt(netWorth() / state.econ.cumInflation)} in today's money). ${legacyText()} Health: ${state.stats.health}, Happiness: ${state.stats.happy}.`};
+  document.getElementById('choices').innerHTML = '';
+  showGameOver();
+  saveGame();
+}
+function showGameOver(){
+  showScreen("gameover");
+  document.getElementById('goTitle').textContent = state.obit ? state.obit.title : state.name + "'s record closes";
+  document.getElementById('goText').textContent = state.obit ? state.obit.text : legacyText();
   showHeirs();
 }
 
@@ -4300,6 +4507,7 @@ function render(){
     document.getElementById(`fill-${k}`).style.width = state.stats[k] + '%';
     document.getElementById(`val-${k}`).textContent = state.stats[k];
   }
+  queueSave();
   const log = document.getElementById('log');
   log.innerHTML = state.log.slice().reverse().slice(0,25).map(e =>
     `<div class="entry"><span class="eage">AGE ${e.age}</span>${e.text} ${e.dtext}</div>`
@@ -4308,6 +4516,18 @@ function render(){
 }
 
 audioWire();
+resumeGame();
+document.addEventListener("visibilitychange", () => { if(document.hidden) saveGame(); });
+window.addEventListener("pagehide", saveGame);
+// keyboard: Space or Enter ages up, 1-4 picks an answer
+document.addEventListener("keydown", e => {
+  if(!state || !state.alive || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const opts = document.querySelectorAll('#choices .choice-btn');
+  if(opts.length && /^[1-9]$/.test(e.key) && opts[+e.key - 1]){ e.preventDefault(); opts[+e.key - 1].click(); return; }
+  if((e.key === " " || e.key === "Enter") && !e.target.closest("button")){
+    const b = document.getElementById('ageBtn'); if(!b.disabled){ e.preventDefault(); b.click(); }
+  }
+});
 </script>
 <script>
 if ("serviceWorker" in navigator) {
