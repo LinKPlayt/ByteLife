@@ -407,7 +407,7 @@
         <button class="tab-btn" data-panel="inv" onclick="togglePanel('inv')"><span class="ti" aria-hidden="true">📈</span>Invest</button>
         <button class="tab-btn" data-panel="ast" onclick="togglePanel('ast')"><span class="ti" aria-hidden="true">🏠</span>Assets</button>
         <button class="tab-btn" data-panel="biz" onclick="togglePanel('biz')"><span class="ti" aria-hidden="true">🏢</span>Business</button>
-        <button class="tab-btn" data-panel="media" onclick="togglePanel('media')"><span class="ti" aria-hidden="true">📱</span>Media</button>
+        <button class="tab-btn" data-panel="media" onclick="togglePanel('media')"><span class="ti" aria-hidden="true">⭐</span>Fame</button>
         <button class="tab-btn" data-panel="health" onclick="togglePanel('health')"><span class="ti" aria-hidden="true">🩺</span>Health</button>
         <button class="tab-btn" data-panel="crime" onclick="togglePanel('crime')"><span class="ti" aria-hidden="true">⚖️</span>Crime</button>
       </div>
@@ -477,7 +477,8 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
-    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0
+    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0,
+    fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
 // ---- the setup screen: gender and personality ----
@@ -620,8 +621,10 @@ const SPECIAL_DELTAS = {
   credit:  n => { if(state.age < 18) return 0; adjustCredit(n); return n; },
   gpa:     n => { if(!state.edu.school) return 0; state.edu.gpa = clamp(state.edu.gpa + n); return n; },
   bond:    n => { const t = state.evTarget && findRel(state.evTarget.id); if(!t) return 0; bump(t, n); return n; },
+  fame:    n => fameSpecial.fame(n),
+  image:   n => fameSpecial.image(n),
 };
-const DELTA_LABEL = {biz:'business', fans:'followers', rep:'reputation', partner:'partner bond', family:'family bond', friends:'friend bond', credit:'credit', gpa:'GPA', bond:'bond'};
+const DELTA_LABEL = {fame:'fame', image:'public image', biz:'business', fans:'followers', rep:'reputation', partner:'partner bond', family:'family bond', friends:'friend bond', credit:'credit', gpa:'GPA', bond:'bond'};
 const PCT_DELTAS = ['biz','fans'];
 function applyDelta(delta){
   const applied = {};
@@ -978,6 +981,23 @@ const CHOICE_EVENTS = [
   [10,80,n=>`{mypet} slipped out the door and is nowhere to be found.`,
     {label:'Search the neighborhood all night', risk:0.8, win:{happy:5}, lose:{happy:-8}, winText:'They find them hiding under a porch.', loseText:'No luck. They never come home.'},
     {label:'Put up posters and wait', risk:0.6, win:{happy:4}, lose:{happy:-8}, winText:'A neighbor calls the next day.', loseText:'Weeks pass with no sign of them.'},'pet'],
+  // ---- fame ----
+  [16,40,n=>`A talent scout stops ${n} in the street and hands them a card.`,
+    {label:'Sign with the agency', delta:{fame:8,happy:5}, effect:()=>{ state.hobbies.acting = state.hobbies.acting || {level:0}; state.hobbies.acting.level = Math.max(state.hobbies.acting.level, 25); state.hobbies.acting.last = state.age; }},
+    {label:'Not interested', delta:{}},'goodlooking&unknown',1.5],
+  [18,90,n=>`A journalist offers ${n} big money for an exclusive tell-all interview.`,
+    {label:'Tell all', delta:{money:20000,fame:5,image:-4,family:-4}},
+    {label:'Keep private life private', delta:{image:2}},'famous'],
+  [14,90,n=>`A fan spots ${n} at dinner and asks for a photo.`,
+    {label:'Happily pose', delta:{happy:2,image:2}},
+    {label:'Politely decline', delta:{image:-1}},'celeb',1,
+    {label:'Snap at them', delta:{image:-6,happy:1}}],
+  [18,90,n=>`${n} is asked to perform at a huge charity concert.`,
+    {label:'Do it for free', delta:{image:8,fame:4,happy:5}},
+    {label:'Ask for a fee', delta:{money:15000,image:-3}},'famous'],
+  [20,90,n=>`A director offers ${n} a cameo in a blockbuster.`,
+    {label:'Take the cameo', risk:0.6, win:{fame:8,happy:6,money:10000}, lose:{fame:3,image:-4}, winText:'The scene becomes a fan favorite.', loseText:'Critics call it a distracting stunt.'},
+    {label:'Pass', delta:{}},'famous'],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
@@ -1011,6 +1031,8 @@ const COND = {
   retired:()=>!!state.retired,
   healthy:()=>state.stats.health >= 70, unwell:()=>state.stats.health <= 40,
   lonely:()=>state.stats.happy <= 35, thriving:()=>state.stats.happy >= 75,
+  celeb:()=>!!state.fame && state.fame.level >= 20, famous:()=>!!state.fame && state.fame.level >= 45, nepo:()=>!!state.fame && state.fame.inherited >= 15,
+  goodlooking:()=>state.stats.looks >= 72, unknown:()=>!state.fame || state.fame.level < 10,
   pet:()=>!!(state.pets && state.pets.length), dog:()=>!!(state.pets && state.pets.some(p => p.species === 'dog')), nopet:()=>!(state.pets && state.pets.length),
   smoker:()=>!!(state.health && state.health.habits.smoke), drinker:()=>!!(state.health && state.health.habits.drink),
   record:()=>!!(state.crime && state.crime.record.some(x => !x.expunged && !x.juvenile)), grad:()=>EDU_RANK[state.edu.level] >= 3,
@@ -1413,6 +1435,16 @@ const BANK = [
   E(6,90,'{mypet} learns to open the treat cupboard',[['and helps themselves to everything',{happy:2,money:-40}]],'pet'),
   E(10,90,'{n} takes {mypet} to the dog park',[['and makes friends with another owner',{happy:4,friends:3}]],'dog'),
   E(16,90,'{n} meets someone while walking {mypet}',[['and they hit it off',{happy:5}]],'dog'),
+  E(10,99,'{n} is recognized at the grocery store',[['and happily poses for a selfie',{happy:3,image:1}],['and gets mobbed by fans',{happy:-2}]],'celeb'),
+  E(16,99,'Paparazzi follow {n} on a private vacation',[['and the photos are everywhere within hours',{happy:-4,fame:1}]],'famous'),
+  E(10,99,'{n} receives a sack of fan mail',[['and reads every single letter',{happy:5}]],'celeb'),
+  E(18,99,'{n} is parodied on a late-night comedy show',[['and laughs along',{happy:3,image:2}],['and is quietly stung by it',{happy:-3}]],'famous'),
+  E(18,99,'{n} is named on a "most influential people" list',[['and the family frames the magazine cover',{happy:6,family:3,fame:3}]],'famous'),
+  E(18,99,'An old classmate sells stories about {n} to a tabloid',[['and it feels like a betrayal',{happy:-5,image:-3}]],'famous'),
+  E(18,99,'{n} is invited to a celebrity charity match',[['and it raises a fortune for a good cause',{happy:5,image:4}]],'celeb'),
+  E(18,99,"A fan tattoos {n}'s face on their arm",[['which is flattering and deeply strange',{happy:2}]],'famous'),
+  E(6,17,'Classmates find out {n} comes from a famous family',[['and everyone suddenly wants to be friends',{happy:3,friends:3}],['and it is hard to know who to trust',{happy:-2}]],'nepo'),
+  E(16,99,'A wax figure of {n} is unveiled at a museum',[['and the likeness is uncanny',{happy:6,fame:2}],['and it looks nothing like them',{happy:-1}]],'famous'),
 ];
 
 // more two-option decisions
@@ -1653,10 +1685,11 @@ function ageUpYear(){
   const legalPrompted = !prompted && !relPrompted && legalYear(a);
   const bizPrompted = !prompted && !relPrompted && !legalPrompted && bizEventYear(a);
   const propPrompted = !prompted && !relPrompted && !legalPrompted && !bizPrompted && propertyEventYear(a);
-  const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted));
+  const famePrompted = fameYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted));
+  const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || famePrompted));
   if(pets.cost) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || pets.asked){ render(); return; }
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || famePrompted || pets.asked){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -1743,7 +1776,7 @@ function rankGap(rank, track){
   if(s.smarts < rank.minSmarts) return rank.minSmarts + ' smarts';
   if(rank.minLooks && s.looks < rank.minLooks) return rank.minLooks + ' looks';
   if(rank.minHealth && s.health < rank.minHealth) return rank.minHealth + ' health';
-  if(rank.hobby && hobbyLevel(rank.hobby) < rank.hobbyLvl) return HOBBY_LIST.find(x => x.key === rank.hobby).name.toLowerCase() + ' level ' + rank.hobbyLvl;
+  if(rank.hobby && hobbyLevel(rank.hobby) < rank.hobbyLvl && !(state.fame && state.fame.inherited >= 20)) return HOBBY_LIST.find(x => x.key === rank.hobby).name.toLowerCase() + ' level ' + rank.hobbyLvl;
   return '';
 }
 
@@ -2760,6 +2793,173 @@ function relationshipsYear(a, prompted){
   return false;
 }
 
+// ---------- Fame: where it comes from, what it pays, what it costs ----------
+const CAREER_FAME = {Acting:[5,15,35,60,85,95], Music:[3,12,25,55,80,95], Sports:[5,15,45,65,85,95], Politics:[3,10,30,45,70,96],
+  Culinary:[0,0,2,5,12,70], Business:[0,0,0,3,10,30], Technology:[0,0,0,2,8,20], Military:[0,0,2,5,15,40], 'Law Enforcement':[0,0,3,5,8,25],
+  Law:[0,0,0,2,5,15], Medicine:[0,0,0,0,4,12], Aviation:[0,0,0,0,2,8], Science:[0,0,0,2,6,15], Education:[0,0,0,0,2,8]};
+const FAME_TIERS = [[90,'Icon'],[70,'Superstar'],[50,'Famous'],[30,'Rising star'],[10,'Local celebrity'],[0,'Unknown']];
+const FM = () => state.fame;
+const fameTier = l => FAME_TIERS.find(t => l >= t[0])[1];
+function fameSources(){
+  const src = [], cum = state.econ.cumInflation;
+  if(state.job && CAREER_FAME[state.job.track]) src.push([CAREER_FAME[state.job.track][state.job.rank] || 0, state.job.title.toLowerCase()]);
+  const f = state.social && state.social.account ? state.social.followers : 0;
+  if(f >= 5000) src.push([Math.min(92, Math.round((Math.log10(f) - 3) * 18 + 10)), fmtFollowers(f) + ' followers']);
+  const nw = netWorth() / cum;
+  if(nw >= 5e6) src.push([Math.min(90, Math.round((Math.log10(nw) - 6.7) * 28 + 20)), 'wealth']);
+  const k = state.crime;
+  const heist = k.record.some(x => x.crime === 'armed robbery') || k.earned / cum > 500000;
+  if(k.wanted || heist) src.push([k.wanted ? 55 : 40, 'notoriety']);
+  if(state.business && state.business.value / cum > 5e6) src.push([30, 'your company']);
+  return src.sort((x, y) => y[0] - x[0]);
+}
+function fameTarget(){
+  const src = fameSources();
+  if(!src.length) return FM().inherited ? FM().inherited * 0.5 : 0;
+  return Math.min(100, src[0][0] + src.slice(1).reduce((t, x) => t + x[0] * 0.15, 0));
+}
+const fameSpecial = {
+  fame: n => { const f = FM(); if(!f) return 0; const b = f.level;
+    if(n > 0 && f.level > fameTarget() + 15) n = n * 0.3;           // publicity can only stretch real fame so far
+    f.level = Math.max(0, Math.min(100, f.level + n)); f.peak = Math.max(f.peak, f.level); return Math.round(f.level - b); },
+  image: n => { const f = FM(); if(!f || f.level < 10) return 0; const b = f.image; f.image = clampRep(f.image + n); return f.image - b; },
+};
+// the yearly life of a famous person; returns true if it asked a question
+function fameYear(a, canPrompt){
+  const f = FM(), n = state.name;
+  const target = fameTarget();
+  if(f.level < target) f.level += (target - f.level) * 0.35;
+  else f.level -= Math.max(1, (f.level - target) * 0.12) + (f.offGrid ? 5 : 0);
+  f.level = Math.max(0, Math.min(100, Math.round(f.level * 10) / 10)); f.peak = Math.max(f.peak, f.level);
+  f.image = clampRep(f.image + (60 - f.image) * 0.05 + (f.publicist ? 1 : 0));
+  // the business of being famous
+  let earn = 0, spend = 0;
+  f.products.forEach(p => { p.age = (p.age || 0) + 1; earn += Math.round(p.base * (f.level / 50) * (f.image / 60) * Math.max(0.2, 1 - p.age * 0.08)); });
+  if(f.publicist) spend += inflR(40000, 1000);
+  if(f.security) spend += inflR(60000, 1000);
+  if(earn || spend) pushEntry(a, earn ? `${n}'s product lines bring in ${fmt(earn)}${spend ? ', minus ' + fmt(spend) + ' for their team' : ''}.` : `${n} pays ${fmt(spend)} for their publicist and security.`, {money: earn - spend});
+  if(state.social.account && f.level >= 20){ for(const k in state.social.platforms) scalePlat(k, f.level / 1500); syncFollowers(); }
+  // brand deals
+  f.offers = [];
+  if(f.level >= 25 && f.image >= 40 && !state.crime.prison){
+    for(let i = 0, cnt = (f.level >= 70 ? 2 : 1) + (f.publicist ? 1 : 0); i < cnt; i++){
+      f.offerSeq = (f.offerSeq || 0) + 1;
+      f.offers.push({id:'f' + f.offerSeq, brand:pick(BRANDS), pay:inflR(Math.pow(f.level, 2) * rint(15, 35), 1000), kind:pick(['ad campaign', 'sponsorship', 'ambassador deal', 'commercial'])});
+    }
+  }
+  // awards
+  const j = state.job, star = j && ['Acting','Music','Sports'].includes(j.track) && j.rank >= (j.track === 'Sports' ? 3 : 2);
+  if(star && Math.random() < 0.2){
+    const award = {Acting:'the Golden Reel for Best Performance', Music:'a Gramophone Award', Sports:'the league MVP award'}[j.track];
+    const skill = j.track === 'Sports' ? state.stats.health : j.track === 'Acting' ? state.stats.looks : state.stats.smarts;
+    if(Math.random() < 0.25 + f.level / 400 + skill / 500){
+      f.awards.push({name:award, age:a});
+      pushEntry(a, `${n} wins ${award}!`, {happy:12, fame:8, image:5, money:inflR(25000, 1000)});
+    } else pushEntry(a, `${n} is nominated for ${award} but doesn't win.`, {happy:2, fame:2});
+  }
+  // the cost of being known
+  if(f.level >= 50 && !f.security && !f.offGrid) applyDelta({happy:-2});
+  if(f.level >= 60 && !f.security && Math.random() < 0.03) pushEntry(a, `A stalker fixates on ${n}, and for a while they're afraid to leave the house.`, {happy:-10, health:-2});
+  if(canPrompt && f.level >= 20 && Math.random() < f.level / 600 * (f.publicist ? 0.6 : 1) * (hasMyTrait('Moody') || hasMyTrait('Flaky') ? 1.4 : 1)){
+    const what = pick(['an old video of ' + n + ' behaving badly resurfaces', 'a tabloid prints rumors about ' + n + "'s private life", n + ' is photographed in a heated argument', 'an ex sells a story about ' + n]);
+    presentCustom(`Scandal: ${what}.`, [
+      {label:'Apologize publicly', run:() => pushEntry(state.age, `${n} apologizes publicly, and most people move on.`, {image:-4, happy:-2})},
+      {label:'Deny everything', run:() => Math.random() < 0.5 ? pushEntry(state.age, `${n} denies it and the story fizzles out.`, {image:1}) : pushEntry(state.age, `${n} denies it, then more evidence comes out.`, {image:-20, fame:3, happy:-6})},
+      {label:'Lean into it', run:() => pushEntry(state.age, `${n} leans into the controversy and stays in the headlines for weeks.`, {fame:6, image:-10})},
+    ]);
+    return true;
+  }
+  return false;
+}
+// ---- things a famous person can do ----
+const FAME_ACTS = [
+  {key:'interview', label:'Give interviews', min:15, meta:'+fame'},
+  {key:'talkshow', label:'Go on a talk show', min:35, meta:'+fame, appearance fee'},
+  {key:'carpet', label:'Walk a red carpet', min:25, cost:3000, meta:'looks matter'},
+  {key:'gala', label:'Host a charity gala', min:20, cost:10000, meta:'+public image'},
+  {key:'stunt', label:'Pull a publicity stunt', min:0, cost:1000, meta:'risky'},
+  {key:'feud', label:'Start a celebrity feud', min:30, meta:'+fame, −image'},
+  {key:'reality', label:'Star in a reality show', min:15, meta:'big fame, big risk', every:5},
+  {key:'memoir', label:'Write a memoir', min:40, meta:'one big payday', once:true},
+  {key:'product', label:'Launch a product line', min:35, cost:50000, meta:'yearly royalties'},
+];
+function fameActState(x){
+  const f = FM();
+  if(state.crime.prison) return {ok:false, why:'not from prison'};
+  if(state.age < 16 && x.min > 0) return {ok:false, why:'from age 16'};
+  if(f.level < x.min) return {ok:false, why:'needs fame ' + x.min};
+  if(state.done['fa_' + x.key]) return {ok:false, why:'done this year'};
+  if(x.once && f.memoir) return {ok:false, why:'already written'};
+  if(x.every && f.lastReality !== undefined && state.age - f.lastReality < x.every) return {ok:false, why:'once every ' + x.every + ' years'};
+  if(x.key === 'product' && f.products.length >= 3) return {ok:false, why:'three lines already'};
+  if(x.cost && !canPay(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) return {ok:false, why:'costs ' + fmt(inflR(x.cost, 100))};
+  return {ok:true, why:''};
+}
+function fameAct(key){
+  const x = FAME_ACTS.find(y => y.key === key), f = FM(), n = state.name; if(!x || !fameActState(x).ok) return;
+  state.done['fa_' + key] = true;
+  const cost = x.cost ? Math.round(inflR(x.cost, 100) * (key === 'gala' ? Math.max(1, f.level / 40) : 1)) : 0;
+  if(cost) pay(cost);
+  if(key === 'interview') pushEntry(state.age, `${n} does a round of interviews.`, {fame:3, image:1, money:inflR(500 + f.level * 40, 50)});
+  else if(key === 'talkshow'){
+    if(Math.random() < 0.8) pushEntry(state.age, `${n} charms the audience on a late-night talk show.`, {fame:5, image:3, money:inflR(f.level * 150, 100), happy:3});
+    else pushEntry(state.age, `${n}'s talk show appearance is painfully awkward, and the clip goes everywhere.`, {fame:3, image:-6, happy:-3});
+  } else if(key === 'carpet'){
+    if(state.stats.looks >= 55) pushEntry(state.age, `${n} stuns on the red carpet and lands on every best-dressed list.`, {fame:4, image:4, happy:4, looks:1});
+    else pushEntry(state.age, `${n}'s red carpet look is torn apart by the fashion press.`, {fame:2, image:-5, happy:-3});
+  } else if(key === 'gala') pushEntry(state.age, `${n} hosts a charity gala that raises a fortune for a good cause.`, {image:10, fame:2, happy:5});
+  else if(key === 'stunt'){
+    if(Math.random() < 0.45) pushEntry(state.age, `${n}'s publicity stunt works perfectly. Everyone is talking about them.`, {fame:8, happy:4});
+    else pushEntry(state.age, `${n}'s publicity stunt backfires and looks desperate.`, {fame:2, image:-10, happy:-3});
+  } else if(key === 'feud') pushEntry(state.age, `${n} starts a very public feud with ${pick(FRIENDS)} ${pick(['Vance', 'Sterling', 'Blake', 'Monroe', 'Hart'])}, a rival celebrity.`, {fame:7, image:-8, happy:1});
+  else if(key === 'reality'){
+    f.lastReality = state.age;
+    const good = Math.random() < 0.5;
+    pushEntry(state.age, good ? `${n} stars in a reality show and fans fall in love with them.` : `${n} stars in a reality show and is edited into the villain.`, {fame:15, image: good ? 6 : -15, money:inflR(40000 + f.level * 1500, 1000), happy: good ? 6 : -4});
+  } else if(key === 'memoir'){
+    f.memoir = true;
+    const adv = inflR(Math.round(20000 * Math.pow(f.level / 10, 1.4)), 1000);
+    pushEntry(state.age, `${n}'s memoir becomes a bestseller, earning ${fmt(adv)}.`, {money:adv, fame:4, image:5, happy:8});
+  } else if(key === 'product'){
+    const kind = pick(['fragrance', 'clothing line', 'sneaker', 'makeup line', 'energy drink', 'cookbook', 'headphones'].filter(k => !f.products.some(p => p.kind === k)));
+    f.products.push({kind, age:0, base:inflR(rint(40, 120) * 1000, 1000)});
+    pushEntry(state.age, `${n} launches a signature ${kind}.`, {fame:3, happy:5});
+  }
+  render();
+}
+function acceptDeal(id){
+  const f = FM(), d = f.offers.find(x => x.id === id); if(!d) return;
+  f.offers = f.offers.filter(x => x.id !== id);
+  pushEntry(state.age, `${state.name} signs a ${d.kind} with ${d.brand} for ${fmt(d.pay)}.`, {money:d.pay, fame:2, image:-2, happy:4});
+  render();
+}
+function declineDeal(id){ const f = FM(); f.offers = f.offers.filter(x => x.id !== id); renderPanel(); }
+function toggleFame(k){ const f = FM(); f[k] = !f[k]; if(k === 'offGrid' && f[k]) pushEntry(state.age, `${state.name} steps away from public life for a while.`, {happy:3}); renderPanel(); }
+function famePanelHtml(){
+  const f = FM(), src = fameSources(), lvl = Math.round(f.level);
+  const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
+  let h = `<div class="status">Fame: <b>${fameTier(lvl)}</b> (${lvl}/100)${f.peak >= lvl + 10 ? ' · peaked at ' + Math.round(f.peak) : ''}` +
+    (lvl >= 10 ? ` · public image <b>${f.image}</b>/100` : '') +
+    (src.length ? '<br>Known for: ' + src.slice(0, 3).map(x => x[1]).join(', ') : '<br>Fame comes from star careers like acting, music, sports and politics, a big social following, great wealth, or notoriety.') +
+    (f.inherited ? '<br>Famous family: doors open a little easier for you.' : '') +
+    (f.awards.length ? '<br>Awards: ' + f.awards.map(x => x.name.replace(/^(the|a) /, '') + ' (' + x.age + ')').join(', ') : '') + '</div>' +
+    `<div class="stat-track" style="margin:-2px 0 4px;"><div class="stat-fill" style="width:${lvl}%;background:var(--gold)"></div></div>`;
+  if(f.offers.length){
+    h += '<div class="plabel">Brand deals (this year only)</div>';
+    f.offers.forEach(d => h += bankRow(`${d.brand} ${d.kind}`, `Pays ${fmt(d.pay)}. Ads cost a little authenticity.`, `<button onclick="acceptDeal('${d.id}')">Sign</button><button onclick="declineDeal('${d.id}')">Decline</button>`));
+  }
+  h += '<div class="plabel">In the spotlight</div>';
+  FAME_ACTS.forEach(x => { const st = fameActState(x); if(lvl >= x.min - 15 || x.min === 0) h += opt(x.label, st.ok ? (x.cost ? fmt(Math.round(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) + ' · ' : '') + x.meta : st.why, `fameAct('${x.key}')`, !st.ok); });
+  if(f.products.length) h += '<div class="owned" style="margin:2px">Product lines: ' + f.products.map(p => p.kind).join(', ') + '. Royalties fade as they age and follow your fame and image.</div>';
+  if(lvl >= 20 || f.publicist || f.security){
+    h += '<div class="plabel">Your team</div>';
+    h += bankRow('Publicist', `Softens scandals, brings more brand deals and polishes your image. ${fmt(inflR(40000, 1000))} a year.`, `<button onclick="toggleFame('publicist')">${f.publicist ? 'Let them go' : 'Hire'}</button>`);
+    h += bankRow('Security', `Keeps paparazzi and stalkers away. ${fmt(inflR(60000, 1000))} a year.`, `<button onclick="toggleFame('security')">${f.security ? 'Let them go' : 'Hire'}</button>`);
+    h += bankRow('Step out of the spotlight', f.offGrid ? 'You are keeping a low profile. Fame fades faster, but life is calmer.' : 'Fame fades faster, but the paparazzi lose interest.', `<button onclick="toggleFame('offGrid')">${f.offGrid ? 'Come back' : 'Go quiet'}</button>`);
+  }
+  return h;
+}
+
 // ---------- Pets ----------
 const PET_SPECIES = [
   {key:'dog', name:'Dog', adopt:250, buy:1800, yearly:1500, life:[10,15], happy:3, minAge:6, exercise:true, trainable:true, shows:true},
@@ -3070,7 +3270,7 @@ function dateOut(key){
   const d = DATE_KINDS.find(x => x.key === key); if(!d || !dateState(d).ok) return;
   state.done["date_" + key] = true; state.done.dates = (state.done.dates || 0) + 1;
   if(dCost(d)){ ensureCash(dCost(d)); state.money -= dCost(d); }
-  const chance = Math.min(0.85, d.base + state.stats.looks / 300 + state.stats.happy / 500);
+  const chance = Math.min(0.9, d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0));
   if(Math.random() < chance){
     const p = newRel("Partner", {age: Math.max(0, state.age + rint(-4,4)), closeness: rint(42,58), origin: d.origin || "on a date"});
     pushEntry(state.age, `${state.name} goes on a date ${d.text} with ${p.name}, and it turns into something real. ${p.name} seems ${p.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:8});
@@ -3509,6 +3709,7 @@ function applyHeir(h){
   state.movedOut = age >= 18;
   state.traits = (kid.traits || []).slice();
   state.pets = (old.pets || []).map(p => Object.assign({}, p)); state.petSeq = old.petSeq || 0;
+  if(old.fame && old.fame.peak >= 30){ state.fame.inherited = Math.round(old.fame.peak * 0.35); state.fame.level = Math.round(state.fame.inherited * 0.6); }
   state.health.history = Array.from(new Set((old.health ? old.health.history : []).concat(old.health ? old.health.conditions.filter(c => c.known && CONDITIONS[c.key].kind !== 'acute' && !CONDITIONS[c.key].mood && c.key !== 'addiction').map(c => c.key) : [])));
   state.will = old.will; state.trust = old.trust;
   // genes and upbringing
@@ -4033,6 +4234,7 @@ function commitCrime(key){
 function lawyerFees(felony){ return {priv: inflR(felony ? 8000 : 2000, 100), top: inflR(felony ? 40000 : 8000, 500)}; }
 function arrest(c, amt){
   const n = state.name;
+  if(state.fame.level >= 30) pushEntry(state.age, `${n}'s arrest is front-page news.`, {image:-20, fame:4});
   if(state.age < 18){                              // juvenile court: no lawyer choice, record sealed at 18
     if(c.felony && Math.random() < 0.45){ addRecord(c, true, "juvenile detention"); imprison(rint(1, 2), c.charge, true); }
     else { addRecord(c, true, "probation"); CR().probation = Math.max(CR().probation, 2); pushEntry(state.age, `A juvenile court gives ${n} probation and community service.`, {happy:-3, family:-5}); }
@@ -4047,7 +4249,7 @@ function arrest(c, amt){
 }
 function trial(c, amt, lawyer){
   const n = state.name;
-  const p = Math.max(0.08, Math.min(0.95, 0.72 - lawyer - state.stats.smarts / 600 + priorCount() * 0.05));
+  const p = Math.max(0.08, Math.min(0.95, 0.72 - lawyer - state.stats.smarts / 600 + priorCount() * 0.05 - state.fame.level / 500));
   if(Math.random() < p){ pushEntry(state.age, `The jury finds ${n} guilty.`, {happy:-5}); sentence(c, amt, false); }
   else { CR().heat = Math.max(0, CR().heat - 10); pushEntry(state.age, `The jury finds ${n} not guilty. ${n} walks free.`, {happy:8}); }
 }
@@ -4110,6 +4312,7 @@ function prisonYear(a){
   updateMarket(a); payDividends(a); housingYear(a); assetsYear(a);
   relationshipsYear(a, true);
   const pc = petsYear(a, false).cost; if(pc) applyDelta({money:-pc});
+  fameYear(a, false);
   if(!k.prison) return;                            // a relationship event can't free you, but stay safe
   applyDelta({health: -rint(0, 2), happy: -rint(2, 5)});
   if(Math.random() < 0.6){
@@ -5863,7 +6066,7 @@ function workYear(a){
   if(j.rank < track.length - 1){
     const next = track[j.rank + 1];
     const eligible = !rankGap(next, j.track);
-    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0)) * (state.econ.recession ? 0.5 : 1);
+    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0) + (CAREER_FAME[j.track] && (TRACK_INFO[j.track] || {}).star ? state.fame.level / 600 : 0)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
       j.rank++; j.title = next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, j.rank));
@@ -5881,7 +6084,7 @@ function togglePanel(name){
   state.panel = state.panel === name ? null : name; renderPanel();
   if(state.panel) window.scrollTo({top:0, behavior:"smooth"});
 }
-const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Social media", hob:"Hobbies", crime:"Crime & the law"};
+const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Fame & social media", hob:"Hobbies", crime:"Crime & the law"};
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
@@ -5900,6 +6103,7 @@ function mePanelHtml(){
   if(state.inheritedTotal) facts.push("Inherited " + fmt(state.inheritedTotal));
   if(k.record.length) facts.push(k.record.filter(x => !x.expunged).length + " conviction" + (k.record.length > 1 ? "s" : "") + " on record");
   if(k.earned) facts.push("Made " + fmt(k.earned) + " from crime");
+  if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
   return h;
@@ -6247,7 +6451,7 @@ function renderPanel(){
       h += bankRow('Deep in debt', 'Bankruptcy discharges unsecured debt but wrecks your credit for years.', `<button onclick="fileBankruptcy()">File for Bankruptcy</button>`);
     }
   } else if(state.panel === 'media'){
-    h += mediaPanelHtml();
+    h += famePanelHtml() + '<div class="plabel">Social media</div>' + mediaPanelHtml();
   } else if(state.panel === 'biz'){
     const b = state.business;
     if(a < 21){ h = '<div class="status">Too young to start a business. Come back at 21.</div>'; }
@@ -6582,7 +6786,7 @@ function die(cause){
     : a < 80 ? ['after a long illness','peacefully, after a good life']
     : ['peacefully, in their sleep','surrounded by family','after a remarkably long and full life'];
   state.obit = {title: `${state.name}'s record closes at ${state.age}${state.generation > 1 ? ' (generation ' + state.generation + ')' : ''}`,
-    text: `They passed ${pick(causes)}${a >= 90 ? ', having lived to a remarkable age' : ''}. Final net worth: ${fmt(netWorth())} (about ${fmt(netWorth() / state.econ.cumInflation)} in today's money). ${legacyText()} Health: ${state.stats.health}, Happiness: ${state.stats.happy}.`};
+    text: `They passed ${pick(causes)}${a >= 90 ? ', having lived to a remarkable age' : ''}.${state.fame.peak >= 50 ? ' Fans around the world mourn a ' + fameTier(state.fame.peak).toLowerCase() + (state.fame.awards.length ? ' with ' + state.fame.awards.length + ' major award' + (state.fame.awards.length > 1 ? 's' : '') : '') + '.' : ''} Final net worth: ${fmt(netWorth())} (about ${fmt(netWorth() / state.econ.cumInflation)} in today's money). ${legacyText()} Health: ${state.stats.health}, Happiness: ${state.stats.happy}.`};
   document.getElementById('choices').innerHTML = '';
   showGameOver();
   saveGame();
@@ -6601,7 +6805,7 @@ function render(){
   const partner = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse');
   const nw = netWorth(), pr = state.crime.prison;
   const bits = [pr ? '<span class="down">in prison</span>' : state.job ? state.job.title : state.retired ? 'retired' : ed.school || (ed.level === 'None' ? (state.age < 5 ? '' : 'no diploma') : ((ed.degrees || []).slice(-1)[0] || {}).degree || EDU_NAMES[ed.level]),
-                partner ? (partner.type === 'Spouse' ? 'married to ' : 'dating ') + partner.name : '', state.crime.wanted ? '<span class="down">wanted</span>' : ''].filter(Boolean);
+                partner ? (partner.type === 'Spouse' ? 'married to ' : 'dating ') + partner.name : '', state.fame.level >= 10 ? '★ ' + fameTier(state.fame.level).toLowerCase() : '', state.crime.wanted ? '<span class="down">wanted</span>' : ''].filter(Boolean);
   document.getElementById('tags').innerHTML =
     `<span class="money${state.money < 0 ? ' neg' : ''}">${fmt(state.money)}</span>${state.age >= 16 && Math.abs(nw - state.money) >= 1 ? `<span class="networth">net worth ${fmt(nw)}</span>` : ''}` +
     (bits.length ? `<div class="tagline">${bits.join(' · ')}</div>` : '');
