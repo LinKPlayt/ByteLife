@@ -63,6 +63,15 @@
 
   /* Setup screen */
   #setup{ text-align:center; }
+  .setup-group{ text-align:left; margin:0 0 16px; }
+  .setup-label{ font-size:12px; font-weight:800; color:var(--muted); margin-bottom:7px; letter-spacing:.02em; }
+  .setup-label span{ font-weight:500; margin-left:4px; }
+  .setup-row .sortbtn{ flex:1; padding:9px 6px; font-size:13px; }
+  .trait-grid{ display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+  .trait-btn{ background:var(--surface); border:1.5px solid var(--line); color:var(--ink); padding:9px 11px; border-radius:12px; text-align:left; font-size:13.5px; }
+  .trait-btn small{ display:block; font-size:11.5px; color:var(--muted); font-weight:500; margin-top:1px; }
+  .trait-btn.on{ border-color:var(--accent); background:var(--accent-soft); }
+  .trait-btn:disabled{ opacity:.45; }
   #setup p.lead{ color:var(--muted); font-size:15px; margin:4px 0 22px; line-height:1.5; }
   #nameInput{
     width:100%;
@@ -343,6 +352,8 @@
   <section id="setup">
     <p class="lead">Every entry starts blank. Name the subject of this record.</p>
     <input id="nameInput" type="text" placeholder="Their name" maxlength="24" onkeydown="if(event.key==='Enter')startLife()">
+    <div class="setup-group"><div class="setup-label">Gender</div><div class="sortrow setup-row" id="genderRow"></div></div>
+    <div class="setup-group"><div class="setup-label">Personality <span>pick up to two, or leave blank for a surprise</span></div><div class="trait-grid" id="traitGrid"></div></div>
     <button class="btn-primary" onclick="startLife()">Begin the record</button>
     <p class="audio-hint">Sound and music start when you begin.</p>
     <button class="audio-link" id="audioSetupBtn" onclick="toggleAllAudio()">Sound: on</button>
@@ -469,9 +480,28 @@ function freshState(name){
     housing:{idx:1, trend:0}, listings:[], listingSeq:0
   };
 }
+// ---- the setup screen: gender and personality ----
+const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
+  Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
+const setup = {gender:'random', traits:[]};
+function renderSetup(){
+  const g = document.getElementById('genderRow'), t = document.getElementById('traitGrid'); if(!g || !t) return;
+  g.innerHTML = [['female','Female'],['male','Male'],['nonbinary','Non-binary'],['random','Random']].map(([k, l]) => `<button class="sortbtn${setup.gender === k ? ' active' : ''}" onclick="setup.gender='${k}';renderSetup()">${l}</button>`).join('');
+  t.innerHTML = TRAITS.map(x => { const on = setup.traits.includes(x); return `<button class="trait-btn${on ? ' on' : ''}" ${!on && setup.traits.length >= 2 ? 'disabled' : ''} onclick="toggleSetupTrait('${x}')">${x}<small>${PLAYER_TRAIT_BLURB[x]}</small></button>`; }).join('');
+}
+function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
+const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
+const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
+function hairFor(gender){ return gender === 'female' ? pick([1, 2]) : gender === 'male' ? 0 : rint(0, 2); }
 function startLife(heir){
   const name = heir ? heir.kid.name : (document.getElementById('nameInput').value.trim() || 'Unnamed');
   state = freshState(name);
+  state.gender = heir ? (heir.kid.gender || rollGender()) : (setup.gender === 'random' ? rollGender() : setup.gender);
+  state.appearance.hairStyle = hairFor(state.gender);
+  if(!heir){
+    state.traits = setup.traits.length ? setup.traits.slice() : rollTraits();
+    state.traits.forEach(t => { const d = TRAIT_START[t]; if(d) for(const k in d) state.stats[k] = clamp(state.stats[k] + d[k]); });
+  }
   if(heir) state.ipos = (heir.old.ipos || []).slice();
   syncIpos();
   if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; }
@@ -484,7 +514,7 @@ function startLife(heir){
     const p = heir.pkg;
     pushEntry(state.age, `${name} steps into a new chapter at ${state.age}, carrying the family line forward as generation ${state.generation}.`, {});
     pushEntry(state.age, inheritText(name, p), {});
-  } else pushEntry(0, `${name} is born. The record begins.`, {});
+  } else pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}. The record begins.`, {});
   render();
   audioStartLife();
 }
@@ -814,6 +844,122 @@ const CHOICE_EVENTS = [
   [55,90,n=>`${n} is offered a spot in a retirement community.`,
     {label:'Move in', delta:{happy:5,health:3,money:-6000}},
     {label:'Stay at home', delta:{happy:2}}],
+  // ---- more choices across a life ----
+  [5,9,n=>`${n} finds a stray kitten shivering outside.`,
+    {label:'Beg to keep it', delta:{happy:6,money:-150}},
+    {label:'Take it to a shelter', delta:{happy:2,smarts:1}},null,1,
+    {label:'Leave it be', delta:{happy:-2}}],
+  [9,13,n=>`${n} is offered a part in the school play.`,
+    {label:'Go for the lead role', risk:0.6, win:{looks:2,happy:6}, lose:{happy:-4}, winText:'They steal the show.', loseText:'They freeze in front of the whole school.'},
+    {label:'Work backstage', delta:{smarts:2,happy:2}}],
+  [11,16,n=>`A friend offers ${n} the answers to tomorrow's test.`,
+    {label:'Use them', risk:0.7, win:{gpa:5,happy:1}, lose:{gpa:-10,happy:-5,family:-4}, winText:'Nobody ever finds out.', loseText:'The teacher catches it, and their parents are called in.'},
+    {label:'Study on their own', delta:{smarts:3,gpa:2}}],
+  [13,17,n=>`Someone offers ${n} a cigarette behind the school.`,
+    {label:'Try it', delta:{happy:2,health:-2}, effect:()=>{ if(Math.random() < 0.35){ state.health.habits.smoke = true; state.health.habits.smokeSince = state.age; } }},
+    {label:'Say no thanks', delta:{health:1}}],
+  [14,17,n=>`${n}'s friends plan to sneak into a sold-out concert.`,
+    {label:'Sneak in with them', risk:0.6, win:{happy:8,friends:5}, lose:{happy:-5,family:-6}, winText:'It is the night of their life.', loseText:'They get caught and grounded for a month.'},
+    {label:'Buy a ticket instead ($80)', delta:{money:-80,happy:4}},null,1,
+    {label:'Stay home', delta:{smarts:1,friends:-2}}],
+  [15,17,n=>`${n} is learning to drive.`,
+    {label:'Practice with a parent', delta:{family:5,smarts:1}},
+    {label:'Pay for lessons ($300)', delta:{money:-300,smarts:2}}],
+  [16,17,n=>`${n} is asked to prom.`,
+    {label:'Say yes', delta:{happy:6,money:-200}},
+    {label:'Go with a group of friends', delta:{happy:4,friends:4}},null,1,
+    {label:'Skip it', delta:{happy:-2}}],
+  [18,24,n=>`${n}'s friends want to road-trip to {c}.`,
+    {label:'Go ($900)', delta:{happy:8,money:-900,friends:5}},
+    {label:"Sit this one out", delta:{friends:-3,money:200}}],
+  [19,35,n=>`A friend asks ${n} to invest $5,000 in their startup.`,
+    {label:'Invest', risk:0.3, win:{money:20000,happy:8,friends:4}, lose:{money:-5000,happy:-4}, winText:'It takes off, and the stake is worth four times as much.', loseText:'The company folds within a year.'},
+    {label:'Pass', delta:{friends:-2}},'afford'],
+  [20,35,n=>`${n}'s roommate keeps leaving the kitchen a disaster.`,
+    {label:'Have it out with them', risk:0.6, win:{happy:3}, lose:{happy:-3,friends:-3}, winText:'Things actually improve.', loseText:'It turns into a cold war.'},
+    {label:'Just clean it yourself', delta:{happy:-2}},'renter',1,
+    {label:'Find a new place ($1,000)', delta:{money:-1000,happy:4}}],
+  [21,40,n=>`${n} is offered a job in {c}, far from family.`,
+    {label:'Take it and move', delta:{happy:4,family:-8,money:3000}},
+    {label:'Stay close to home', delta:{family:4}},'job'],
+  [22,45,n=>`A crypto influencer swears a brand-new coin will make ${n} rich.`,
+    {label:'Put in $2,000', risk:0.2, win:{money:14000,happy:6}, lose:{money:-2000,happy:-3}, winText:'It rockets, and they cash out in time.', loseText:'The coin turns out to be a rug pull.'},
+    {label:'Ignore the hype', delta:{smarts:1}}],
+  [22,65,n=>`${n} witnesses a car accident on the way home.`,
+    {label:'Stop and help', delta:{happy:5,health:-1}},
+    {label:'Call it in and keep driving', delta:{happy:-1}}],
+  [24,50,n=>`${n} is invited to a destination wedding in {c}.`,
+    {label:'Go ($1,500)', delta:{money:-1500,happy:6,friends:6}},
+    {label:'Send a nice gift ($200)', delta:{money:-200,friends:1}},null,1,
+    {label:'Skip it', delta:{friends:-5}}],
+  [24,55,n=>`${n}'s boss asks them to take the blame for a coworker's mistake.`,
+    {label:'Take the hit for the team', delta:{happy:-3}, effect:()=>{ state.boost = true; }},
+    {label:'Refuse', risk:0.7, win:{happy:3}, lose:{happy:-4}, winText:'The boss backs down.', loseText:'The boss makes their life miserable for months.'},'job'],
+  [25,60,n=>`${n} gets a call: they've won a free cruise, they just have to pay the port fees.`,
+    {label:'Pay the $400 fees', risk:0.08, win:{happy:9}, lose:{money:-400,happy:-3}, winText:'Unbelievably, it is real.', loseText:'It is a scam, of course.'},
+    {label:'Hang up', delta:{smarts:1}}],
+  [26,60,n=>`A storm knocks a neighbor's tree onto ${n}'s fence.`,
+    {label:'Split the cost with them', delta:{money:-600,happy:1}},
+    {label:'Insist they pay', risk:0.6, win:{happy:2}, lose:{money:-1200,happy:-3}, winText:'They pay up without a fuss.', loseText:'They refuse, and it ends up costing more.'},'home'],
+  [28,60,n=>`A cousin asks ${n} to cosign a loan.`,
+    {label:'Cosign it', risk:0.6, win:{family:6,happy:2}, lose:{money:-8000,credit:-40,family:-6}, winText:'They pay it off on time.', loseText:'They default, and the bank comes after the cosigner.'},
+    {label:'Politely refuse', delta:{family:-3}}],
+  [30,70,n=>`${n} finds a lump and is nervous about seeing a doctor.`,
+    {label:'Get it checked ($200)', delta:{money:-200}, effect:()=>{ checkup(false); }},
+    {label:'Wait and see', delta:{happy:-2}}],
+  [28,60,n=>`A recruiter offers ${n} a role at a rival firm for 20% more pay.`,
+    {label:'Take the offer', delta:{happy:5}, effect:()=>{ if(state.job){ convertCoworkersToFriends(); state.job.salary = Math.round(state.job.salary * 1.2 / 100) * 100; state.job.years = 0; } }},
+    {label:'Stay loyal', delta:{happy:1}},'job'],
+  [35,65,n=>`${n}'s teenager wants a car.`,
+    {label:'Buy a used one ($8,000)', delta:{money:-8000,family:8}},
+    {label:'Make them earn it', delta:{family:-2,smarts:1}},'kids'],
+  [35,70,n=>`${n} is asked to run for the local school board.`,
+    {label:'Run for it', risk:0.5, win:{happy:6,smarts:2}, lose:{happy:-3}, winText:'They win a seat.', loseText:'They lose by a handful of votes.'},
+    {label:'Decline', delta:{}}],
+  [35,70,n=>`An old flame reaches out to ${n} online.`,
+    {label:'Meet up for coffee', risk:0.5, win:{happy:5}, lose:{partner:-15,happy:-4}, winText:'It is just a warm catch-up.', loseText:'Their partner finds out and is hurt.'},
+    {label:'Leave it in the past', delta:{partner:3}},'partnered'],
+  [40,75,n=>`${n} is offered a timeshare at a beach resort.`,
+    {label:'Buy in ($12,000)', delta:{money:-12000,happy:4}},
+    {label:'Walk away', delta:{smarts:1}},'afford'],
+  [50,80,n=>`${n}'s doctor recommends a screening test.`,
+    {label:'Book it ($500)', delta:{money:-500}, effect:()=>{ checkup(false); }},
+    {label:'Put it off', delta:{happy:1}}],
+  [50,80,n=>`${n}'s adult child wants to move back home.`,
+    {label:'Welcome them back', delta:{family:10,money:-3000,happy:-1}},
+    {label:'Help them find a place ($2,000)', delta:{family:4,money:-2000}},'kids',1,
+    {label:'Say no', delta:{family:-10}}],
+  [60,90,n=>`${n} is invited on a cruise with old friends.`,
+    {label:'Go ($4,000)', delta:{money:-4000,happy:9,friends:6}},
+    {label:'Stay home', delta:{}},'afford'],
+  [62,95,n=>`A grandchild asks ${n} to teach them the family recipe.`,
+    {label:'Spend the day cooking together', delta:{happy:6,family:5}},
+    {label:'Write it down for them', delta:{family:2}},'grandkids'],
+  [65,95,n=>`A small publisher asks ${n} to write their memoirs.`,
+    {label:'Write them', risk:0.35, win:{money:15000,happy:8}, lose:{happy:3}, winText:'The book sells surprisingly well.', loseText:'It sells a few copies, but the family treasures it.'},
+    {label:'Decline', delta:{}}],
+  [60,95,n=>`Someone calls ${n} claiming to be from the bank and asks for their account details.`,
+    {label:'Hang up and call the bank', delta:{smarts:1}},
+    {label:'Give them the details', risk:0, win:{}, lose:{money:-5000,happy:-6}, winText:'', loseText:'It was a scam, and the account is drained.'}],
+  // ---- shaped by personality ----
+  [18,60,n=>`A mentor notices ${n}'s drive and offers extra responsibility.`,
+    {label:'Take on the extra projects', delta:{smarts:2,happy:-1}, effect:()=>{ state.boost = true; }},
+    {label:'Keep a healthy balance', delta:{happy:2}},'ambitious&job',2],
+  [14,65,n=>`${n} is talked into doing stand-up at an open mic.`,
+    {label:'Get up there', risk:0.7, win:{happy:8,looks:1,fans:5}, lose:{happy:-4}, winText:'The room is in stitches.', loseText:'Total silence. Not a single laugh.'},
+    {label:'Heckle from the back', delta:{happy:2}},'funny',2],
+  [18,70,n=>`${n} gets the itch to go somewhere completely off the map.`,
+    {label:'Backpack through {c} ($2,500)', delta:{money:-2500,happy:10,health:2}},
+    {label:'Stay put this year', delta:{happy:-2}},'adventurous&afford',2],
+  [16,85,n=>`A stranger's story about hard times moves ${n}.`,
+    {label:'Give generously ($500)', delta:{money:-500,happy:5}},
+    {label:'Offer kind words', delta:{happy:1}},'generous',2],
+  [20,80,n=>`A friend asks ${n} for advice on a big life decision.`,
+    {label:'Share some hard-won wisdom', delta:{happy:4,friends:6}},
+    {label:'Tell them to trust their gut', delta:{friends:2}},'wise&friends',2],
+  [18,80,n=>`${n} wakes up in a dark mood that won't lift.`,
+    {label:'Talk to someone about it', delta:{happy:4}},
+    {label:'Push through alone', delta:{happy:-3}},'moody',2],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
@@ -846,6 +992,11 @@ const COND = {
   retired:()=>!!state.retired,
   healthy:()=>state.stats.health >= 70, unwell:()=>state.stats.health <= 40,
   lonely:()=>state.stats.happy <= 35, thriving:()=>state.stats.happy >= 75,
+  smoker:()=>!!(state.health && state.health.habits.smoke), drinker:()=>!!(state.health && state.health.habits.drink),
+  record:()=>!!(state.crime && state.crime.record.some(x => !x.expunged && !x.juvenile)), grad:()=>EDU_RANK[state.edu.level] >= 3,
+  partnered:()=>hasRel('Partner','Spouse'),
+  ambitious:()=>hasMyTrait('Ambitious'), funny:()=>hasMyTrait('Funny'), adventurous:()=>hasMyTrait('Adventurous'), generous:()=>hasMyTrait('Generous'),
+  wise:()=>hasMyTrait('Wise'), loyal:()=>hasMyTrait('Loyal'), moody:()=>hasMyTrait('Moody'), flaky:()=>hasMyTrait('Flaky'),
 };
 // a condition can combine several with "&", e.g. "retired&afford"
 const ok = c => !c || c.split('&').every(k => COND[k] && COND[k]());
@@ -1196,6 +1347,51 @@ const BANK = [
   E(60,110,"{n} takes a long, slow vacation on the pension",[["and returns relaxed",{happy:8,health:2,money:-1800}]],"retired&afford"),
   E(60,110,"{n} budgets carefully on a fixed income",[["and keeps everything comfortably in order",{smarts:2,happy:2}],["and has to skip a few small luxuries",{happy:-3}]],"retired"),
   E(55,110,"{n} and their spouse celebrate a golden anniversary",[["and renew their vows in the garden",{partner:9,happy:11,family:4}]],"spouse",0.5),
+  // more everyday moments
+  E(4,8,'{n} loses a first tooth',[['and finds a coin under the pillow',{happy:3}],['and swallows it by accident',{happy:-1}]]),
+  E(6,11,'{n} enters the school science fair',[['and wins a blue ribbon',{smarts:4,happy:4}],['and the volcano never erupts',{smarts:1,happy:-2}]]),
+  E(6,10,'{n} learns to ride a bike',[['and races around the block',{happy:5,health:2}],['and has the scraped knees to prove it',{health:-2,happy:1}]]),
+  E(8,13,"{n} breaks a neighbor's window with a ball",[['and owns up to it right away',{smarts:2,family:2}],['and hides behind the shed',{happy:-2,family:-3}]]),
+  E(12,16,'{n} gets their first phone',[['and is never seen without it',{happy:4,smarts:-1}],['and uses it to teach themselves to code',{smarts:3}]]),
+  E(13,17,'{n} has a first crush',[['and it is returned',{happy:6}],['and it goes absolutely nowhere',{happy:-3}]]),
+  E(16,17,'{n} passes the driving test',[['on the first try',{happy:5}],['on the third try',{happy:2}]]),
+  E(14,17,'{n} makes the honor roll',[['and the family is beaming',{happy:4,family:3,gpa:2}]],'school'),
+  E(18,25,'{n} learns to cook a real meal',[['and it becomes a weekly tradition',{health:2,happy:3}],['and sets off the smoke alarm',{happy:1}]]),
+  E(18,30,'{n} gets food poisoning from a sketchy food truck',[['and swears off it forever',{health:-4,happy:-2}]]),
+  E(18,30,'{n} pulls an all-nighter before finals',[['and aces the exam',{gpa:4,health:-2}],['and sleeps straight through the exam',{gpa:-6,happy:-4}]],'college'),
+  E(18,30,'{n} joins a campus singing group',[['and makes lifelong friends',{happy:5,friends:5}]],'college'),
+  E(20,35,'{n} goes viral for a silly video',[['and gains a wave of followers',{fans:15,happy:5}],['and becomes a meme for all the wrong reasons',{happy:-3}]],'social'),
+  E(20,50,'{n} gets a parking ticket',[['and pays it grudgingly',{money:-80}],['and fights it and wins',{smarts:1,happy:2}]],'car'),
+  E(21,60,'{n} gets a surprise tax refund',[['and puts it straight into savings',{money:1200,happy:2}]],'job'),
+  E(21,65,'{n} gets audited',[['and the paperwork checks out',{happy:-2}],['and owes back taxes',{money:-2500,happy:-4}]],'job'),
+  E(22,50,'{n} adopts a dog named {pet}',[['who becomes a best friend',{happy:8,health:2,money:-600}],['who chews through every shoe in the house',{happy:3,money:-900}]]),
+  E(22,60,'{n} is stuck in a two-hour traffic jam',[['and misses an important meeting',{happy:-2}],['and discovers a great podcast',{smarts:1,happy:1}]],'car'),
+  E(23,55,'{n} gets a raise without even asking',[['and celebrates quietly',{money:2000,happy:4}]],'job'),
+  E(24,50,"{n} is in {f}'s wedding party",[['and gives a toast that brings the house down',{friends:6,happy:5,money:-400}]]),
+  E(25,60,"{n}'s identity is stolen",[['but they catch it quickly',{happy:-2,credit:-10}],['and it takes months to clean up',{happy:-5,credit:-40,money:-800}]]),
+  E(25,55,'{n} runs a half marathon',[['and crosses the finish line beaming',{health:6,happy:6}],['and limps across the line',{health:2,happy:2}]],'healthy'),
+  E(26,60,"{n}'s basement floods in a storm",[['but insurance covers most of it',{happy:-2,money:-500}],['and the repairs are expensive',{money:-3500,happy:-4}]],'home'),
+  E(28,60,'{n} finds a forgotten investment account',[['with a pleasant balance inside',{money:2500,happy:5}]],null,0.4),
+  E(28,65,'{n} is asked to join the board of a local charity',[['and finds it deeply rewarding',{happy:5,smarts:2}]],'job'),
+  E(30,65,'{n} hits a deer on a dark country road',[['but nobody is hurt',{money:-1500,happy:-3}],['and spends a night in the hospital',{health:-6,money:-2000,happy:-4}]],'car'),
+  E(30,60,"{n}'s kids put on a talent show",[['and it is gloriously chaotic',{happy:6,family:4}]],'kids'),
+  E(30,75,'{n} gets a call from an old school friend',[['and they pick up like no time has passed',{happy:5,friends:4}]]),
+  E(35,65,"{n} is roped into coaching a kids' sports team",[['and loves every minute',{happy:6,health:2}],['and the parents are a nightmare',{happy:-2}]],'kids'),
+  E(35,75,'{n} wins a raffle at a charity dinner',[['and takes home a weekend getaway',{happy:6}]],null,0.6),
+  E(40,75,"{n}'s property taxes go up",[['and the bill stings',{money:-1200,happy:-2}]],'home'),
+  E(40,80,'{n} plants a vegetable garden',[['and it overflows with tomatoes',{happy:5,health:2}],['and the rabbits eat everything',{happy:-1}]],'home'),
+  E(50,85,'{n} is honored for years of community service',[['at a small, heartfelt ceremony',{happy:7}]],null,0.5),
+  E(55,90,'{n} takes a pottery class',[['and makes a lopsided but beloved vase',{happy:5}]]),
+  E(60,95,'{n} gets a smartphone lesson from a grandchild',[['and finally masters video calls',{happy:5,smarts:1,family:3}]],'grandkids'),
+  E(65,100,'{n} reconnects with a long-lost cousin',[['and they swap family stories for hours',{happy:6,family:3}]]),
+  E(70,105,'{n} takes a fall at home',[['but recovers well',{health:-5,happy:-2}],['and needs months of rehab',{health:-10,happy:-5,money:-2000}]]),
+  E(18,80,'{n} goes a whole month without a cigarette',[['and feels better than they have in years',{health:3,happy:3}]],'smoker'),
+  E(18,80,'{n} wakes up with a brutal hangover',[['and swears never again',{health:-2,happy:-2}]],'drinker'),
+  E(18,75,'{n} is turned down for an apartment after a background check',[['and has to keep looking',{happy:-4}]],'record'),
+  E(25,85,'{n} is invited to an exclusive gala',[["and rubs shoulders with the city's elite",{happy:6,looks:1,money:-1000}]],'rich'),
+  E(25,85,"{n}'s tenant leaves a heartfelt thank-you note",[['which makes being a landlord feel worth it',{happy:4}]],'landlord'),
+  E(25,80,"{n}'s business is featured in the local paper",[['and new customers pour in',{biz:8,happy:5}]],'biz'),
+  E(22,70,'{n} is invited to speak at their old school',[['and inspires a room full of students',{happy:6,smarts:1}]],'grad'),
 ];
 
 // more two-option decisions
@@ -1413,6 +1609,8 @@ function ageUpYear(){
   document.getElementById('choices').innerHTML = '';
   state.lastDone = state.done || {};
   state.done = {};
+  if(hasMyTrait('Moody')) applyDelta({happy: rint(-5, 5)});
+  if(hasMyTrait('Flaky') && state.edu.school) state.edu.gpa = clamp(state.edu.gpa - 2);
   updateEconomy(a);
   trustYear(a);
   crimeYear(a);
@@ -1474,13 +1672,18 @@ function presentCustom(promptText, opts){
   });
 }
 
+// a choice can have a third option, a gamble (risk = chance it works out) and a side effect
 function presentChoice(ev){
-  const [,, promptFn, optA, optB] = ev;
-  const promptText = promptFn(state.name);
-  presentCustom(promptText, [optA, optB].map(o => ({
-    label: scaleLabel(o.label),
-    run:()=>pushEntry(state.age, `${promptText} — ${state.name} chose: ${scaleLabel(o.label).toLowerCase()}.`, scaleMoneyDelta(o.delta))
-  })));
+  const promptText = fill(ev[2](state.name)), opts = [ev[3], ev[4]].concat(ev[7] ? [ev[7]] : []);
+  presentCustom(promptText, opts.map(o => { const label = fill(scaleLabel(o.label)); return {
+    label,
+    run:()=>{
+      let d = o.delta || {}, extra = '';
+      if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); }
+      if(o.effect) o.effect();
+      pushEntry(state.age, `${promptText} — ${state.name} chose: ${label.charAt(0).toLowerCase() + label.slice(1)}.${extra}`, scaleMoneyDelta(d));
+    }
+  }; }));
 }
 
 const fmt = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
@@ -1530,8 +1733,8 @@ const CAREERS = {
     {title:'Paper Route Carrier', minAge:14, edu:'None', minSmarts:0, salary:1800, hours:8, stress:10, promo:0.2},
   ],
   Retail: [
-    {title:'Cashier', minAge:16, edu:'None', minSmarts:0, salary:19000, hours:30, stress:20, promo:0.2},
-    {title:'Shift Lead', minAge:18, edu:'None', minSmarts:20, salary:26000, hours:35, stress:28, promo:0.16},
+    {title:'Cashier', minAge:16, edu:'None', minSmarts:0, salary:24000, hours:30, stress:20, promo:0.2},
+    {title:'Shift Lead', minAge:18, edu:'None', minSmarts:20, salary:30000, hours:35, stress:28, promo:0.16},
     {title:'Assistant Manager', minAge:21, edu:'High School', minSmarts:35, salary:38000, hours:42, stress:40, promo:0.12},
     {title:'Store Manager', minAge:25, edu:'High School', minSmarts:45, salary:55000, hours:48, stress:52, promo:0.09},
     {title:'Regional Manager', minAge:30, edu:'High School', minSmarts:55, salary:85000, hours:50, stress:62, promo:0.06},
@@ -1627,7 +1830,7 @@ const CAREERS = {
     {title:'Research Director', minAge:44, edu:'Master', minSmarts:88, salary:210000, hours:50, stress:62, promo:0},
   ],
   Culinary: [
-    {title:'Dishwasher', minAge:15, edu:'None', minSmarts:0, salary:20000, hours:35, stress:30, promo:0.25},
+    {title:'Dishwasher', minAge:15, edu:'None', minSmarts:0, salary:23000, hours:35, stress:30, promo:0.25},
     {title:'Line Cook', minAge:17, edu:'None', minSmarts:15, salary:28000, hours:45, stress:50, promo:0.16},
     {title:'Sous Chef', minAge:22, edu:'None', minSmarts:35, salary:45000, hours:55, stress:62, promo:0.12},
     {title:'Head Chef', minAge:26, edu:'None', minSmarts:45, salary:65000, hours:58, stress:68, promo:0.08},
@@ -2455,8 +2658,11 @@ function makeRel(type, o){
   const r = {id:relId(), name:freeName(), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
              closeness: o.closeness !== undefined ? o.closeness : 35, traits: o.traits || rollTraits(), origin: o.origin || ""};
   if(o.livingTogether) r.livingTogether = true;
+  r.gender = o.gender || (type === 'Mother' ? 'female' : type === 'Father' ? 'male' : rollGender());
   return r;
 }
+const REL_WORDS = {Child:['daughter','son'], Sibling:['sister','brother'], Spouse:['wife','husband'], Partner:['girlfriend','boyfriend'], Grandchild:['granddaughter','grandson']};
+function relLabel(r){ const w = REL_WORDS[r.type]; return w && r.gender === 'female' ? w[0] : w && r.gender === 'male' ? w[1] : r.type.toLowerCase(); }
 // avoid giving two people in the same family the same name
 function freeName(){
   const taken = [state.name].concat(state.relationships.map(x => x.name), state.relationships.filter(x => x.spouse).map(x => x.spouse.name));
@@ -2491,6 +2697,7 @@ function relationshipsYear(a, prompted){
     const isFamily = FAMILY_TYPES.includes(rel.type);
     let decay = isFamily ? rint(-2,2) : rint(-4,1);
     if(hasTrait(rel, "Loyal") && decay < 0) decay = Math.ceil(decay / 2);
+    if(hasMyTrait("Loyal") && decay < 0) decay = Math.ceil(decay * 0.6);
     if(hasTrait(rel, "Moody")) decay += rint(-2,2);
     bump(rel, decay);
     if(!isFamily && rel.closeness <= 0){
@@ -2614,6 +2821,9 @@ function interact(id, key){
     else { gain = -2; happy = -2; text = n + " reaches out to " + rn + ", but the hurt runs deeper than one apology."; }
   }
   if(!text) text = T(pick(ix.texts));
+  if(hasMyTrait('Funny')) gain = Math.round(gain * 1.15);
+  if(hasMyTrait('Generous') && ix.kind === 'gift'){ gain = Math.round(gain * 1.25); happy += 1; }
+  if(hasMyTrait('Adventurous') && ix.adv) happy += 2;
   bump(r, gain);
   if(happy) delta.happy = happy;
   if(smarts) delta.smarts = smarts;
@@ -3094,7 +3304,7 @@ function showHeirs(){
   p.kids.slice().sort((a, b) => (b.type === "Child") - (a.type === "Child") || b.age - a.age).forEach(k => {
     const c = heirCash(k, p), tr = (k.traits || []).map(t => t.toLowerCase()).join(" · ");
     const body = [tr].concat(lifeBits(k)).concat([bondLabel(k).toLowerCase() + " bond with you"]).filter(Boolean).join(" · ") + ". Inherits " + inheritParts(c) + ".";
-    h += bankRow(k.name + (k.type === "Grandchild" ? " (grandchild)" : "") + ", age " + k.age, body, '<button onclick="continueAs(\'' + k.id + '\')">Continue as ' + k.name + "</button>");
+    h += bankRow(k.name + " (" + relLabel(k) + "), age " + k.age, body, '<button onclick="continueAs(\'' + k.id + '\')">Continue as ' + k.name + "</button>");
   });
   box.innerHTML = h;
 }
@@ -3154,14 +3364,14 @@ function applyHeir(h){
   // the people around you
   const rels = [], copy = (type, src, o) => {
     const r = makeRel(type, Object.assign({age: src.age, traits: src.traits}, o)); r.name = src.name;
-    ["edu", "job", "spouse", "inCollege", "collegeEnd", "collegePaid", "movedOut"].forEach(k => { if(src[k] !== undefined) r[k] = src[k] && typeof src[k] === "object" ? Object.assign({}, src[k]) : src[k]; });
+    ["edu", "job", "spouse", "inCollege", "collegeEnd", "collegePaid", "movedOut", "gender", "baseSalary"].forEach(k => { if(src[k] !== undefined) r[k] = src[k] && typeof src[k] === "object" ? Object.assign({}, src[k]) : src[k]; });
     return r;
   };
   const oldRel = id => old.relationships.find(r => r.id === id);
   if(kid.type === "Child"){
     const co = (kid.coParent && oldRel(kid.coParent) && LOVE.includes(oldRel(kid.coParent).type)) ? oldRel(kid.coParent) : plan.spouse;
     if(co){
-      rels.push(copy(Math.random() < 0.5 ? "Mother" : "Father", co, {closeness: Math.max(30, Math.min(95, co.closeness - 5 + rint(-10, 10))), origin:"family", livingTogether: age < 18}));
+      rels.push(copy(co.gender === 'female' ? "Mother" : co.gender === 'male' ? "Father" : (Math.random() < 0.5 ? "Mother" : "Father"), co, {gender: co.gender, closeness: Math.max(30, Math.min(95, co.closeness - 5 + rint(-10, 10))), origin:"family", livingTogether: age < 18}));
       state.famEstate = co === plan.spouse ? Math.round(plan.spouseShare / cum) : rint(20000, 150000);   // what the surviving parent holds becomes a future inheritance
     }
     old.relationships.filter(r => r.type === "Child" && r.id !== kid.id).forEach(k => rels.push(copy("Sibling", k, {closeness: 50 + rint(-15, 20), origin:"family"})));
@@ -3231,7 +3441,7 @@ function relRow(r){
   }
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
   const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
-  return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b> <span class="tick">' + r.type.toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
+  return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b> <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
     '<div class="stat-track" style="margin:5px 0 2px;"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' +
     '<div class="btnrow-social">' + quick + '<button onclick="toggleRel(\'' + r.id + '\')">' + (open ? "Less" : "More") + "</button></div>" +
@@ -4058,7 +4268,7 @@ function payoffLoan(id){
 function loansYear(a){
   let missed = false;
   state.loans.slice().forEach(l => {
-    if(l.deferred) return;
+    if(l.deferred || (l.startAge && state.age < l.startAge)) return;
     const interest = l.balance * l.apr;
     const due = Math.min(l.yearlyPayment, l.balance + interest);
     if(ensureCash(due)){
@@ -4515,6 +4725,33 @@ function buyLottery(){
   }
   render();
 }
+const LIFESTYLES = {
+  frugal:{label:'Frugal', mult:0.7, rent:0.8, happy:-2, blurb:'cheap rent, cooking at home, few treats'},
+  comfortable:{label:'Comfortable', mult:1, rent:1, happy:0, blurb:'a normal life'},
+  lavish:{label:'Lavish', mult:1.9, rent:1.6, happy:3, blurb:'a nice place, eating out, the good stuff'},
+};
+function setLifestyle(k){ state.lifestyle = k; renderPanel(); }
+// a spouse brings in their own income after tax until they retire
+function spouseIncome(sp){
+  if(sp.age >= 65) return Math.round(inflR(14000, 100) * 0.92);
+  if(sp.baseSalary === undefined) sp.baseSalary = rint(15, 85) * 1000;
+  return Math.round(sp.baseSalary * state.econ.cumInflation * 0.78);
+}
+function livingEstimate(){
+  const cum = state.econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, sp = hasRel('Spouse');
+  const own = state.assets.some(x => x.category === 'Homes' && !x.rental), kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
+  return Math.round((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult));
+}
+// sell investments to cover a negative balance before debts get out of hand
+function coverWithInvestments(a){
+  let sold = 0;
+  for(const k in state.portfolio){
+    if(state.money >= 0) break;
+    const units = state.portfolio[k]; if(!(units > 0)) continue;
+    const before = state.money; execSell(k, units); sold += state.money - before;
+  }
+  if(sold > 0) pushEntry(a, `${state.name} sells ${fmt(sold)} of investments to cover bills.`, {happy:-2});
+}
 function yearlyFinances(a){
   const e = state.edu, econ = state.econ;
   let income = 0;
@@ -4551,17 +4788,43 @@ function yearlyFinances(a){
     state.movedOut = true;
     pushEntry(a, `${state.name} moves out on their own — rent and bills are now their responsibility.`, {});
   }
+  const cum = econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable;
+  const spouse = state.relationships.find(r => r.type === 'Spouse');
+  const kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
+  let kidCost = 0, studentShort = 0;
+  if(spouse && !jailed) income += spouseIncome(spouse);
   if(a >= 18 && independent && !jailed){
     const ownsHome = state.assets.some(x => x.category === 'Homes' && !x.rental);
-    if(!ownsHome) expenses += Math.round(10000 * econ.cumInflation);
-    if(state.insurance.health) expenses += Math.round(1200 * econ.cumInflation);
-    if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) expenses += Math.round(900 * econ.cumInflation);
-    if(state.insurance.home && ownsHome) expenses += Math.round(800 * econ.cumInflation);
-    expenses += Math.round(1800 * econ.cumInflation);
+    const student = (e.program || e.gradAge === a) && !spouse;
+    if(student){
+      expenses += Math.round(9000 * cum * L.mult);                         // dorms, meal plans, shared apartments
+    } else {
+      if(!ownsHome) expenses += Math.round(13000 * cum * L.rent * (spouse ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1));   // young singles share with roommates
+      expenses += Math.round(11000 * cum * L.mult * (spouse ? 1.6 : 1));   // food, transport, utilities and everything else
+    }
+    kidCost = Math.round(kids * 8000 * cum * Math.sqrt(L.mult));
+    expenses += kidCost;
+    if(state.insurance.health) expenses += Math.round(1200 * cum);
+    if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) expenses += Math.round(900 * cum);
+    if(state.insurance.home && ownsHome) expenses += Math.round(800 * cum);
+    if(L.happy) applyDelta({happy: L.happy});
   }
   if(a >= 65) expenses = Math.round(expenses * 0.85);                     // downsized, simpler living
-  const net = income - expenses;
-  if(net !== 0) pushEntry(a, net >= 0 ? 'A decent year financially — income covers the bills with some left over.' : 'Bills and living costs outpace income this year.', {money:net});
+  let net = income - expenses;
+  // students cover a shortfall with student loans instead of going broke
+  if((e.program || e.gradAge === a) && net < 0 && state.money + state.savings + net < 0){
+    studentShort = Math.round(-(state.money + state.savings + net));
+    let sl = state.loans.find(l => l.type === 'Student' && l.deferred);
+    if(!sl) sl = takeLoan('Student', 0, 10, Math.max(0.045, econ.rate - 0.005), {deferred:true});
+    sl.principal += studentShort; sl.balance += studentShort;
+    net += studentShort;
+  }
+  if(income || expenses){
+    const bits = [];
+    if(kidCost) bits.push(fmt(kidCost) + ' on the kids');
+    if(studentShort) bits.push(fmt(studentShort) + ' borrowed in student loans');
+    pushEntry(a, `${state.name} brings in ${fmt(income)} and spends ${fmt(expenses)} on living costs${bits.length ? ' (' + bits.join(', ') + ')' : ''}.`, {money:net});
+  }
   state.lastAutoSaved = 0; state.lastAutoInvested = 0;
   if(state.autoSave > 0 && net > 0 && state.money > 0){
     const amt = Math.min(state.money, Math.round(net * state.autoSave));
@@ -4573,7 +4836,26 @@ function yearlyFinances(a){
     if(amt >= 10 && execBuy('IDXF', amt)) state.lastAutoInvested = amt;
   }
   if(state.bankrupt && a >= state.bankruptUntilAge) state.bankrupt = false;
-  if(state.money <= -20000 && !state.bankrupt){
+  if(state.money < 0) coverWithInvestments(a);
+  if(net < 0 && !e.program && state.lifestyle !== 'frugal' && !state.tipFrugal && state.money < 0){
+    state.tipFrugal = true;
+    pushEntry(a, `Money is tight. Switching to a frugal lifestyle in the Bank tab would cut ${state.name}'s living costs by about a third.`, {});
+  }
+  // unpaid bills go to collections as a repayment plan; bankruptcy only when the debt truly outgrows income
+  if(state.money <= -3000 * econ.cumInflation && !state.bankrupt){
+    const owed = Math.round(-state.money);
+    const unsecured = owed + state.loans.filter(l => ['Personal','Collections','Business'].includes(l.type)).reduce((t, l) => t + l.balance, 0) + (state.creditCard ? state.creditCard.balance : 0);
+    const yearlyIncome = Math.max(income, 30000 * econ.cumInflation);
+    if(unsecured < yearlyIncome * 1.5){
+      state.money = 0;
+      const prev = state.loans.find(l => l.type === 'Collections');
+      if(prev){ prev.balance += owed; prev.principal += owed; prev.yearsLeft = 5; prev.yearlyPayment = Math.round(prev.balance * prev.apr / (1 - Math.pow(1 + prev.apr, -5))); }
+      else takeLoan('Collections', owed, 5, 0.16, {});
+      adjustCredit(-25);
+      pushEntry(a, `${state.name} falls behind on bills, and ${fmt(owed)} goes to collections on a five-year repayment plan.`, {happy:-4});
+    }
+  }
+  if(state.money <= -20000 * econ.cumInflation && !state.bankrupt){
     state.creditCard = null;
     state.loans = state.loans.filter(l => l.type === 'Mortgage' || l.type === 'Car' || l.type === 'Student');
     state.money = 0;
@@ -5244,6 +5526,7 @@ function graduate(a){
   const what = p.kind === 'trade' ? `${n} finishes ${p.name.toLowerCase()} with a certificate`
             : p.kind === 'grad' ? `${n} earns ${p.degree === 'MD' ? 'a medical degree' : p.degree === 'JD' ? 'a law degree' : p.degree === 'PhD' ? 'a PhD' : p.degree === 'MBA' ? 'an MBA' : "a Master's degree"}`
             : `${n} graduates from ${p.name} with ${p.award === 'Associate' ? 'an Associate degree' : "a Bachelor's in " + p.major}${honors ? ', ' + honors : ''}`;
+  e.gradAge = a;
   pushEntry(a, `${what} (GPA ${g}).`, {smarts: p.kind === 'grad' ? 4 : 3, happy:8});
 }
 // campus actions
@@ -5331,7 +5614,7 @@ function convertCoworkersToFriends(){
 // ---------- Retirement & pension ----------
 // Long lives need a plan for the later decades: retire from 60, auto-retire at 70, and a pension that tracks the cost of living.
 function pensionFor(){
-  const floor = 11000 * state.econ.cumInflation;                         // basic state pension, indexed to living costs
+  const floor = 16000 * state.econ.cumInflation;                         // basic state pension, indexed to living costs
   const earned = state.peakSalary * 0.40 * Math.min(1, state.workYears / 35);   // what a full career adds
   return Math.round(Math.max(floor, floor * 0.6 + earned) / 100) * 100;
 }
@@ -5378,7 +5661,7 @@ function workYear(a){
     if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
-  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03)){
+  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0)){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
@@ -5388,7 +5671,7 @@ function workYear(a){
   if(j.rank < track.length - 1){
     const next = track[j.rank + 1];
     const eligible = !rankGap(next, j.track);
-    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track)) * (state.econ.recession ? 0.5 : 1);
+    const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
       j.rank++; j.title = next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, j.rank));
@@ -5410,7 +5693,7 @@ const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities & hobbies
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
-  let h = '<div class="status"><b>' + state.name + "</b>, " + state.age + (state.generation > 1 ? " · generation " + state.generation : "") +
+  let h = '<div class="status"><b>' + state.name + "</b>, " + state.age + (state.gender && state.gender !== 'nonbinary' ? " · " + state.gender : state.gender ? " · non-binary" : "") + (state.generation > 1 ? " · generation " + state.generation : "") +
     (traits ? "<br>Personality: " + traits : "") +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
@@ -5444,6 +5727,7 @@ function doActivity(i){
     if(Math.random() < 0.85){ delta.looks = rint(8, 14); delta.happy = 5; text += ' and loves the result.'; }
     else { delta.looks = -rint(5, 10); delta.happy = -8; delta.health = -4; text += ', and it goes badly wrong.'; }
   } else if(x.cost){ delta.money = -actCost(x); }
+  if(x.key === 'vacation' && hasMyTrait('Adventurous')) delta.happy = (delta.happy || 0) + 4;
   if(x.key === 'volunteer' && Math.random() < 0.3 && state.relationships.length < 60){
     const f = newRel('Friend', {closeness: rint(30, 45), origin:'volunteering'}); text += ' One of them, ' + f.name + ', becomes a friend.';
   }
@@ -5518,7 +5802,7 @@ function study(){
   if(state.done.study) return;
   state.done.study = true;
   state.edu.gpa = clamp(state.edu.gpa + 6);
-  pushEntry(state.age, `${state.name} hits the books hard.`, {smarts:3,happy:-1});
+  pushEntry(state.age, `${state.name} hits the books hard.`, {smarts: hasMyTrait('Wise') ? 5 : 3, happy:-1});
   render();
 }
 function skipClass(){
@@ -5533,7 +5817,7 @@ function activateStudentLoan(){
   if(!sl) return;
   if(sl.balance > 0){
     const term = sl.balance > 100000 * state.econ.cumInflation ? 20 : 10;     // big balances get a longer repayment plan
-    sl.deferred = false; sl.term = term; sl.yearsLeft = term;
+    sl.deferred = false; sl.term = term; sl.yearsLeft = term; sl.startAge = state.age + 1;   // a year's grace after leaving school
     sl.yearlyPayment = Math.round(sl.balance * sl.apr / (1 - Math.pow(1+sl.apr, -term)));
   } else {
     state.loans = state.loans.filter(l => l.id !== sl.id);
@@ -5702,6 +5986,8 @@ function renderPanel(){
       Credit Score <b>${state.creditScore}</b> (${creditTier(state.creditScore)})${state.bankrupt ? ' · <span style="color:var(--red)">bankrupt</span>' : ''}<br>
       Interest Rate ${(econ.rate*100).toFixed(1)}% · Inflation ${(econ.inflation*100).toFixed(1)}%${econ.recession ? ' · <span style="color:var(--red)">Recession</span>' : ''}</div>`;
 
+    if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
+      Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
     h += trustHtml() + savingsPanelHtml();
     if(a >= 16) h += retirementHtml();
 
@@ -6113,6 +6399,7 @@ function render(){
 }
 
 audioWire();
+renderSetup();
 resumeGame();
 document.addEventListener("visibilitychange", () => { if(document.hidden) saveGame(); });
 window.addEventListener("pagehide", saveGame);
