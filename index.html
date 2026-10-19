@@ -290,6 +290,7 @@
   .panel-close{ width:32px; height:32px; border-radius:50%; background:var(--surface); border:1px solid var(--line); color:var(--muted); font-size:13px; padding:0; }
   .opt .tick{ font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--red); background:rgba(189,82,79,0.09); padding:1px 5px; border-radius:5px; margin-left:4px; vertical-align:1px; }
   .opt > span:first-child{ text-align:left; }
+  .sub-meta{ display:block; font-size:11.5px; color:var(--muted); font-weight:500; margin-top:2px; }
   /* decisions */
   .decision{ background:var(--surface); border:1.5px solid var(--gold); border-radius:14px; padding:13px 15px; font-size:15px; line-height:1.5; box-shadow:0 3px 12px rgba(185,132,44,0.12); }
   .decision-label{ font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--gold); margin-bottom:4px; }
@@ -396,7 +397,7 @@
         <button class="tab-btn" data-panel="ast" onclick="togglePanel('ast')"><span class="ti" aria-hidden="true">🏠</span>Assets</button>
         <button class="tab-btn" data-panel="biz" onclick="togglePanel('biz')"><span class="ti" aria-hidden="true">🏢</span>Business</button>
         <button class="tab-btn" data-panel="media" onclick="togglePanel('media')"><span class="ti" aria-hidden="true">📱</span>Media</button>
-        <button class="tab-btn" data-panel="hob" onclick="togglePanel('hob')"><span class="ti" aria-hidden="true">🎨</span>Hobbies</button>
+        <button class="tab-btn" data-panel="health" onclick="togglePanel('health')"><span class="ti" aria-hidden="true">🩺</span>Health</button>
         <button class="tab-btn" data-panel="crime" onclick="togglePanel('crime')"><span class="ti" aria-hidden="true">⚖️</span>Crime</button>
       </div>
     </div>
@@ -463,7 +464,8 @@ function freshState(name){
     estates:[], estateSeq:0, will:'family', trust:false, famEstate:0, inheritedTotal:0, evTarget:null, openRel:null, socMenu:null,
     generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null,
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
-    crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null}
+    crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
+    health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}}
   };
 }
 function startLife(heir){
@@ -520,6 +522,7 @@ function resumeGame(){
   if(!saved || typeof saved.name !== "string" || !saved.stats || !Array.isArray(saved.relationships)) return false;
   try{
     state = upgradeSave(saved);
+    if(state.panel === 'hob') state.panel = 'act';
     syncIpos();
     document.getElementById('nameTag').textContent = state.name + (state.generation > 1 ? ' · generation ' + state.generation : '');
     if(state.alive){
@@ -1397,20 +1400,23 @@ function ageUpYear(){
   const a = state.age;
 
   // death chance: negligible through childhood, then a realistic curve that rises with age and falls with good health
-  if(Math.random() < mortalityChance(a, state.stats.health)){
-    die();
+  const fatal = deathRoll(a);
+  if(fatal){
+    die(fatal);
     return;
   }
 
   // slow, uneven physical aging
   if(a > 55 && Math.random() < (a > 75 ? 0.9 : 0.55)) applyDelta({health: -1});
   document.getElementById('choices').innerHTML = '';
+  state.lastDone = state.done || {};
   state.done = {};
   updateEconomy(a);
   trustYear(a);
   crimeYear(a);
   if(state.crime.prison){ prisonYear(a); render(); return; }
-  const prompted = schoolYear(a);
+  const schoolPrompted = schoolYear(a);
+  const prompted = healthYear(a, !schoolPrompted) || schoolPrompted;
   yearlyFinances(a);
   workYear(a);
   loansYear(a);
@@ -1474,6 +1480,29 @@ function presentChoice(ev){
 
 const fmt = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
 const EDU_RANK = {'None':0, 'High School':1, 'Bachelor':2, 'Master':3};
+// extra rules for some tracks: clean records, danger on the job, short careers, elections
+const TRACK_INFO = {
+  Military:{risk:0.04, blurb:'Deployments, danger and a steady climb'},
+  'Law Enforcement':{clean:true, risk:0.03, blurb:'Needs a spotless record'},
+  Firefighting:{risk:0.04, blurb:'Dangerous and heroic'},
+  Finance:{clean:true, blurb:'Long hours, huge pay'},
+  Science:{blurb:'Needs a Master\'s to go far'},
+  Politics:{clean:true, elect:true, star:true, blurb:'Win elections to move up'},
+  Acting:{star:true, blurb:'Looks and luck; most never make it'},
+  Music:{star:true, blurb:'A long shot with a huge payoff'},
+  Sports:{star:true, maxAge:38, risk:0.05, blurb:'Over by your late thirties'},
+};
+// whether you meet one rung of a career ladder; returns the first thing missing, or ''
+function rankGap(rank){
+  const s = state.stats;
+  if(state.age < rank.minAge) return 'age ' + rank.minAge;
+  if(EDU_RANK[state.edu.level] < EDU_RANK[rank.edu]) return rank.edu === 'Master' ? "a Master's" : rank.edu;
+  if(s.smarts < rank.minSmarts) return rank.minSmarts + ' smarts';
+  if(rank.minLooks && s.looks < rank.minLooks) return rank.minLooks + ' looks';
+  if(rank.minHealth && s.health < rank.minHealth) return rank.minHealth + ' health';
+  if(rank.hobby && hobbyLevel(rank.hobby) < rank.hobbyLvl) return HOBBY_LIST.find(x => x.key === rank.hobby).name.toLowerCase() + ' level ' + rank.hobbyLvl;
+  return '';
+}
 
 // [title, minAge, education required, min smarts, salary/yr]
 // Each career is a ladder of ranks: {title, minAge, edu, minSmarts, salary, hours, stress, promo}
@@ -1540,6 +1569,95 @@ const CAREERS = {
     {title:'Partner', minAge:40, edu:'Bachelor', minSmarts:85, salary:310000, hours:58, stress:82, promo:0.04},
     {title:'Managing Partner', minAge:46, edu:'Bachelor', minSmarts:88, salary:450000, hours:58, stress:85, promo:0},
   ],
+  Military: [
+    {title:'Private', minAge:18, edu:'High School', minSmarts:20, minHealth:55, salary:32000, hours:50, stress:55, promo:0.2},
+    {title:'Corporal', minAge:20, edu:'High School', minSmarts:30, minHealth:55, salary:40000, hours:50, stress:58, promo:0.16},
+    {title:'Sergeant', minAge:23, edu:'High School', minSmarts:40, minHealth:50, salary:52000, hours:52, stress:60, promo:0.12},
+    {title:'Lieutenant', minAge:24, edu:'Bachelor', minSmarts:55, minHealth:50, salary:68000, hours:55, stress:62, promo:0.1},
+    {title:'Captain', minAge:28, edu:'Bachelor', minSmarts:62, salary:88000, hours:55, stress:65, promo:0.08},
+    {title:'Colonel', minAge:36, edu:'Bachelor', minSmarts:70, salary:125000, hours:55, stress:70, promo:0.05},
+    {title:'General', minAge:45, edu:'Bachelor', minSmarts:78, salary:190000, hours:58, stress:78, promo:0},
+  ],
+  'Law Enforcement': [
+    {title:'Police Cadet', minAge:18, edu:'High School', minSmarts:30, minHealth:50, salary:38000, hours:45, stress:45, promo:0.25},
+    {title:'Police Officer', minAge:20, edu:'High School', minSmarts:35, minHealth:50, salary:55000, hours:48, stress:58, promo:0.12},
+    {title:'Detective', minAge:26, edu:'High School', minSmarts:55, salary:75000, hours:50, stress:65, promo:0.1},
+    {title:'Police Sergeant', minAge:30, edu:'High School', minSmarts:58, salary:88000, hours:50, stress:66, promo:0.08},
+    {title:'Police Lieutenant', minAge:35, edu:'Bachelor', minSmarts:65, salary:105000, hours:52, stress:68, promo:0.06},
+    {title:'Police Chief', minAge:42, edu:'Bachelor', minSmarts:72, salary:150000, hours:55, stress:75, promo:0},
+  ],
+  Firefighting: [
+    {title:'Probationary Firefighter', minAge:18, edu:'High School', minSmarts:25, minHealth:60, salary:36000, hours:48, stress:50, promo:0.25},
+    {title:'Firefighter', minAge:20, edu:'High School', minSmarts:30, minHealth:55, salary:52000, hours:48, stress:55, promo:0.13},
+    {title:'Fire Engineer', minAge:25, edu:'High School', minSmarts:45, minHealth:50, salary:64000, hours:48, stress:55, promo:0.1},
+    {title:'Fire Lieutenant', minAge:30, edu:'High School', minSmarts:55, salary:78000, hours:50, stress:60, promo:0.08},
+    {title:'Fire Captain', minAge:35, edu:'High School', minSmarts:60, salary:92000, hours:50, stress:62, promo:0.06},
+    {title:'Fire Chief', minAge:42, edu:'Bachelor', minSmarts:68, salary:130000, hours:52, stress:68, promo:0},
+  ],
+  Finance: [
+    {title:'Bank Teller', minAge:18, edu:'High School', minSmarts:30, salary:31000, hours:40, stress:30, promo:0.18},
+    {title:'Financial Analyst', minAge:22, edu:'Bachelor', minSmarts:62, salary:78000, hours:55, stress:60, promo:0.12},
+    {title:'Associate', minAge:25, edu:'Bachelor', minSmarts:70, salary:120000, hours:60, stress:70, promo:0.1},
+    {title:'Vice President', minAge:30, edu:'Bachelor', minSmarts:76, salary:190000, hours:60, stress:75, promo:0.07},
+    {title:'Managing Director', minAge:36, edu:'Bachelor', minSmarts:82, salary:350000, hours:62, stress:82, promo:0.04},
+    {title:'Partner', minAge:44, edu:'Bachelor', minSmarts:88, salary:650000, hours:60, stress:85, promo:0},
+  ],
+  Science: [
+    {title:'Lab Technician', minAge:18, edu:'High School', minSmarts:45, salary:36000, hours:40, stress:30, promo:0.15},
+    {title:'Research Assistant', minAge:22, edu:'Bachelor', minSmarts:60, salary:50000, hours:45, stress:40, promo:0.12},
+    {title:'Scientist', minAge:25, edu:'Master', minSmarts:72, salary:88000, hours:45, stress:45, promo:0.1},
+    {title:'Senior Scientist', minAge:30, edu:'Master', minSmarts:78, salary:115000, hours:48, stress:50, promo:0.08},
+    {title:'Principal Investigator', minAge:36, edu:'Master', minSmarts:84, salary:150000, hours:50, stress:58, promo:0.05},
+    {title:'Research Director', minAge:44, edu:'Master', minSmarts:88, salary:210000, hours:50, stress:62, promo:0},
+  ],
+  Culinary: [
+    {title:'Dishwasher', minAge:15, edu:'None', minSmarts:0, salary:20000, hours:35, stress:30, promo:0.25},
+    {title:'Line Cook', minAge:17, edu:'None', minSmarts:15, salary:28000, hours:45, stress:50, promo:0.16},
+    {title:'Sous Chef', minAge:22, edu:'None', minSmarts:35, salary:45000, hours:55, stress:62, promo:0.12},
+    {title:'Head Chef', minAge:26, edu:'None', minSmarts:45, salary:65000, hours:58, stress:68, promo:0.08},
+    {title:'Executive Chef', minAge:32, edu:'None', minSmarts:55, salary:95000, hours:58, stress:70, promo:0.05},
+    {title:'Celebrity Chef', minAge:36, edu:'None', minSmarts:60, minLooks:55, salary:240000, hours:50, stress:60, promo:0},
+  ],
+  Aviation: [
+    {title:'Ramp Agent', minAge:18, edu:'High School', minSmarts:20, salary:30000, hours:40, stress:35, promo:0.18},
+    {title:'Flight Attendant', minAge:19, edu:'High School', minSmarts:30, minLooks:45, salary:42000, hours:40, stress:40, promo:0.12},
+    {title:'First Officer', minAge:23, edu:'Bachelor', minSmarts:65, minHealth:60, salary:90000, hours:45, stress:55, promo:0.1},
+    {title:'Airline Captain', minAge:30, edu:'Bachelor', minSmarts:72, minHealth:60, salary:170000, hours:45, stress:62, promo:0.06},
+    {title:'Senior Captain', minAge:38, edu:'Bachelor', minSmarts:76, minHealth:55, salary:230000, hours:45, stress:62, promo:0.04},
+    {title:'Chief Pilot', minAge:45, edu:'Bachelor', minSmarts:80, minHealth:55, salary:280000, hours:48, stress:66, promo:0},
+  ],
+  Politics: [
+    {title:'Campaign Volunteer', minAge:16, edu:'None', minSmarts:30, salary:4000, hours:15, stress:25, promo:0.2},
+    {title:'City Council Member', minAge:25, edu:'High School', minSmarts:50, minLooks:40, salary:45000, hours:40, stress:50, promo:0.1},
+    {title:'Mayor', minAge:30, edu:'Bachelor', minSmarts:60, minLooks:45, salary:95000, hours:55, stress:68, promo:0.07},
+    {title:'State Senator', minAge:35, edu:'Bachelor', minSmarts:65, minLooks:45, salary:140000, hours:55, stress:70, promo:0.03},
+    {title:'Governor', minAge:40, edu:'Bachelor', minSmarts:72, minLooks:50, salary:190000, hours:60, stress:80, promo:0.015},
+    {title:'President', minAge:45, edu:'Bachelor', minSmarts:78, minLooks:50, salary:400000, hours:70, stress:92, promo:0},
+  ],
+  Acting: [
+    {title:'Extra', minAge:16, edu:'None', minSmarts:0, minLooks:40, hobby:'acting', hobbyLvl:20, salary:8000, hours:15, stress:20, promo:0.15},
+    {title:'Bit-Part Actor', minAge:18, edu:'None', minSmarts:0, minLooks:50, salary:24000, hours:25, stress:35, promo:0.1},
+    {title:'Supporting Actor', minAge:21, edu:'None', minSmarts:0, minLooks:60, salary:70000, hours:40, stress:45, promo:0.06},
+    {title:'Lead Actor', minAge:24, edu:'None', minSmarts:0, minLooks:68, salary:250000, hours:50, stress:55, promo:0.04},
+    {title:'Movie Star', minAge:28, edu:'None', minSmarts:0, minLooks:74, salary:1200000, hours:50, stress:65, promo:0.025},
+    {title:'Hollywood Legend', minAge:35, edu:'None', minSmarts:0, minLooks:70, salary:3000000, hours:40, stress:60, promo:0},
+  ],
+  Music: [
+    {title:'Street Performer', minAge:14, edu:'None', minSmarts:0, hobby:'music', hobbyLvl:30, salary:6000, hours:15, stress:20, promo:0.15},
+    {title:'Session Musician', minAge:18, edu:'None', minSmarts:25, salary:30000, hours:35, stress:35, promo:0.1},
+    {title:'Touring Musician', minAge:21, edu:'None', minSmarts:30, salary:55000, hours:45, stress:55, promo:0.07},
+    {title:'Recording Artist', minAge:23, edu:'None', minSmarts:35, minLooks:45, salary:150000, hours:45, stress:60, promo:0.04},
+    {title:'Headliner', minAge:26, edu:'None', minSmarts:35, minLooks:50, salary:800000, hours:50, stress:70, promo:0.025},
+    {title:'Music Legend', minAge:32, edu:'None', minSmarts:35, salary:1800000, hours:35, stress:55, promo:0},
+  ],
+  Sports: [
+    {title:'Amateur Athlete', minAge:16, edu:'None', minSmarts:0, minHealth:70, hobby:'sports', hobbyLvl:40, salary:5000, hours:25, stress:30, promo:0.15},
+    {title:'Minor League Player', minAge:18, edu:'None', minSmarts:0, minHealth:75, salary:35000, hours:40, stress:45, promo:0.1},
+    {title:'Pro Athlete', minAge:20, edu:'None', minSmarts:0, minHealth:80, salary:250000, hours:45, stress:55, promo:0.07},
+    {title:'Starting Player', minAge:22, edu:'None', minSmarts:0, minHealth:80, salary:900000, hours:45, stress:60, promo:0.05},
+    {title:'All-Star', minAge:24, edu:'None', minSmarts:0, minHealth:82, salary:4000000, hours:45, stress:65, promo:0.03},
+    {title:'Superstar', minAge:26, edu:'None', minSmarts:0, minHealth:82, salary:12000000, hours:45, stress:70, promo:0},
+  ],
 };
 
 const ACTIVITIES = [
@@ -1552,11 +1670,10 @@ const ACTIVITIES = [
   {key:'gym', label:'Hit the gym', min:14, cost:40, delta:{health:6,looks:3}, text:n=>`${n} gets a serious workout in.`},
   {key:'clothes', label:'Buy new clothes', min:13, cost:300, delta:{looks:5,happy:2}, text:n=>`${n} treats themselves to a new wardrobe.`},
   {key:'dinner', label:'Go out to dinner', min:16, cost:80, delta:{happy:4}, text:n=>`${n} enjoys a great meal out.`},
-  {key:'doctor', label:'See a doctor', min:1, cost:150, delta:{health:8}, text:n=>`${n} gets a full checkup and a clean-ish bill of health.`},
+  {key:'doctor', label:'Get a checkup', min:1, cost:150, delta:{health:2}, text:n=>`${n} goes in for a full checkup.`},
   {key:'vacation', label:'Take a vacation', min:18, cost:2000, delta:{happy:12,health:2}, text:n=>`${n} escapes on a proper vacation.`},
   {key:'gamble', label:'Gamble at the casino', min:21, cost:200, delta:{}, text:n=>`${n} tries their luck at the casino`},
   {key:'meditate', label:'Meditate', min:10, cost:0, delta:{happy:3,health:1}, text:n=>`${n} sits with their thoughts for a while and comes out calmer.`},
-  {key:'gym', label:'Train at the gym', min:14, cost:40, delta:{health:4,looks:2,happy:1}, text:n=>`${n} puts in a solid season at the gym.`},
   {key:'volunteer', label:'Volunteer', min:12, cost:0, delta:{happy:5,smarts:1}, text:n=>`${n} volunteers and meets some good people.`},
   {key:'surgery', label:'Cosmetic surgery', min:18, cost:6000, delta:{}, text:n=>`${n} goes under the knife`},
 ];
@@ -2343,13 +2460,13 @@ function lifeBits(r){
 }
 function relJobFor(r){
   const edu = r.edu || "High School";
-  const open = Object.keys(CAREERS).filter(k => k !== "Odd Jobs" && CAREERS[k][0].minAge <= r.age && EDU_RANK[edu] >= EDU_RANK[CAREERS[k][0].edu]);
+  const open = Object.keys(CAREERS).filter(k => k !== "Odd Jobs" && !(TRACK_INFO[k] || {}).star && CAREERS[k][0].minAge <= r.age && EDU_RANK[edu] >= EDU_RANK[CAREERS[k][0].edu]);
   return open.length ? {track: pick(open), rank: 0, years: 0} : null;
 }
 function relJobYear(r, a){
   const j = r.job, next = CAREERS[j.track][j.rank + 1];
   j.years++;
-  if(next && r.age >= next.minAge && EDU_RANK[r.edu || "High School"] >= EDU_RANK[next.edu] && Math.random() < 0.12 + (hasTrait(r, "Ambitious") ? 0.08 : 0)){
+  if(next && r.age >= next.minAge && (!(TRACK_INFO[j.track] || {}).maxAge || r.age < TRACK_INFO[j.track].maxAge) && EDU_RANK[r.edu || "High School"] >= EDU_RANK[next.edu] && Math.random() < 0.12 + (hasTrait(r, "Ambitious") ? 0.08 : 0)){
     j.rank++;
     if(r.closeness >= 55) pushEntry(a, `${r.name} calls ${state.name} to share big news: a promotion to ${next.title}.`, {happy:2});
   }
@@ -2696,6 +2813,7 @@ function applyHeir(h){
   state.econ = old.econ; state.market = old.market;               // the world carries on from where the last life ended
   state.movedOut = age >= 18;
   state.traits = (kid.traits || []).slice();
+  state.health.history = Array.from(new Set((old.health ? old.health.history : []).concat(old.health ? old.health.conditions.filter(c => c.known && CONDITIONS[c.key].kind !== 'acute' && !CONDITIONS[c.key].mood && c.key !== 'addiction').map(c => c.key) : [])));
   state.will = old.will; state.trust = old.trust;
   // genes and upbringing
   const mix = v => clamp(Math.round(0.4 * v + 0.6 * rint(38, 85)));
@@ -2866,6 +2984,287 @@ function estatePlanHtml(){
   return h;
 }
 
+// ---------- Health: illness, treatment and habits ----------
+// kind: acute heals by itself within a year; chronic lasts until it resolves or is managed; cancer has stages.
+// silent conditions stay hidden until a checkup or until they get bad enough to notice.
+const CONDITIONS = {
+  flu:         {name:'the flu', onset:'comes down with a nasty flu', kind:'acute', min:0, rate:0.09, hit:{health:-3, happy:-1}},
+  bone:        {name:'a broken bone', onset:'breaks a bone in an accident', kind:'acute', min:3, rate:0.025, hit:{health:-5, happy:-3}, treat:'a cast and physio', cost:1500, untreatedExtra:{health:-4}},
+  pneumonia:   {name:'pneumonia', onset:'comes down with pneumonia', kind:'acute', min:0, rate:0.01, aging:true, hit:{health:-7}, treat:'antibiotics and rest', cost:900, mort:0.03, mortTreated:0.003, death:'of pneumonia'},
+  asthma:      {name:'asthma', kind:'chronic', min:2, max:14, rate:0.012, hit:{health:-3}, managed:{health:-1}, treat:'an inhaler', cost:300, yearly:true, mort:0.002, resolve:0.08, death:'after a severe asthma attack'},
+  migraine:    {name:'migraines', kind:'chronic', min:14, max:55, rate:0.009, hit:{happy:-3, smarts:-1}, managed:{happy:-1}, treat:'migraine medication', cost:400, yearly:true, resolve:0.06},
+  depression:  {name:'depression', kind:'chronic', min:13, rate:0.01, mood:true, hit:{happy:-7, health:-1}, managed:{happy:-2}, treat:'therapy', cost:2000, yearly:true, resolve:0.12, resolveTreated:0.35},
+  anxiety:     {name:'an anxiety disorder', kind:'chronic', min:12, rate:0.01, mood:true, hit:{happy:-5}, managed:{happy:-1}, treat:'therapy', cost:1500, yearly:true, resolve:0.1, resolveTreated:0.3},
+  addiction:   {name:'an addiction', kind:'chronic', min:14, rate:0, hit:{health:-5, happy:-4, smarts:-1}, managed:{happy:-1}, treat:'rehab', cost:12000, oneOff:true, resolveTreated:0.6, drain:3000},
+  hypertension:{name:'high blood pressure', kind:'chronic', min:28, rate:0.015, aging:true, silent:true, hit:{health:-2}, managed:{}, treat:'blood pressure pills', cost:500, yearly:true, mort:0.002, mortTreated:0.0007, death:'of a stroke'},
+  diabetes:    {name:'type 2 diabetes', kind:'chronic', min:30, rate:0.008, aging:true, silent:true, hit:{health:-3}, managed:{health:-1}, treat:'insulin and a diet plan', cost:2500, yearly:true, mort:0.004, mortTreated:0.0015, death:'of complications from diabetes'},
+  heart:       {name:'heart disease', kind:'chronic', min:38, rate:0.007, aging:true, silent:true, hit:{health:-3}, managed:{health:-1}, treat:'cardiac care', cost:6000, yearly:true, mort:0.015, mortTreated:0.005, death:'of a heart attack'},
+  arthritis:   {name:'arthritis', kind:'chronic', min:45, rate:0.02, aging:true, hit:{health:-2, happy:-2}, managed:{happy:-1}, treat:'physical therapy', cost:1200, yearly:true},
+  dementia:    {name:'dementia', kind:'chronic', min:62, rate:0.006, aging:true, hit:{smarts:-6, happy:-2}, managed:{smarts:-3}, treat:'memory care', cost:15000, yearly:true, mort:0.02, death:'after a long struggle with dementia'},
+  cancer:      {name:'cancer', kind:'cancer', min:18, rate:0.003, aging:true, silent:true, mort:[0.006, 0.02, 0.08, 0.25], death:'after a battle with cancer'},
+};
+const CANCER_TREATMENTS = [
+  {key:'surgery', label:'Surgery', cost:30000, stages:[1,2], cure:[0.88, 0.7], hit:{health:-6}},
+  {key:'chemo', label:'Chemotherapy', cost:50000, stages:[1,2,3,4], cure:[0.8, 0.62, 0.38, 0.12], hit:{health:-12, happy:-6, looks:-4}},
+  {key:'trial', label:'Experimental trial', cost:150000, stages:[3,4], cure:[0.5, 0.28], hit:{health:-10, happy:-4}},
+];
+const H = () => state.health;
+const condOf = key => H().conditions.find(c => c.key === key);
+const medCost = n => Math.round(inflR(n, 10) * (state.insurance.health ? 0.2 : 1));
+function exercisedThisYear(){
+  const d = state.lastDone || {};                // healthYear runs after the new year's slate is cleared
+  return !!(d.gym || d.sport || d.play || d['hob_gym'] || d['hob_running'] || d['hob_sports'] || d['hob_hiking'] || d['pr_workout']) ||
+         ['gym', 'running', 'sports', 'hiking'].some(k => hobbyLevel(k) >= 40);
+}
+function onsetChance(key, d, a){
+  if(a < d.min || (d.max && a > d.max)) return 0;
+  const hb = H().habits, s = state.stats;
+  let p = d.rate;
+  if(d.aging) p *= 1 + Math.max(0, a - 45) / 14;
+  if(key === 'cancer' && a < 40) p *= 0.35;
+  p *= Math.max(0.5, Math.min(2, 1 + (60 - s.health) / 80));
+  if(H().history.includes(key)) p *= 1.6;
+  if(hb.smoke && ['heart','cancer','pneumonia','hypertension','asthma'].includes(key)) p *= key === 'cancer' ? 2.5 : 2;
+  if(hb.drink === 2 && ['heart','cancer','hypertension','depression'].includes(key)) p *= 1.4;
+  if(['diabetes','heart','hypertension'].includes(key)) p *= hb.diet === 'healthy' ? 0.6 : hb.diet === 'junk' ? 1.6 : 1;
+  if(['heart','diabetes','depression','hypertension'].includes(key) && exercisedThisYear()) p *= 0.75;
+  if(d.mood){ p *= s.happy < 30 ? 3 : s.happy < 45 ? 1.6 : 1; if(state.job){ const r = CAREERS[state.job.track][state.job.rank]; p *= 1 + r.stress / 150; } if(state.crime.prison) p *= 2; }
+  if(key === 'bone' && state.job && (TRACK_INFO[state.job.track] || {}).risk) p *= 1.5;
+  return p;
+}
+function addCondition(key, a, opts){
+  if(condOf(key)) return null;
+  const d = CONDITIONS[key];
+  const c = {key, since:a, known: !d.silent || !!(opts && opts.known), treated:false};
+  if(d.kind === 'cancer') c.stage = 1;
+  H().conditions.push(c);
+  return c;
+}
+function condLabel(c){ const d = CONDITIONS[c.key]; return d.kind === 'cancer' ? 'stage ' + c.stage + ' cancer' : d.name; }
+function condName(c){ const n = condLabel(c); return n.replace(/^(the|an?) /, '').replace(/^./, x => x.toUpperCase()); }
+function condMort(c){
+  const d = CONDITIONS[c.key];
+  if(d.kind === 'cancer') return d.mort[c.stage - 1] * (c.treated ? 0.6 : 1);
+  if(!d.mort) return 0;
+  return c.treated ? (d.mortTreated !== undefined ? d.mortTreated : d.mort * 0.4) : d.mort * (d.aging ? 1 + Math.max(0, state.age - 60) / 20 : 1);
+}
+// what kills you this year, if anything: an illness, or age and general health
+function deathRoll(a){
+  for(const c of H().conditions){ const m = condMort(c); if(m && Math.random() < m) return c; }
+  return Math.random() < mortalityChance(a, state.stats.health) * 0.8 ? 'age' : null;   // illnesses now carry part of the risk
+}
+function diagnose(c, how){
+  c.known = true;
+  pushEntry(state.age, `${how || 'A doctor'} ${how ? 'reveals' : 'diagnoses'} ${state.name} with ${condLabel(c)}.`, {happy:-3});
+}
+function checkup(silent){
+  const found = H().conditions.filter(c => !c.known);
+  found.forEach(c => diagnose(c, 'A checkup'));
+  H().lastCheckup = state.age;
+  if(!silent && !found.length) pushEntry(state.age, `${state.name}'s checkup comes back clear.`, {happy:1});
+  return found;
+}
+// a decision about treating something newly found
+function treatmentPrompt(c){
+  const d = CONDITIONS[c.key], n = state.name;
+  if(d.kind === 'cancer') return cancerPrompt(c);
+  if(!d.treat) return false;
+  const cost = medCost(d.cost);
+  presentCustom(`${n} has ${condLabel(c)}. Treatment is ${d.treat}, costing ${fmt(cost)}${d.yearly ? ' a year' : ''}${state.insurance.health ? ' after insurance' : ''}.`, [
+    canPay(cost) ? {label:`Start treatment (${fmt(cost)}${d.yearly ? '/yr' : ''})`, run:() => startTreatment(c.key)} : null,
+    {label: canPay(cost) ? 'Not now' : "Can't afford it right now", run:() => pushEntry(state.age, `${n} holds off on treating ${condLabel(c)}.`, {})},
+  ].filter(Boolean));
+  return true;
+}
+function cancerPrompt(c){
+  const n = state.name, opts = CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).map(t => {
+    const cost = medCost(t.cost);
+    return canPay(cost) ? {label:`${t.label} (${fmt(cost)}), about ${Math.round(t.cure[t.stages.indexOf(c.stage)] * 100)}% chance of remission`, run:() => cancerTreat(c.key, t.key)} : null;
+  }).filter(Boolean);
+  opts.push({label: opts.length ? 'Decline treatment' : 'Treatment is out of reach', run:() => pushEntry(state.age, `${n} decides against cancer treatment for now.`, {happy:-2})});
+  presentCustom(`${n} is facing stage ${c.stage} cancer. What do they do?`, opts);
+  return true;
+}
+function startTreatment(key){
+  const c = condOf(key), d = CONDITIONS[key]; if(!c || c.treated || !d.treat) return;
+  const cost = medCost(d.cost); if(!ensureCash(cost)) return;
+  state.money -= cost;
+  if(d.kind === 'acute'){
+    H().conditions = H().conditions.filter(x => x !== c);
+    pushEntry(state.age, `${state.name} gets ${d.treat} for ${d.name} and recovers.`, {happy:2});
+  } else if(d.oneOff){
+    if(Math.random() < d.resolveTreated){ H().conditions = H().conditions.filter(x => x !== c); H().habits.drink = Math.min(H().habits.drink, 1); pushEntry(state.age, `${state.name} completes ${d.treat} and gets clean.`, {happy:8, health:4}); }
+    else pushEntry(state.age, `${state.name} goes through ${d.treat}, but relapses soon after.`, {happy:-4});
+  } else {
+    c.treated = true;
+    pushEntry(state.age, `${state.name} starts ${d.treat} for ${d.name}.`, {happy:1});
+  }
+  render();
+}
+function stopTreatment(key){
+  const c = condOf(key); if(!c || !c.treated) return;
+  c.treated = false;
+  pushEntry(state.age, `${state.name} stops treatment for ${CONDITIONS[key].name}.`, {});
+  render();
+}
+function cancerTreat(key, tkey){
+  const c = condOf(key), t = CANCER_TREATMENTS.find(x => x.key === tkey);
+  if(!c || !t || !t.stages.includes(c.stage) || state.done.cancerTx) return;
+  const cost = medCost(t.cost); if(!ensureCash(cost)) return;
+  state.money -= cost; state.done.cancerTx = true; c.treated = true;
+  if(Math.random() < t.cure[t.stages.indexOf(c.stage)]){
+    H().conditions = H().conditions.filter(x => x !== c);
+    if(!H().history.includes('cancer')) H().history.push('cancer');
+    pushEntry(state.age, `${state.name} goes through ${t.label.toLowerCase()} and the cancer goes into remission.`, Object.assign({}, t.hit, {happy:12}));
+  } else pushEntry(state.age, `${state.name} goes through ${t.label.toLowerCase()}, but the cancer is still there.`, Object.assign({}, t.hit, {happy:-6}));
+  render();
+}
+// yearly: habits, new illnesses, progression, treatment costs. Returns true if it asked a question.
+function healthYear(a, canPrompt){
+  const could = canPrompt, hb = H().habits, n = state.name, conds = H().conditions;
+  const cash0 = state.money + state.savings;
+  // habits
+  if(hb.smoke){ applyDelta({health:-1, money:-inflR(1500, 10)}); if(Math.random() < 0.4) applyDelta({looks:-1}); }
+  if(hb.drink === 1) applyDelta({happy:1, money:-inflR(500, 10)});
+  if(hb.drink === 2){ applyDelta({happy:1, health:-2, money:-inflR(2000, 10)}); if(Math.random() < 0.3) applyDelta({smarts:-1}); }
+  if(hb.diet === 'healthy'){ applyDelta({health:1, money:-inflR(1200, 10)}); }
+  if(hb.diet === 'junk'){ applyDelta({health:-1}); if(Math.random() < 0.3) applyDelta({looks:-1}); }
+  if(!condOf('addiction') && a >= 14 && Math.random() < (hb.drink === 2 ? 0.08 : hb.drink === 1 ? 0.01 : 0) + (state.crime.record.some(r => r.crime === 'drug dealing') ? 0.03 : 0)){
+    const c = addCondition('addiction', a); pushEntry(a, `${n}'s drinking has turned into an addiction.`, {happy:-4});
+    if(canPrompt && treatmentPrompt(c)) canPrompt = false;
+  }
+  // existing conditions
+  conds.slice().forEach(c => {
+    const d = CONDITIONS[c.key];
+    if(d.kind === 'acute'){
+      if(a > c.since){ H().conditions = H().conditions.filter(x => x !== c); if(d.untreatedExtra) applyDelta(d.untreatedExtra); pushEntry(a, `${n} gets over ${d.name}${d.untreatedExtra ? ', though it never quite healed right' : ''}.`, {}); }
+      return;
+    }
+    if(d.kind === 'cancer'){
+      if(Math.random() < (c.treated ? 0.2 : 0.45) && c.stage < 4){ c.stage++; c.treated = false; }
+      applyDelta({health: -2 * c.stage, happy: c.known ? -3 : 0});
+      if(!c.known && c.stage >= 3){ diagnose(c, 'Worrying symptoms'); if(canPrompt && cancerPrompt(c)) canPrompt = false; }
+      return;
+    }
+    if(c.treated && d.yearly){
+      const cost = medCost(d.cost);
+      if(ensureCash(cost)) state.money -= cost;
+      else { c.treated = false; pushEntry(a, `${n} can't afford ${d.treat} any more and has to stop.`, {happy:-3}); }
+    }
+    // chronic illness wears health down slowly rather than every single year, so decades of it don't compound
+    const eff = Object.assign({}, c.treated ? (d.managed || {}) : d.hit);
+    if(eff.health && Math.random() > 0.4) delete eff.health;
+    applyDelta(eff);
+    if(d.drain && !c.treated) applyDelta({money:-inflR(d.drain, 10)});
+    if(!c.known && Math.random() < 0.25){ diagnose(c, 'Symptoms'); if(canPrompt && treatmentPrompt(c)) canPrompt = false; }
+    const resolve = c.treated ? (d.resolveTreated || d.resolve || 0) : (d.resolve || 0);
+    if(resolve && Math.random() < resolve * (d.mood && state.stats.happy > 55 ? 1.5 : 1)){
+      H().conditions = H().conditions.filter(x => x !== c);
+      if(c.known) pushEntry(a, `${n}'s ${d.name.replace(/^(an?|the) /, '')} ${d.mood ? 'lifts' : 'clears up'}.`, {happy:5});
+    }
+  });
+  // a nudge to get checked when it has been a while
+  if(canPrompt && a >= 35 && !state.crime.prison && (H().lastCheckup === null || a - H().lastCheckup >= 4) && Math.random() < 0.35){
+    const cost = inflR(150, 5);
+    presentCustom(`${n}'s doctor's office calls: it has been ${H().lastCheckup === null ? 'years' : (a - H().lastCheckup) + ' years'} since ${n}'s last checkup.`, [
+      {label:`Book a checkup (${fmt(cost)})`, run:() => doCheckup()},
+      {label:"Skip it", run:() => pushEntry(state.age, `${n} puts off the checkup again.`, {})},
+    ]);
+    canPrompt = false;
+  }
+  // one line for what habits and treatment cost this year, instead of silent deductions
+  const spent = Math.round(cash0 - state.money - state.savings);
+  if(spent > 0){
+    state.money += spent;
+    const why = [hb.smoke ? 'cigarettes' : '', hb.drink ? 'drinks' : '', hb.diet === 'healthy' ? 'healthy food' : '', conds.some(c => c.treated && CONDITIONS[c.key].yearly) ? 'medical care' : '', condOf('addiction') && !condOf('addiction').treated ? 'feeding an addiction' : ''].filter(Boolean);
+    pushEntry(a, `${n} spends ${fmt(spent)} on ${why.length ? why.join(', ').replace(/, ([^,]*)$/, ' and $1') : 'their health'} this year.`, {money:-spent});
+  }
+  // new illnesses
+  for(const key in CONDITIONS){
+    if(condOf(key) || key === 'addiction') continue;
+    if(Math.random() < onsetChance(key, CONDITIONS[key], a)){
+      const c = addCondition(key, a), d = CONDITIONS[key];
+      if(c.known){
+        pushEntry(a, d.kind === 'acute' ? `${n} ${d.onset}.` : `${n} is diagnosed with ${d.name}.`, d.kind === 'acute' ? {} : {happy:-3});
+        if(canPrompt && treatmentPrompt(c)) canPrompt = false;
+      }
+    }
+  }
+  return could && !canPrompt;
+}
+// ---- habits ----
+function setDiet(d){ H().habits.diet = d; renderPanel(); }
+function setDrink(v){
+  const hb = H().habits;
+  if(v < hb.drink && condOf('addiction')) return;          // addiction needs rehab first
+  if(v > 0 && state.age < 14) return;
+  hb.drink = v; renderPanel();
+}
+function toggleSmoking(){
+  const hb = H().habits, n = state.name;
+  if(!hb.smoke){ if(state.age < 14) return; hb.smoke = true; hb.smokeSince = state.age; pushEntry(state.age, `${n} takes up smoking.`, {happy:1}); }
+  else {
+    if(state.done.quitSmoke) return;
+    state.done.quitSmoke = true;
+    if(Math.random() < 0.35 + state.stats.smarts / 400){ hb.smoke = false; pushEntry(state.age, `${n} quits smoking for good.`, {happy:4, health:2}); }
+    else pushEntry(state.age, `${n} tries to quit smoking but can't stick with it this year.`, {happy:-2});
+  }
+  render();
+}
+function healthPanelHtml(){
+  const hh = H(), hb = hh.habits, s = state.stats, a = state.age;
+  const known = hh.conditions.filter(c => c.known);
+  const pill = (label, active, js, dis) => '<button class="sortbtn' + (active ? " active" : "") + '" ' + (dis ? 'disabled ' : '') + 'onclick="' + js + '">' + label + "</button>";
+  const label = s.health >= 80 ? "Excellent" : s.health >= 60 ? "Good" : s.health >= 40 ? "Fair" : s.health >= 20 ? "Poor" : "Critical";
+  let h = '<div class="status">Overall health: <b>' + label + "</b> (" + s.health + "/100)" +
+    "<br>" + (known.length ? known.length + " known condition" + (known.length > 1 ? "s" : "") : "No known conditions") +
+    " · Last checkup: " + (hh.lastCheckup !== null && hh.lastCheckup !== undefined ? (hh.lastCheckup === a ? "this year" : "age " + hh.lastCheckup) : "never") +
+    "<br>Health insurance: " + (state.insurance.health ? "<b>yes</b>, covers 80% of treatment" : "none") +
+    (hh.history.length ? "<br>Family history: " + hh.history.map(k => CONDITIONS[k].name.replace(/^(an?|the) /, '')).join(", ") : "") + "</div>";
+  const cc = inflR(150, 5);
+  h += '<div class="btnrow-social"><button onclick="doCheckup()" ' + (state.done.doctor || !canPay(cc) ? "disabled" : "") + ">" + (state.done.doctor ? "Checked up this year ✓" : "Get a checkup (" + fmt(cc) + ")") + "</button>" +
+       (a >= 18 ? '<button onclick="toggleInsurance(\'health\')">' + (state.insurance.health ? "Cancel health insurance" : "Get health insurance") + "</button>" : "") + "</div>";
+  if(known.length){
+    h += '<div class="plabel">Conditions</div>';
+    known.forEach(c => {
+      const d = CONDITIONS[c.key];
+      let acts = "", body;
+      if(d.kind === 'cancer'){
+        body = "Stage " + c.stage + " of 4. Untreated, it tends to spread." + (c.treated ? " Recently treated." : "");
+        CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).forEach(t => { const cost = medCost(t.cost); acts += '<button onclick="cancerTreat(\'' + c.key + '\',\'' + t.key + '\')" ' + (state.done.cancerTx || !canPay(cost) ? "disabled" : "") + ">" + t.label + " (" + fmt(cost) + ", " + Math.round(t.cure[t.stages.indexOf(c.stage)] * 100) + "%)</button>"; });
+      } else {
+        const cost = medCost(d.cost || 0);
+        body = (d.kind === 'acute' ? "Should pass within a year." : c.treated ? "Managed with " + d.treat + (d.yearly ? " (" + fmt(cost) + " a year)." : ".") : "Untreated, it takes a toll every year.") + " Since age " + c.since + ".";
+        if(d.treat && !c.treated) acts += '<button onclick="startTreatment(\'' + c.key + '\')" ' + (canPay(cost) ? "" : "disabled") + ">" + (d.oneOff ? "Go to " : "Start ") + d.treat + " (" + fmt(cost) + (d.yearly ? "/yr" : "") + ")</button>";
+        if(c.treated && d.yearly) acts += '<button onclick="stopTreatment(\'' + c.key + '\')">Stop treatment</button>';
+      }
+      h += bankRow(condName(c) + (c.treated && d.kind !== 'cancer' ? ' <span class="tick">MANAGED</span>' : ''), body, acts);
+    });
+  }
+  if(a >= 12){
+    h += '<div class="plabel">Habits</div><div class="invrow"><div class="owned">Diet</div><div class="sortrow">' +
+      pill("Healthy (" + fmt(inflR(1200, 10)) + "/yr)", hb.diet === 'healthy', "setDiet('healthy')") + pill("Normal", hb.diet === 'normal', "setDiet('normal')") + pill("Junk food", hb.diet === 'junk', "setDiet('junk')") + "</div>";
+    if(a >= 14){
+      const addicted = !!condOf('addiction');
+      h += '<div class="owned">Drinking' + (addicted ? " · an addiction has to be treated before cutting back" : "") + '</div><div class="sortrow">' +
+        pill("None", hb.drink === 0, "setDrink(0)", addicted) + pill("Socially", hb.drink === 1, "setDrink(1)", addicted) + pill("Heavily", hb.drink === 2, "setDrink(2)") + "</div>";
+      h += '<div class="owned">Smoking: ' + (hb.smoke ? "yes, since age " + hb.smokeSince : "no") + '</div><div class="assetbuy"><button onclick="toggleSmoking()" ' + (hb.smoke && state.done.quitSmoke ? "disabled" : "") + ">" + (hb.smoke ? (state.done.quitSmoke ? "Tried to quit this year" : "Try to quit") : "Start smoking") + "</button></div>";
+    }
+    h += '<div class="owned">Smoking, heavy drinking and junk food raise the odds of serious illness. Exercise, a healthy diet and checkups lower them.</div></div>';
+  }
+  return h;
+}
+function doCheckup(){
+  const cost = inflR(150, 5);
+  if(state.done.doctor || !ensureCash(cost)) return;
+  state.done.doctor = true; state.money -= cost;
+  applyDelta({health:2});
+  const found = checkup(false);
+  const serious = found.find(c => CONDITIONS[c.key].kind === 'cancer') || found.find(c => CONDITIONS[c.key].treat);
+  if(serious) treatmentPrompt(serious);
+  render();
+}
+
 // ---------- Crime and the law ----------
 const CRIMES = [
   {key:'shoplift', ing:'shoplifting', charge:'shoplifting', label:'Shoplift', min:10, pay:[20,150], risk:0.18, blurb:'small change, small risk'},
@@ -3001,6 +3400,7 @@ const PRISON_EVENTS = [
 ];
 function prisonYear(a){
   const k = CR(), pr = k.prison, n = state.name;
+  healthYear(a, false);
   yearlyFinances(a); loansYear(a); creditCardYear(a); creditScoreYear(a);
   updateMarket(a); payDividends(a); assetsYear(a);
   relationshipsYear(a, true);
@@ -4192,8 +4592,26 @@ function workYear(a){
   const stressHealth = rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0;
   const stressHappy = rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0;
   if(stressHealth || stressHappy) applyDelta({health:stressHealth, happy:stressHappy});
+  const info = TRACK_INFO[j.track] || {};
+  if(info.maxAge && a >= info.maxAge){
+    convertCoworkersToFriends(); state.job = null;
+    pushEntry(a, `${state.name}'s body can't keep up any more, and they retire from ${j.track.toLowerCase()} as ${rank.title}.`, {happy:-4});
+    return;
+  }
+  if(info.risk && Math.random() < info.risk){
+    const c = addCondition('bone', a);
+    pushEntry(a, c ? `${state.name} is injured on the job as ${rank.title} and breaks a bone.` : `${state.name} is hurt on the job.`, {health:-6, happy:-3});
+  }
+  if(j.track === 'Military' && Math.random() < 0.15){
+    const bonus = Math.round(j.salary * 0.15);
+    pushEntry(a, `${state.name} is deployed overseas for part of the year.`, {money:bonus, happy:-4, family:-3});
+  }
+  if(info.elect && j.rank >= 1 && Math.random() < 0.06){
+    pushEntry(a, `${state.name} is caught up in a political scandal.`, {happy:-6, rep:-10});
+    if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
+  }
 
-  if(Math.random() < (state.econ.recession ? 0.09 : 0.03)){
+  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03)){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
@@ -4202,12 +4620,12 @@ function workYear(a){
 
   if(j.rank < track.length - 1){
     const next = track[j.rank + 1];
-    const eligible = state.age >= next.minAge && EDU_RANK[state.edu.level] >= EDU_RANK[next.edu] && state.stats.smarts >= next.minSmarts;
+    const eligible = !rankGap(next);
     const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + (state.edu.level === 'Master' ? 0.05 : 0)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
       j.rank++; j.title = next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, inflR(next.salary, 100));
-      pushEntry(a, `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.`, {happy:6});
+      pushEntry(a, (TRACK_INFO[j.track] || {}).elect ? `${state.name} wins the election and becomes ${next.title} — salary now ${fmt(j.salary)}.` : `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.`, {happy: (TRACK_INFO[j.track] || {}).star ? 12 : 6});
       return;
     }
   }
@@ -4221,7 +4639,7 @@ function togglePanel(name){
   state.panel = state.panel === name ? null : name; renderPanel();
   if(state.panel) window.scrollTo({top:0, behavior:"smooth"});
 }
-const PANEL_TITLES = {me:"Your life", act:"Activities", edu:"School", job:"Career", soc:"People", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Social media", hob:"Hobbies", crime:"Crime & the law"};
+const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities & hobbies", edu:"School", job:"Career", soc:"People", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Social media", hob:"Hobbies", crime:"Crime & the law"};
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
@@ -4247,6 +4665,7 @@ function mePanelHtml(){
 
 function doActivity(i){
   const x = ACTIVITIES[i];
+  if(x.key === 'doctor') return doCheckup();
   if(state.done[x.key] || state.money < actCost(x)) return;
   state.done[x.key] = true;
   let delta = Object.assign({}, x.delta), text = x.text(state.name);
@@ -4282,6 +4701,7 @@ const HOBBY_LIST = [
   {key:'traveling', name:'Traveling', minAge:16, cost:400, stat:{happy:6,smarts:1}},
   {key:'collecting', name:'Collecting', minAge:6, cost:50, stat:{happy:3}},
   {key:'sports', name:'Sports', minAge:6, cost:0, stat:{health:5,happy:2}},
+  {key:'acting', name:'Acting', minAge:6, cost:10, stat:{happy:3,looks:1}},
 ];
 function hobbyLevel(key){ return (state.hobbies[key] && state.hobbies[key].level) || 0; }
 function hobbyTier(lvl){ return lvl >= 90 ? 'Master' : lvl >= 70 ? 'Expert' : lvl >= 35 ? 'Skilled' : lvl > 0 ? 'Beginner' : 'Untried'; }
@@ -4374,14 +4794,14 @@ function enrollGrad(method){
   render();
 }
 const RECORD_BARRED = ['Law', 'Medicine', 'Education'];
-const recordBlocks = trackName => RECORD_BARRED.includes(trackName) && felonyCount() > 0;
+const recordBlocks = trackName => (RECORD_BARRED.includes(trackName) && felonyCount() > 0) || (!!(TRACK_INFO[trackName] || {}).clean && priorCount() > 0);
 function applyJob(trackName){
   const track = CAREERS[trackName];
   if(recordBlocks(trackName) || state.crime.prison) return;
   if(!track || (state.job && state.job.track === trackName) || state.done['app_'+trackName]) return;
   const rank0 = track[0];
   if(state.retired || state.age > 66) return;
-  if(state.age < rank0.minAge || EDU_RANK[state.edu.level] < EDU_RANK[rank0.edu] || state.stats.smarts < rank0.minSmarts) return;
+  if(rankGap(rank0)) return;
   state.done['app_'+trackName] = true;
   const chance = Math.min(90, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
@@ -4424,6 +4844,32 @@ function workHarder(){
   render();
 }
 
+function hobbiesHtml(){
+  const a = state.age;
+  let h = '<div class="plabel">Hobbies</div>';
+  HOBBY_LIST.forEach(hobby => {
+    if(a < hobby.minAge) return;
+    const lvl = hobbyLevel(hobby.key);
+    const tier = hobbyTier(lvl);
+    const linkedBizKey = hobby.career ? HOBBY_BUSINESS[hobby.key] : null;
+    let actions = `<button onclick="practiceHobby('${hobby.key}')" ${(state.done['hob_'+hobby.key] || state.money < hobCost(hobby)) ? 'disabled' : ''}>Practice${hobby.cost ? ' ('+fmt(hobCost(hobby))+')' : ''}</button>`;
+    if(hobby.career) actions += `<button onclick="freelanceGig('${hobby.key}')" ${(state.done['free_'+hobby.key] || lvl < 35) ? 'disabled' : ''}>Freelance Gig</button>`;
+    if(lvl >= 50) actions += `<button onclick="enterCompetition('${hobby.key}')" ${(state.done['comp_'+hobby.key] || state.money < compFee()) ? 'disabled' : ''}>Compete (${fmt(compFee())})</button>`;
+    const unlockNote = hobby.career
+      ? (lvl >= 70
+          ? ` · Mastery unlocks a founding bonus if you start a ${BUSINESS_TYPES.find(t=>t.key===linkedBizKey).name} in Business`
+          : lvl >= 35
+            ? ` · Freelancing as a ${hobby.career} is open`
+            : ` · Reach level 35 to freelance as a ${hobby.career}`)
+      : '';
+    h += `<div class="invrow">
+      <div class="itop"><span><b>${hobby.name}</b></span><span class="price">${tier}${lvl > 0 ? ' · '+lvl+'/100' : ''}</span></div>
+      <div class="owned">${hobby.career ? hobby.career + ' path' : 'Just for fun'}${unlockNote}</div>
+      <div class="assetbuy">${actions}</div>
+    </div>`;
+  });
+  return h;
+}
 function renderPanel(){
   const p = document.getElementById('panel');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.panel === state.panel));
@@ -4431,12 +4877,13 @@ function renderPanel(){
   const a = state.age, e = state.edu, s = state.stats;
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis?'disabled':''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
   const head = '<div class="panel-head"><span>' + (PANEL_TITLES[state.panel] || "") + '</span><button class="panel-close" onclick="togglePanel(null)" aria-label="Close">✕</button></div>';
-  if(state.crime.prison && !['crime','soc','me','bank','inv','ast'].includes(state.panel)){
+  if(state.crime.prison && !['crime','soc','me','bank','inv','ast','health'].includes(state.panel)){
     p.innerHTML = head + '<div class="status">Not available while ' + (state.crime.prison.juvenile ? 'in juvenile detention' : 'in prison') + '. See the Crime tab for what you can do inside.</div>';
     return;
   }
   let h = '';
   if(state.panel === 'me'){ h += mePanelHtml(); }
+  else if(state.panel === 'health'){ h += healthPanelHtml(); }
   else if(state.panel === 'crime'){ h += crimePanelHtml(); }
   else if(state.panel === 'act'){
     if(a >= 18) h += `<div class="btnrow-social"><button onclick="buyLottery()" ${(state.done.lotto || state.money < lottoCost()) ? 'disabled' : ''}>Buy Lottery Ticket (${fmt(lottoCost())})</button></div>`;
@@ -4445,6 +4892,7 @@ function renderPanel(){
       const done = state.done[x.key];
       h += opt(x.label, done ? 'done ✓' : (x.cost ? fmt(actCost(x)) : 'free'), `doActivity(${i})`, done || state.money < actCost(x));
     });
+    h += hobbiesHtml();
   } else if(state.panel === 'edu'){
     if(e.school){
       h += `<div class="status">Enrolled: <b>${e.school}</b> · GPA <b>${Math.round(e.gpa)}</b></div>`;
@@ -4567,28 +5015,6 @@ function renderPanel(){
         h += bankRow('IPO Not Yet Available', `Needs a ${fmt(ipoMin())} valuation and at least 5 employees.`, '');
       h += bankRow('Sell the Business', 'Cash out now at a discount to its full valuation.', `<button onclick="closeBusiness()">Sell for ${fmt(Math.round(b.value*0.7))}</button>`);
     }
-  } else if(state.panel === 'hob'){
-    HOBBY_LIST.forEach(hobby => {
-      if(a < hobby.minAge) return;
-      const lvl = hobbyLevel(hobby.key);
-      const tier = hobbyTier(lvl);
-      const linkedBizKey = hobby.career ? HOBBY_BUSINESS[hobby.key] : null;
-      let actions = `<button onclick="practiceHobby('${hobby.key}')" ${(state.done['hob_'+hobby.key] || state.money < hobCost(hobby)) ? 'disabled' : ''}>Practice${hobby.cost ? ' ('+fmt(hobCost(hobby))+')' : ''}</button>`;
-      if(hobby.career) actions += `<button onclick="freelanceGig('${hobby.key}')" ${(state.done['free_'+hobby.key] || lvl < 35) ? 'disabled' : ''}>Freelance Gig</button>`;
-      if(lvl >= 50) actions += `<button onclick="enterCompetition('${hobby.key}')" ${(state.done['comp_'+hobby.key] || state.money < compFee()) ? 'disabled' : ''}>Compete (${fmt(compFee())})</button>`;
-      const unlockNote = hobby.career
-        ? (lvl >= 70
-            ? ` · Mastery unlocks a founding bonus if you start a ${BUSINESS_TYPES.find(t=>t.key===linkedBizKey).name} in Business`
-            : lvl >= 35
-              ? ` · Freelancing as a ${hobby.career} is open`
-              : ` · Reach level 35 to freelance as a ${hobby.career}`)
-        : '';
-      h += `<div class="invrow">
-        <div class="itop"><span><b>${hobby.name}</b></span><span class="price">${tier}${lvl > 0 ? ' · '+lvl+'/100' : ''}</span></div>
-        <div class="owned">${hobby.career ? hobby.career + ' path' : 'Just for fun'}${unlockNote}</div>
-        <div class="assetbuy">${actions}</div>
-      </div>`;
-    });
   } else {
     if(a < 12){ h = '<div class="status">Too young to work.</div>'; }
     else {
@@ -4613,10 +5039,11 @@ function renderPanel(){
       for(const trackName in CAREERS){
         const rank0 = CAREERS[trackName][0];
         const already = j && j.track === trackName;
-        const barred = recordBlocks(trackName);
-        const ineligible = barred || state.retired || a > 66 || a < rank0.minAge || EDU_RANK[e.level] < EDU_RANK[rank0.edu] || s.smarts < rank0.minSmarts;
-        const meta = barred ? 'needs a clean record' : (state.retired || a > 66) ? 'hiring is closed at your age' : ineligible ? `needs age ${rank0.minAge}${rank0.edu !== 'None' ? ', ' + rank0.edu : ''}${rank0.minSmarts ? ', ' + rank0.minSmarts + ' smarts' : ''}` : fmt(inflR(rank0.salary, 100)) + '/yr to start';
-        h += opt(`${trackName} (${rank0.title} →)`, meta, `applyJob('${trackName}')`, already || state.done['app_'+trackName] || ineligible);
+        const barred = recordBlocks(trackName), gap = rankGap(rank0), info = TRACK_INFO[trackName] || {};
+        const tooOld = info.maxAge && a >= info.maxAge - 4;
+        const ineligible = barred || tooOld || state.retired || a > 66 || !!gap;
+        const meta = barred ? 'needs a clean record' : tooOld ? 'too old to start' : (state.retired || a > 66) ? 'hiring is closed at your age' : gap ? 'needs ' + gap : fmt(inflR(rank0.salary, 100)) + '/yr to start';
+        h += opt(`${trackName} <span class="sub-meta">${rank0.title} → ${CAREERS[trackName][CAREERS[trackName].length - 1].title}${info.blurb ? ' · ' + info.blurb : ''}</span>`, meta, `applyJob('${trackName}')`, already || state.done['app_'+trackName] || ineligible);
       }
     }
   }
@@ -4903,11 +5330,12 @@ function audioWire(){
   });
 }
 
-function die(){
+function die(cause){
   state.alive = false;
+  const illness = cause && cause !== 'age' ? CONDITIONS[cause.key] : null;
   audioDeath();
   const a = state.age;
-  const causes = state.crime.prison ? ['while serving time','in a prison infirmary'] : a < 18 ? ['after a sudden illness','in a tragic accident']
+  const causes = illness ? [illness.death || 'after a serious bout of ' + illness.name.replace(/^(an?|the) /, '')] : state.crime.prison ? ['while serving time','in a prison infirmary'] : a < 18 ? ['after a sudden illness','in a tragic accident']
     : a < 55 ? ['after a sudden illness','in an unexpected accident']
     : a < 80 ? ['after a long illness','peacefully, after a good life']
     : ['peacefully, in their sleep','surrounded by family','after a remarkably long and full life'];
