@@ -532,7 +532,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -1769,7 +1769,10 @@ function ageUpYear(){
   hobbiesYear(a);
   const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
   const netPrompted = networkYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted));
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted){ render(); return; }
+  const milPrompted = militaryYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted));
+  const polPrompted = politicsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted));
+  if(!state.alive) return;
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -3019,11 +3022,15 @@ function worldEventsYear(a){
   });
   // elections every four years
   if(w.year % 4 === 0 && a > 0){
-    const side = r() < 0.5 ? 'progressive' : 'conservative', P = PARTIES[side];
+    const race = presidentialRace(w), mine = POL().party && POL().party !== 'independent' ? POL().party : null;
+    // voters tire of a party that has held power a long time
+    let side = r() < 0.5 + (w.party && (w.partyYears || 0) >= 8 ? (w.party === 'progressive' ? -0.12 : 0.12) : 0) ? 'progressive' : 'conservative';
+    if(race && mine) side = race.won ? mine : (mine === 'progressive' ? 'conservative' : 'progressive');
+    const P = PARTIES[side];
     const pol = (w.celebs || []).find(c => c.active && c.kind === 'politician');
-    const winner = state.job && state.job.track === 'Politics' && state.job.rank === CAREERS.Politics.length - 1 ? state.name : pol ? pol.name : pick(FRIENDS) + ' ' + pick(SURNAMES);
+    const winner = race && race.won ? state.name : inOffice() && officeIdx() === 5 ? state.name : pol ? pol.name : pick(FRIENDS) + ' ' + pick(SURNAMES);
     const changed = w.party !== side;
-    w.party = side;
+    w.party = side; w.president = winner; w.partyYears = changed ? 4 : (w.partyYears || 0) + 4;
     // a new government may repeal the other side's laws
     const theirs = w.laws.filter(k => { const l = WORLD_LAWS.find(x => x.key === k); return l && l.side !== side && l.side !== 'any'; });
     if(changed && theirs.length && r() < 0.4){ const k = pick(theirs); w.laws = w.laws.filter(x => x !== k); headline(`${(WORLD_LAWS.find(l => l.key === k).head).replace(/ (PASSED|BECOMES LAW|LEGALIZED|SIGNED|PROTECTED BY LAW)$/, '')} REPEALED`, 'The new government reverses course.', 'policy', false); }
@@ -3063,7 +3070,7 @@ function worldEventsHtml(){
   h += evs.length ? evs.map(ev => `${ev.icon} <b>${ev.name}</b> (year ${ev.year}${ev.left > 0 && ev.key !== 'recession' ? ', ' + ev.left + ' more expected' : ''}): ${ev.desc}`).join('<br>') : 'Calm times. No major events are shaping the world right now.';
   const sectors = Object.keys(fx.sectors).filter(s => Math.abs(fx.sectors[s]) >= 0.05);
   if(sectors.length) h += '<br><br>Stock outlook: ' + sectors.map(s => `<span class="${fx.sectors[s] > 0 ? 'up' : 'down'}">${s} ${fx.sectors[s] > 0 ? '▲' : '▼'}</span>`).join(' · ');
-  if(w.party) h += '<br>Government: ' + PARTIES[w.party].name;
+  if(w.party) h += '<br>Government: ' + PARTIES[w.party].name + (w.president ? ', President ' + w.president : '');
   if((w.laws || []).length) h += '<br>Laws in force: ' + w.laws.map(k => (WORLD_LAWS.find(l => l.key === k) || {head:k}).head.toLowerCase().replace(/ (passed|becomes law|legalized|signed|protected by law)$/, '')).join(', ');
   if((w.unlocked || []).length) h += '<br>New industries: ' + w.unlocked.join(', ');
   if((w.tech || []).some(k => !WORLD_TECH.find(t => t.key === k).unlock)) h += '<br>Breakthroughs: ' + w.tech.filter(k => !WORLD_TECH.find(t => t.key === k).unlock).map(k => ({selfDriving:'self-driving cars', fusion:'fusion power'})[k]).join(', ');
@@ -3120,11 +3127,12 @@ function worldStart(a){
     headline(pick(['BREAKTHROUGH CANCER TREATMENT APPROVED', 'NEW IMMUNOTHERAPY SHOWS STUNNING RESULTS']), 'Survival rates are expected to climb.', 'health', state.health.conditions.some(c => c.key === 'cancer'));
   }
   // policy
-  if(r() < 0.06){
+  const playerPresident = inOffice() && officeIdx() === 5;
+  if(!playerPresident && r() < 0.06){
     const up = r() < 0.5; w.taxMult = Math.max(0.8, Math.min(1.25, w.taxMult + (up ? 0.06 : -0.06)));
     headline(up ? 'INCOME TAXES RAISED' : 'TAX CUTS PASSED', up ? 'Paychecks will shrink a little.' : 'Workers will keep a bit more of each paycheck.', 'policy', !!state.job);
   }
-  if(r() < 0.05){
+  if(!playerPresident && r() < 0.05){
     w.wageMult = Math.round((w.wageMult + 0.05) * 100) / 100;
     const low = state.job && ['Retail','Culinary','Odd Jobs'].includes(state.job.track);
     if(low){ state.job.salary = Math.round(state.job.salary * 1.05 / 100) * 100; pushEntry(a, `${n}'s pay goes up with the new minimum wage.`, {happy:3}); }
@@ -4534,6 +4542,7 @@ const CONDITIONS = {
   asthma:      {name:'asthma', kind:'chronic', min:2, max:14, rate:0.012, hit:{health:-3}, managed:{health:-1}, treat:'an inhaler', cost:300, yearly:true, mort:0.002, resolve:0.08, death:'after a severe asthma attack'},
   migraine:    {name:'migraines', kind:'chronic', min:14, max:55, rate:0.009, hit:{happy:-3, smarts:-1}, managed:{happy:-1}, treat:'migraine medication', cost:400, yearly:true, resolve:0.06},
   depression:  {name:'depression', kind:'chronic', min:13, rate:0.01, mood:true, hit:{happy:-7, health:-1}, managed:{happy:-2}, treat:'therapy', cost:2000, yearly:true, resolve:0.12, resolveTreated:0.35},
+  ptsd:        {name:'PTSD', kind:'chronic', min:16, rate:0, mood:true, hit:{happy:-6, health:-1}, managed:{happy:-2}, treat:'therapy', cost:2500, yearly:true, resolve:0.06, resolveTreated:0.25},
   anxiety:     {name:'an anxiety disorder', kind:'chronic', min:12, rate:0.01, mood:true, hit:{happy:-5}, managed:{happy:-1}, treat:'therapy', cost:1500, yearly:true, resolve:0.1, resolveTreated:0.3},
   addiction:   {name:'an addiction', kind:'chronic', min:14, rate:0, hit:{health:-5, happy:-4, smarts:-1}, managed:{happy:-1}, treat:'rehab', cost:12000, oneOff:true, resolveTreated:0.6, drain:3000},
   hypertension:{name:'high blood pressure', kind:'chronic', min:28, rate:0.015, aging:true, silent:true, hit:{health:-2}, managed:{}, treat:'blood pressure pills', cost:500, yearly:true, mort:0.002, mortTreated:0.0007, death:'of a stroke'},
@@ -4921,6 +4930,7 @@ function imprison(years, crime, juvenile){
   const k = CR(), n = state.name;
   k.prison = {left:years, total:years, crime, behavior:0, juvenile:!!juvenile, gang:false};
   k.probation = 0; k.heat = 0; k.wanted = false;
+  if(!juvenile && milActive()) milDischarge('dishonorable', `${n} is dishonorably discharged from the ${MIL_BRANCHES[state.mil.branch].name}.`);
   if(state.job){ convertCoworkersToFriends(); pushEntry(state.age, `${n} loses their job as ${state.job.title}.`, {}); state.job = null; }
   if(!juvenile && state.edu.school){ pushEntry(state.age, `${n} is forced to leave ${state.edu.school.toLowerCase()}.`, {}); state.edu.school = null; state.edu.program = null; state.edu.endAge = 0; activateStudentLoan(); }
   const p = state.relationships.find(r => LOVE.includes(r.type));
@@ -6508,6 +6518,7 @@ function choosePayment(c, major){
   const aid = aidFor(c), cost = Math.round(inflR(c.tuition, 100) * (1 - aid)), par = parentsWillPay();
   const opts = [];
   if(cost === 0) opts.push({label:'Full scholarship, no tuition', run:() => enrollProgram(c, major, 'paid', aid)});
+  else if(state.mil && state.mil.gi) opts.push({label:'The GI Bill pays tuition', run:() => { state.mil.gi = false; state.mil.giUsed = true; enrollProgram(c, major, 'paid', aid); }});
   else {
     if(par === 1) opts.push({label:'Parents cover the rest', run:() => enrollProgram(c, major, 'paid', aid, 'parents')});
     if(par === 0.5) opts.push({label:`Parents pay half, you pay ${fmt(cost / 2)}/yr`, run:() => enrollProgram(c, major, 'cash', 1 - (1 - aid) / 2, 'parents')});
@@ -6721,28 +6732,29 @@ function workYear(a){
     const c = addCondition('bone', a);
     pushEntry(a, c ? `${state.name} is injured on the job as ${rank.title} and breaks a bone.` : `${state.name} is hurt on the job.`, {health:-6, happy:-3});
   }
-  if(j.track === 'Military' && Math.random() < 0.15){
+  if(j.track === 'Military' && !state.mil && Math.random() < 0.15){
     const bonus = Math.round(j.salary * 0.15);
     pushEntry(a, `${state.name} is deployed overseas for part of the year.`, {money:bonus, happy:-4, family:-3});
   }
   if(info.elect && j.rank >= 1 && Math.random() < 0.06){
-    pushEntry(a, `${state.name} is caught up in a political scandal.`, {happy:-6, rep:-10});
+    pushEntry(a, `${state.name} is caught up in a political scandal.`, {happy:-6, rep:-10, image:-10});
+    POL().scandal = a; POL().approval = Math.max(0, POL().approval - 15);
     if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
-  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + wfx().layoffs + trackFx(j.track).layoff){
+  if(!info.elect && j.track !== 'Military' && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + wfx().layoffs + trackFx(j.track).layoff){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
     return;
   }
 
-  if(j.rank < track.length - 1){
+  if(j.rank < track.length - 1 && !info.elect){              // politicians climb by winning elections, not promotions
     const next = track[j.rank + 1];
     const eligible = !rankGap(next, j.track);
     const chance = (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0) + (CAREER_FAME[j.track] && (TRACK_INFO[j.track] || {}).star ? state.fame.level / 600 : 0)) * (state.econ.recession ? 0.5 : 1);
     if(eligible && Math.random() < chance){
-      j.rank++; j.title = next.title;
+      j.rank++; j.title = j.track === 'Military' && state.mil ? milTitle(j.rank) : next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, j.rank));
       pushEntry(a, (TRACK_INFO[j.track] || {}).elect ? `${state.name} wins the election and becomes ${next.title} — salary now ${fmt(j.salary)}.` : `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.`, {happy: (TRACK_INFO[j.track] || {}).star ? 12 : 6});
       return;
@@ -6939,6 +6951,7 @@ const RECORD_BARRED = ['Law', 'Medicine', 'Education'];
 const trackOpen = t => { const g = (TRACK_INFO[t] || {}).gated; return !g || (state.world && (state.world.unlocked || []).includes(g)); };
 const recordBlocks = trackName => (RECORD_BARRED.includes(trackName) && felonyCount() > 0) || (!!(TRACK_INFO[trackName] || {}).clean && priorCount() > 0);
 function applyJob(trackName){
+  if(trackName === 'Military') return enlistPrompt();
   const track = CAREERS[trackName];
   if(recordBlocks(trackName) || state.crime.prison || !trackOpen(trackName)) return;
   if(!track || (state.job && state.job.track === trackName) || state.done['app_'+trackName]) return;
@@ -6946,13 +6959,13 @@ function applyJob(trackName){
   if(state.retired || state.age > 66) return;
   if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     if(state.job){
       convertCoworkersToFriends();
       pushEntry(state.age, `${state.name} leaves their job as ${state.job.title} for a new career.`, {});
     }
-    const start = startRankFor(trackName);
+    const start = trackName === 'Politics' ? 0 : startRankFor(trackName);
     state.job = {track:trackName, rank:start, title:track[start].title, salary:startingSalary(trackName, start), years:0};
     if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(0, state.age+rint(-8,8)), closeness:35+rint(0,20), origin:'through work'});
     pushEntry(state.age, `${state.name} lands a role as ${state.job.title} in ${trackName}, starting at ${fmt(state.job.salary)}.`, {happy:6});
@@ -6963,6 +6976,8 @@ function applyJob(trackName){
 }
 function quitJob(ok){
   const j = state.job; if(!j) return;
+  if(milActive()) return leaveMilitary(ok);
+  if(inOffice()) return resignOffice(ok);
   if(ok !== true) return askConfirm(`Quit your job as ${j.title}?`, "Quit", () => quitJob(true));
   state.job = null;
   convertCoworkersToFriends();
@@ -7158,18 +7173,19 @@ function renderPanel(){
         if(wl.length) h += `<div class="status">${wl.join('<br>')}</div>`;
         if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">needs ' + nxGap + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
         h += opt('Work extra hard', '−2 health', 'workHarder()', state.done.work);
-        h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
-        h += opt('Look for a better offer', j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1);
-        h += opt('Quit job', '', 'quitJob()', false);
+        if(j.track !== 'Military' && j.track !== 'Politics') h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
+        if(j.track !== 'Military' && j.track !== 'Politics') h += opt('Look for a better offer', j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1);
+        h += opt(j.track === 'Military' ? 'Leave the military' : inOffice() ? 'Resign from office' : 'Quit job', '', 'quitJob()', false);
         if(a >= 60) h += opt('Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       } else if(state.retired){
         h += `<div class="status"><b>Retired</b><br>Pension ${fmt(state.pension)}/yr, adjusted for the cost of living each year.</div>`;
       } else {
         h += '<div class="status">Currently unemployed. Browse career tracks below — you\'ll start at the entry rank of whichever one you apply to.</div>';
       }
+      h += milHtml() + govHtml();
       h += '<div class="plabel">CAREER TRACKS</div>';
       for(const trackName in CAREERS){
-        if(!trackOpen(trackName)) continue;
+        if(!trackOpen(trackName) || trackName === 'Military') continue;       // the military has its own section above
         const rank0 = CAREERS[trackName][0];
         const already = j && j.track === trackName;
         const barred = recordBlocks(trackName), gap = rankGap(rank0, trackName), info = TRACK_INFO[trackName] || {};
@@ -7468,7 +7484,7 @@ function die(cause){
   const illness = cause && cause !== 'age' ? CONDITIONS[cause.key] : null;
   audioDeath();
   const a = state.age;
-  const causes = illness ? [illness.death || 'after a serious bout of ' + illness.name.replace(/^(an?|the) /, '')] : state.crime.prison ? ['while serving time','in a prison infirmary'] : a < 18 ? ['after a sudden illness','in a tragic accident']
+  const causes = cause === 'combat' ? ['in combat, serving in the ' + MIL_BRANCHES[(state.mil || {}).branch || 'army'].name] : illness ? [illness.death || 'after a serious bout of ' + illness.name.replace(/^(an?|the) /, '')] : state.crime.prison ? ['while serving time','in a prison infirmary'] : a < 18 ? ['after a sudden illness','in a tragic accident']
     : a < 55 ? ['after a sudden illness','in an unexpected accident']
     : a < 80 ? ['after a long illness','peacefully, after a good life']
     : ['peacefully, in their sleep','surrounded by family','after a remarkably long and full life'];
@@ -8066,7 +8082,7 @@ function offerJob(r, track, why){
   const p = proOf(r), cur = state.job;
   if(!trackOpen(track) || recordBlocks(track) || state.retired || state.age > 64) return false;
   // a connection can open a door a rung or two up, never hand you an elected office or stardom
-  const ceiling = {Politics:1, Acting:2, Music:2, Sports:1}[track];
+  const ceiling = {Politics:0, Acting:2, Music:2, Sports:1, Military:-1}[track];
   let cap = cur && cur.track === track ? cur.rank + 1 : startRankFor(track) + p.tier - 1;
   if(ceiling !== undefined) cap = Math.min(cap, ceiling);
   const rank = bestRankFor(track, cap);
@@ -8257,6 +8273,437 @@ function networkYear(a, canAsk){
   return networkAsk(r) && !!document.querySelector('#choices .choice-btn');
 }
 
+// ---------- Military service ----------
+// Enlisting is a commitment: a term of service, deployments that grow dangerous in wartime, medals,
+// and benefits that last a lifetime for those who leave honorably.
+const MIL_BRANCHES = {
+  army:    {name:'Army', titles:['Private','Corporal','Sergeant','Lieutenant','Captain','Colonel','General'], combat:1, pay:1, blurb:'the backbone of every war'},
+  navy:    {name:'Navy', titles:['Seaman','Petty Officer','Chief Petty Officer','Ensign','Lieutenant Commander','Captain','Admiral'], combat:0.6, pay:1, blurb:'long months at sea'},
+  airforce:{name:'Air Force', titles:['Airman','Senior Airman','Staff Sergeant','Second Lieutenant','Major','Colonel','General'], combat:0.45, pay:1.05, minSmarts:40, blurb:'technical and safer, needs 40 smarts'},
+  marines: {name:'Marine Corps', titles:['Private','Lance Corporal','Sergeant','Second Lieutenant','Captain','Colonel','General'], combat:1.4, pay:1, minHealth:65, blurb:'first in, the most danger and glory, needs 65 health'},
+};
+const MIL = () => state.mil;
+const milActive = () => !!(state.mil && state.mil.status === 'active' && state.job && state.job.track === 'Military');
+const isVeteran = () => !!(state.mil && state.mil.status === 'veteran' && state.mil.discharge === 'honorable');
+const atWar = () => !!(state.world && (state.world.events || []).some(e => e.key === 'war'));
+function milTitle(rank){ const m = MIL(), b = MIL_BRANCHES[(m && m.branch) || 'army']; return b.titles[Math.min(rank, b.titles.length - 1)]; }
+function enlistGap(key, officer){
+  const b = MIL_BRANCHES[key], s = state.stats;
+  if(state.age < 18) return 'age 18';
+  if(state.age > (officer ? 32 : 35)) return 'too old to enlist';
+  if(felonyCount() > 0) return 'a clean record (no felonies)';
+  if(state.mil && state.mil.discharge === 'dishonorable') return 'no dishonorable discharge';
+  if(milActive()) return 'already serving';
+  if(state.edu.program) return 'finishing school first';
+  if(state.crime.prison) return 'freedom';
+  if(EDU_RANK[state.edu.level] < (officer ? 3 : 1)) return officer ? "a Bachelor's degree" : 'a high school diploma';
+  if(s.health < (b.minHealth || 55)) return (b.minHealth || 55) + ' health';
+  if(s.smarts < (officer ? 55 : b.minSmarts || 20)) return (officer ? 55 : b.minSmarts || 20) + ' smarts';
+  return '';
+}
+function enlist(key, officer, how){
+  if(how !== 'draft' && enlistGap(key, officer)) return;
+  const b = MIL_BRANCHES[key], rank = officer ? 3 : 0, a = state.age;
+  if(state.edu.school && !state.edu.program){ state.edu.school = null; }
+  const j = threadJob('Military', rank);
+  j.salary = Math.round(j.salary * b.pay / 100) * 100;
+  const prev = state.mil;
+  state.mil = {branch:key, officer:!!officer, start:a, termEnd:a + (how === 'draft' ? 2 : 4), years: prev ? prev.years : 0, deployments: prev ? prev.deployments : 0, combat: prev ? prev.combat : 0,
+    medals: prev ? prev.medals : [], status:'active', discharge:null, gi: prev ? prev.gi : false, giUsed: prev ? prev.giUsed : false, drafted: how === 'draft'};
+  j.title = milTitle(rank);
+  const bonus = how === 'draft' || officer ? 0 : inflR(rint(2, 8) * 1000, 500);
+  pushEntry(a, how === 'draft' ? `${state.name} reports for duty in the ${b.name} and ships out to basic training.`
+    : officer ? `${state.name} is commissioned as a ${j.title} in the ${b.name}.` : `${state.name} enlists in the ${b.name}${bonus ? ' with a ' + fmt(bonus) + ' signing bonus' : ''} and heads off to basic training.`,
+    {money: bonus, health:6, smarts:1, happy:-3, family:-2});
+  render();
+}
+function enlistPrompt(){
+  const opts = Object.keys(MIL_BRANCHES).filter(k => !enlistGap(k, false) || !enlistGap(k, true)).map(k => ({label:`${MIL_BRANCHES[k].name}: ${MIL_BRANCHES[k].blurb}`, run:() => {
+    if(!enlistGap(k, true) && !enlistGap(k, false)) presentCustom(`With a degree, ${state.name} can join the ${MIL_BRANCHES[k].name} as an officer.`, [
+      {label:`Officer Candidate School (start as ${MIL_BRANCHES[k].titles[3]})`, run:() => enlist(k, true)}, {label:`Enlist (start as ${MIL_BRANCHES[k].titles[0]})`, run:() => enlist(k, false)}]);
+    else enlist(k, !enlistGap(k, true));
+  }}));
+  if(!opts.length) return;
+  opts.push({label:'Not now', run:() => {}});
+  presentCustom(`Which branch will ${state.name} join? Service is a ${4}-year commitment.`, opts);
+}
+function milDischarge(kind, text){
+  const m = MIL(); if(!m || m.status !== 'active') return;
+  m.status = 'veteran'; m.discharge = kind; m.left = state.age;
+  if(kind === 'honorable' && m.years >= 3 && !m.giUsed) m.gi = true;
+  if(kind !== 'honorable') m.gi = false;
+  if(kind === 'honorable' && m.years >= 20 && state.job) m.pension = Math.round(state.job.salary * 0.5 / 100) * 100;
+  if(state.job && state.job.track === 'Military'){ convertCoworkersToFriends(); state.job = null; }
+  if(text) pushEntry(state.age, text, kind === 'honorable' ? {happy:6} : {happy:-8});
+}
+function leaveMilitary(ok){
+  const m = MIL(); if(!milActive()) return;
+  if(state.age < m.termEnd && ok !== true) return askConfirm('Your service term is not over. Leaving now means a general discharge and no GI Bill. Leave anyway?', 'Leave', () => leaveMilitary(true));
+  if(state.age < m.termEnd) milDischarge('general', `${state.name} leaves the ${MIL_BRANCHES[m.branch].name} early with a general discharge.`);
+  else milDischarge('honorable', `${state.name} completes their service and leaves the ${MIL_BRANCHES[m.branch].name} with an honorable discharge.`);
+  render();
+}
+function award(medal, a){
+  const m = MIL(); m.medals.push({name:medal, age:a});
+  const fame = {'Medal of Honor':25, 'Silver Star':6, 'Bronze Star':3, 'Purple Heart':2}[medal] || 1;
+  pushEntry(a, `${state.name} is awarded the ${medal}.`, {happy: medal === 'Purple Heart' ? 2 : 8, fame});
+}
+function combatPrompt(a){
+  const m = MIL(), b = MIL_BRANCHES[m.branch], n = state.name;
+  const S = [
+    `${n}'s unit is ambushed on patrol.`, `${n}'s convoy hits a roadside bomb.`, `${n}'s position comes under heavy fire at night.`,
+    `A rescue mission goes wrong, and ${n}'s team is pinned down.`];
+  const risky = (killP, hurtP, medalP, medal, good) => () => {
+    m.combat++;
+    if(Math.random() < killP * b.combat * (state.stats.health < 50 ? 1.5 : 1)) return die('combat');
+    let hurt = false;
+    if(Math.random() < hurtP * b.combat){ hurt = true; addCondition('bone', a); pushEntry(a, `${n} is wounded in the fighting.`, {health:-15, happy:-6}); award('Purple Heart', a); }
+    if(Math.random() < medalP) award(Math.random() < 0.05 ? 'Medal of Honor' : medal, a);
+    else pushEntry(a, good, {happy:-2});
+    if(Math.random() < 0.18 + (hurt ? 0.15 : 0)) addCondition('ptsd', a);
+    if(Math.random() < 0.3) state.boost = true;
+  };
+  presentCustom(pick(S), [
+    {label:'Hold the line', run: risky(0.015, 0.2, 0.25, 'Bronze Star', `${n} holds steady, and the unit gets through it together.`)},
+    {label:'Charge in to save a wounded comrade', run: risky(0.03, 0.32, 0.45, 'Silver Star', `${n} drags a wounded friend to safety.`)},
+    {label:'Take cover and wait for support', run: () => { m.combat++; if(Math.random() < 0.004 * b.combat) return die('combat'); if(Math.random() < 0.12) addCondition('ptsd', a); pushEntry(a, `${n} keeps their head down until help arrives.`, {happy:-3}); }},
+  ]);
+  return true;
+}
+function militaryYear(a, canAsk){
+  const m = MIL(), j = state.job;
+  // a career soldier from an old save or an inherited life
+  if(j && j.track === 'Military' && (!m || m.status !== 'active')) state.mil = Object.assign(m || {branch:'army', medals:[], deployments:0, combat:0, years:0, gi:false}, {status:'active', discharge:null, start:a, termEnd:a + 4});
+  if(state.mil && state.mil.pension && state.mil.status === 'veteran'){ state.mil.pension = Math.round(state.mil.pension * (1 + Math.max(0, yrInfl())) / 100) * 100; state.money += state.mil.pension; }
+  if(state.mil && state.mil.status === 'active' && !(j && j.track === 'Military')){      // left service some other way (retirement age, inheritance)
+    state.mil.status = 'veteran'; state.mil.discharge = state.mil.discharge || 'honorable'; state.mil.left = a;
+    if(state.mil.years >= 3 && !state.mil.giUsed) state.mil.gi = true;
+  }
+  if(!milActive()){
+    // the draft, in wartime
+    if(atWar() && canAsk && !state.mil && a >= 18 && a <= 26 && !state.edu.school && !state.crime.prison && Math.random() < 0.08) return draftPrompt(a);
+    // a recruiter
+    if(canAsk && !state.mil && (a === 17 || a === 18 || (a <= 24 && !state.job && Math.random() < 0.1)) && !state.done.recruiter && Math.random() < 0.35 && Object.keys(MIL_BRANCHES).some(k => !enlistGap(k, false) || a === 17)){
+      state.done.recruiter = true;
+      const bonus = inflR(rint(3, 10) * 1000, 500);
+      if(a === 17){ pushEntry(a, `A military recruiter visits ${state.name}'s school, promising travel, training and a ${fmt(bonus)} signing bonus.`, {}); return false; }
+      presentCustom(`A recruiter offers ${state.name} a ${fmt(bonus)} signing bonus, free college after service, and a steady paycheck.`, [
+        {label:'Sign up', run:() => enlistPrompt()}, {label:'Not for me', run:() => pushEntry(a, `${state.name} turns the recruiter down.`, {})}]);
+      return true;
+    }
+    return false;
+  }
+  m.years++;
+  j.title = milTitle(j.rank);
+  // deployments: dangerous in wartime, otherwise training, bases and peacekeeping
+  const war = atWar(), b = MIL_BRANCHES[m.branch];
+  if(Math.random() < (war ? 0.45 + b.combat * 0.2 : 0.18)){
+    m.deployments++;
+    const pay = Math.round(j.salary * (war ? 0.25 : 0.12));
+    pushEntry(a, war ? `${state.name} is deployed to the war zone with the ${b.name}.` : `${state.name} is deployed overseas on a ${pick(['peacekeeping', 'training', 'humanitarian'])} mission.`, {money: pay, happy:-4, family:-4, partner:-3});
+    if(war && canAsk && Math.random() < 0.6 * b.combat) return combatPrompt(a);
+  }
+  // a term ends: stay in or go home
+  if(a >= m.termEnd){
+    if(!canAsk) return false;
+    const bonus = inflR(rint(10, 30) * 1000, 1000);
+    const opts = [{label:`Reenlist for 4 more years (${fmt(bonus)} bonus)`, run:() => { m.termEnd = a + 4; state.money += bonus; pushEntry(a, `${state.name} reenlists for another four years.`, {happy:2}); }},
+      {label:'Leave as a veteran', run:() => milDischarge('honorable', `${state.name} completes their service and leaves the ${b.name} with an honorable discharge.`)}];
+    presentCustom(`${state.name}'s ${m.drafted ? 'draft service' : 'term of service'} is up after ${m.years} year${m.years === 1 ? '' : 's'}${m.years >= 20 ? ', enough for a military pension' : m.years >= 16 ? `. ${20 - m.years} more years would earn a lifetime pension` : ''}.`, opts);
+    return true;
+  }
+  return false;
+}
+function draftPrompt(a){
+  presentCustom(`War has brought back the draft, and ${state.name}'s number comes up.`, [
+    {label:'Report for duty', run:() => { if(state.stats.health >= 45) enlist('army', false, 'draft'); else pushEntry(a, `${state.name} fails the medical exam and is sent home.`, {}); }},
+    {label:'Apply as a conscientious objector', run:() => { if(Math.random() < 0.6) pushEntry(a, `${state.name} is granted conscientious objector status and serves in a hospital instead.`, {happy:-2, smarts:1}); else { pushEntry(a, `${state.name}'s objection is denied, and they are drafted anyway.`, {happy:-6}); enlist('army', false, 'draft'); } }},
+    {label:'Flee the country', run:() => { pushEntry(a, `${state.name} slips across the border to avoid the draft, leaving family behind.`, {happy:-10, family:-15, money: -inflR(3000, 100)}); if(Math.random() < 0.35){ const c = {key:'draft', charge:'draft evasion', ing:'dodging the draft', felony:true, years:[1, 4]}; CR().arrests++; pushEntry(a, `${state.name} is caught and charged with draft evasion.`, {happy:-6}); arrest(c, 0); } }},
+  ]);
+  return true;
+}
+function milHtml(){
+  const m = MIL(), a = state.age;
+  let h = '<div class="plabel">🎖 Military service</div>';
+  if(milActive()){
+    const b = MIL_BRANCHES[m.branch];
+    h += `<div class="invrow"><div class="owned"><b>${state.job.title}</b>, ${b.name} · ${m.years} year${m.years === 1 ? '' : 's'} served · term ends at ${m.termEnd}<br>${m.deployments} deployment${m.deployments === 1 ? '' : 's'}${m.combat ? ' · ' + m.combat + ' firefight' + (m.combat === 1 ? '' : 's') : ''}${m.medals.length ? '<br>Medals: ' + m.medals.map(x => x.name).join(', ') : ''}${atWar() ? '<br><span class="down">The country is at war: deployments are frequent and dangerous.</span>' : ''}</div>` +
+      `<div class="btnrow-social" style="margin:8px 0 0;"><button onclick="leaveMilitary()">${a >= m.termEnd ? 'Leave as a veteran' : 'Leave early (general discharge)'}</button></div></div>`;
+    return h;
+  }
+  if(m){
+    h += `<div class="invrow"><div class="owned">${m.discharge === 'honorable' ? 'Veteran' : m.discharge === 'dishonorable' ? 'Dishonorably discharged' : 'Former service member'} of the ${MIL_BRANCHES[m.branch].name}, ${m.years} years${m.medals.length ? ' · ' + m.medals.map(x => x.name).join(', ') : ''}` +
+      (isVeteran() ? '<br>Benefits: ' + [m.gi ? 'GI Bill pays college tuition' : '', m.pension ? 'pension ' + fmt(m.pension) + '/yr' : '', 'hiring edge in police, fire, aviation and politics', 'voters trust veterans'].filter(Boolean).join(' · ') : '') + '</div></div>';
+  }
+  if(a < 17 || a > 35) return m ? h : '';
+  h += '<div class="invrow"><div class="owned">Serve 4 years, earn a salary, deploy around the world. Wartime brings danger and medals; an honorable discharge brings the GI Bill (free college), a hiring edge and, after 20 years, a pension. A degree lets you start as an officer.</div></div>';
+  Object.keys(MIL_BRANCHES).forEach(k => {
+    const b = MIL_BRANCHES[k], gE = enlistGap(k, false), gO = enlistGap(k, true);
+    h += `<button class="opt" ${gE && gO ? 'disabled' : ''} onclick="enlistBranch('${k}')"><span>Join the ${b.name} <span class="sub-meta">${b.blurb}</span></span><span class="meta">${!gO ? 'as an officer' : !gE ? 'enlist' : 'needs ' + gE}</span></button>`;
+  });
+  return h;
+}
+function enlistBranch(k){
+  const gE = enlistGap(k, false), gO = enlistGap(k, true);
+  if(!gE && !gO) presentCustom(`With a degree, ${state.name} can join the ${MIL_BRANCHES[k].name} as an officer.`, [
+    {label:`Officer Candidate School (start as ${MIL_BRANCHES[k].titles[3]})`, run:() => enlist(k, true)}, {label:`Enlist (start as ${MIL_BRANCHES[k].titles[0]})`, run:() => enlist(k, false)}, {label:'Not now', run:() => {}}]);
+  else if(!gO) enlist(k, true); else if(!gE) enlist(k, false);
+}
+
+// ---------- Government and politics ----------
+// Offices are won in elections you choose to run. In office you make real decisions: some reshape the
+// world everyone lives in (taxes, wages, laws, war and peace), and approval decides whether you keep the job.
+const OFFICES = [null,
+  {title:'City Council Member', term:4, cost:[5000, 30000], exec:false},
+  {title:'Mayor', term:4, cost:[20000, 150000], exec:true},
+  {title:'State Senator', term:6, cost:[80000, 600000], exec:false},
+  {title:'Governor', term:4, cost:[400000, 3000000], exec:true},
+  {title:'President', term:4, cost:[2000000, 40000000], exec:true},
+];
+const POL = () => state.pol || (state.pol = {party:null, approval:50, termEnd:0, terms:{}, campaign:null, bribes:0, former:null, wins:0, laws:0});
+const inOffice = () => !!(state.job && state.job.track === 'Politics' && state.job.rank >= 1);
+const officeIdx = () => inOffice() ? state.job.rank : 0;
+const PARTY_NAMES = {progressive:'Progressive', conservative:'Conservative', independent:'Independent'};
+// how far a candidate can reach: one step up from their current office, two for celebrities and the very rich
+function officeReach(){
+  const top = Math.max(officeIdx(), POL().highest || 0);
+  const outsider = state.fame.level >= 55 || netWorth() / state.econ.cumInflation >= 5e6;
+  return Math.min(5, Math.max(1, top + 1 + (outsider ? 1 : 0)));
+}
+function runGap(i){
+  if(state.age < 18) return 'age 18';
+  if(state.crime.prison) return 'freedom';
+  if(POL().campaign) return 'a campaign already under way';
+  if(inOffice() && i <= officeIdx()) return 'a higher office';
+  if(i === 5 && (POL().terms[5] || 0) >= 2) return 'term limits';
+  if(i > officeReach()) return 'experience in a lower office';
+  const gap = rankGap(CAREERS.Politics[i], 'Politics');
+  return gap;
+}
+function winChance(i, style){
+  const s = state.stats, P = POL(), w = state.world;
+  let p = 0.52 - i * 0.075 + (s.looks - 50) / 300 + (s.smarts - 50) / 400 + Math.min(0.12, state.fame.level / 400) + networkPull('Politics') / 120;
+  p += {grass:0, ads:0.07, blitz:0.12, donors:0.08, attack:0.05}[style] || 0;
+  if(isVeteran()) p += 0.05 + Math.min(0.06, MIL().medals.length * 0.02);
+  if(P.party === 'independent') p -= 0.05;
+  else if(P.party && w.party && P.party !== w.party && i < 5) p += 0.04;          // voters lean against the party in power
+  if(i === 5 && P.party && w.party && P.party !== w.party && (w.partyYears || 0) >= 8) p += 0.06;
+  p -= felonyCount() * 0.25 + priorCount() * 0.06 + (P.scandal && state.age - P.scandal < 4 ? 0.12 : 0);
+  if(state.fame.image < 40) p -= 0.08;
+  p -= Math.min(0.2, (P.losses || 0) * 0.05);                                     // perennial candidates wear voters out
+  return Math.max(0.04, Math.min(0.85, p));
+}
+// the actual race: a strong or weak opponent can swing it either way
+const raceRoll = p => Math.random() < Math.max(0.03, Math.min(0.9, p + (Math.random() - 0.5) * 0.2));
+function reelectChance(){ const P = POL(); return Math.max(0.08, Math.min(0.88, 0.3 + (P.approval - 50) / 70 + state.fame.level / 400 + (isVeteran() ? 0.03 : 0) - (P.scandal && state.age - P.scandal < 4 ? 0.12 : 0))); }
+const styleCost = (i, style) => style === 'grass' || style === 'donors' ? inflR(OFFICES[i].cost[0] * 0.3, 100) : inflR(OFFICES[i].cost[style === 'blitz' ? 1 : 0], 100);
+function runForOffice(i){
+  if(runGap(i)) return;
+  const o = OFFICES[i], n = state.name, opts = [];
+  const add = (style, label) => { const c = styleCost(i, style); if(canPay(c)) opts.push({label:`${label} (${fmt(c)}, about ${Math.round(winChance(i, style) * 100)}% to win)`, run:() => startCampaign(i, style, c)}); };
+  add('grass', 'Grassroots: knock on doors');
+  add('ads', 'A full campaign with TV ads');
+  add('blitz', 'Blanket the airwaves');
+  add('attack', 'Go negative with attack ads');
+  add('donors', 'Take big-donor money (favors will be owed)');
+  if(!opts.length) return pushEntry(state.age, `${n} can't afford to run for ${o.title}.`, {});
+  if(!POL().party) opts.unshift({label:'Pick a party first', run:() => partyPrompt()});
+  opts.push({label:'Not this time', run:() => {}});
+  presentCustom(`${n} considers running for ${o.title}${i === 5 ? `. The next presidential election is ${electionWhen()}` : ''}. How will they campaign?`, opts);
+  render();
+}
+const yearsToElection = () => (4 - ((state.world.year + 1) % 4)) % 4;
+const electionWhen = () => yearsToElection() === 0 ? 'next year' : 'in ' + (yearsToElection() + 1) + ' years';
+function startCampaign(i, style, cost){
+  pay(cost);
+  const P = POL();
+  if(style === 'donors') P.owed = (P.owed || 0) + 1;
+  if(style === 'attack' && Math.random() < 0.25){ applyDelta({image:-8}); pushEntry(state.age, `${state.name}'s attack ads backfire and turn voters off.`, {happy:-3}); style = 'grass'; }
+  if(i === 5){ P.campaign = {office:5, style}; pushEntry(state.age, `${state.name} announces a run for President${P.party ? ' as a ' + PARTY_NAMES[P.party] : ''}. The campaign will run until election day.`, {happy:4, fame:4}); return; }
+  resolveElection(i, winChance(i, style));
+}
+function takeOffice(i){
+  const P = POL(), o = OFFICES[i], prev = inOffice() ? state.job.title : null;
+  const j = threadJob('Politics', i);
+  P.termEnd = state.age + o.term; P.approval = rint(52, 64); P.losses = 0; P.terms[i] = (P.terms[i] || 0) + 1; P.highest = Math.max(P.highest || 0, i); P.wins++;
+  return j;
+}
+function resolveElection(i, chance){
+  const o = OFFICES[i], n = state.name;
+  if(raceRoll(chance)){
+    const j = takeOffice(i);
+    pushEntry(state.age, `${n} wins the election and becomes ${j.title} — salary now ${fmt(j.salary)}.`, {happy:14, fame: i * 3});
+    return true;
+  }
+  POL().losses = (POL().losses || 0) + 1;
+  pushEntry(state.age, `${n} loses the race for ${o.title}.`, {happy:-8, fame: i});
+  return false;
+}
+function partyPrompt(){
+  presentCustom(`Which party will ${state.name} join?`, Object.keys(PARTY_NAMES).map(k => ({label: k === 'independent' ? 'Stay independent (harder to win)' : `${PARTY_NAMES[k]} Party: ${k === 'progressive' ? 'higher wages, more protections, higher taxes' : 'lower taxes, fewer rules, tough on crime'}`, run:() => { POL().party = k; pushEntry(state.age, k === 'independent' ? `${state.name} registers as an independent.` : `${state.name} joins the ${PARTY_NAMES[k]} Party.`, {}); }})));
+}
+function civicAct(kind){
+  if(state.done['civic_' + kind] || state.age < 18 || state.crime.prison) return;
+  state.done['civic_' + kind] = true;
+  const n = state.name;
+  if(kind === 'volunteer'){
+    if(Math.random() < 0.3 && state.relationships.length < 60){ const r = newRel('Contact', {age: clampAge(state.age + rint(-5, 15)), closeness: rint(40, 55), origin: 'on a campaign'}); r.pro = 'politician'; pushEntry(state.age, `${n} volunteers on a campaign and gets to know ${r.name}, a politician.`, {happy:3}); }
+    else pushEntry(state.age, `${n} spends weekends knocking on doors for a campaign.`, {happy:2, smarts:1});
+  } else if(kind === 'donate'){
+    const c = inflR(1000, 100); if(!canPay(c)) return; pay(c);
+    if(Math.random() < 0.4 && state.relationships.length < 60){ const r = newRel('Contact', {age: clampAge(state.age + rint(0, 20)), closeness: rint(40, 55), origin: 'at a fundraiser'}); r.pro = 'politician'; pushEntry(state.age, `${n} donates ${fmt(c)} and is invited to a fundraiser, where they meet ${r.name}, a politician.`, {}); }
+    else pushEntry(state.age, `${n} donates ${fmt(c)} to a political campaign.`, {});
+  } else if(kind === 'protest'){
+    if(Math.random() < 0.12){ pushEntry(state.age, `${n}'s protest turns tense, and they are briefly detained.`, {happy:-3}); CR().heat = Math.min(100, CR().heat + 10); }
+    else pushEntry(state.age, `${n} marches in a protest for a cause they believe in.`, {happy:4, rep:3});
+  } else if(kind === 'townhall' && inOffice()){
+    const P = POL(); P.approval = Math.min(100, P.approval + rint(1, 5)); pushEntry(state.age, `${n} holds a packed town hall and listens to voters.`, {happy:1});
+  }
+  render();
+}
+// decisions that come with power; effects marked world change the economy, the laws and the news for everyone
+function policyChoices(i){
+  const w = state.world, e = state.econ, P = POL(), exec = OFFICES[i].exec, pres = i === 5, gov = i >= 4;
+  const ap = d => () => { P.approval = Math.max(0, Math.min(100, P.approval + d)); };
+  const list = [];
+  if(pres && atWar()) list.push({w:4, prompt:'War rages overseas. As commander in chief, what does the President do?', opts:[
+    {label:'Send more troops to win it', run:() => { const ev = w.events.find(x => x.key === 'war'); if(Math.random() < 0.4 && ev){ ev.left = 0; headline('THE WAR IS WON', 'Troops begin coming home.', 'world', true); P.approval += 12; pushEntry(state.age, `Under ${state.name}, the war ends in victory.`, {happy:10, fame:6}); } else { P.approval -= 6; pushEntry(state.age, `The surge drags on with heavy losses.`, {happy:-6}); } }},
+    {label:'Negotiate a peace deal', run:() => { const ev = w.events.find(x => x.key === 'war'); if(Math.random() < 0.55 && ev){ ev.left = 0; headline('PEACE AGREEMENT SIGNED', `President ${state.name} brokers an end to the war.`, 'world', true); P.approval += 10; pushEntry(state.age, `${state.name} brokers a peace deal that ends the war.`, {happy:10, fame:8}); } else { P.approval -= 5; pushEntry(state.age, `Peace talks collapse.`, {happy:-4}); } }},
+    {label:'Stay the course', run:() => { P.approval -= 2; pushEntry(state.age, `${state.name} keeps the current strategy.`, {}); }}]});
+  if(gov && w.events.some(x => x.key === 'pandemic')) list.push({w:4, prompt:'A pandemic is spreading. What does the government do?', opts:[
+    {label:'Order lockdowns', run:() => { const ev = w.events.find(x => x.key === 'pandemic'); if(ev && pres) ev.left = Math.max(0, ev.left - 1); w.fx.marketShock = (w.fx.marketShock || 0) - (pres ? 0.05 : 0.01); P.approval += rint(-6, 8); pushEntry(state.age, `${state.name} orders lockdowns. Cases fall, but businesses suffer.`, {}); }},
+    {label:'Keep everything open', run:() => { const ev = w.events.find(x => x.key === 'pandemic'); if(ev && pres) ev.left++; P.approval += rint(-8, 6); pushEntry(state.age, `${state.name} keeps the economy open as the virus spreads.`, {}); }}]});
+  if(gov && e.recession) list.push({w:4, prompt:'The economy is in recession.', opts:[
+    {label:'Pass a big stimulus package', run:() => { if(pres){ e.recessionLeft = Math.max(0, e.recessionLeft - 1); e.cumInflation *= 1.015; } P.approval += 8; pushEntry(state.age, `${state.name} pushes through a stimulus. Checks go out and spending rebounds.`, {}); if(pres) headline('STIMULUS PACKAGE SIGNED', 'Relief checks are on the way.', 'economy', true); }},
+    {label:'Cut spending and balance the budget', run:() => { P.approval -= 7; if(pres) e.inflation = Math.max(0, e.inflation - 0.01); pushEntry(state.age, `${state.name} chooses austerity. Markets approve; voters don't.`, {}); }}]});
+  if(pres){
+    const inForce = w.laws || [], partySide = P.party === 'independent' ? null : P.party;
+    const pass = WORLD_LAWS.filter(l => !inForce.includes(l.key) && (!partySide || l.side === partySide || l.side === 'any'));
+    if(pass.length){ const l = pick(pass); list.push({w:3, prompt:`${state.name} can push Congress to pass a new law: ${l.head.toLowerCase().replace(/ (passed|becomes law|legalized|signed|protected by law)$/, '')}.`, opts:[
+      {label:'Fight for it', run:() => { if(Math.random() < 0.35 + P.approval / 150){ w.laws.push(l.key); P.laws++; headline(l.head, `Signed into law by President ${state.name}.`, 'policy', true); P.approval += rint(-3, 7); pushEntry(state.age, `${state.name} signs a new law: ${l.head.toLowerCase()}.`, {happy:6}); } else { P.approval -= 4; pushEntry(state.age, `Congress blocks ${state.name}'s bill.`, {happy:-4}); } }},
+      {label:'Spend the political capital elsewhere', run:() => {}}]}); }
+    const theirs = inForce.map(k => WORLD_LAWS.find(l => l.key === k)).filter(l => l && partySide && l.side !== partySide && l.side !== 'any');
+    if(theirs.length){ const l = pick(theirs); list.push({w:2, prompt:`${state.name}'s party wants to repeal a law: ${l.head.toLowerCase()}.`, opts:[
+      {label:'Repeal it', run:() => { if(Math.random() < 0.5 + P.approval / 200){ w.laws = w.laws.filter(x => x !== l.key); P.laws++; headline(`${l.head.replace(/ (PASSED|BECOMES LAW|LEGALIZED|SIGNED|PROTECTED BY LAW)$/, '')} REPEALED`, `President ${state.name} reverses it.`, 'policy', true); P.approval += rint(-4, 4); pushEntry(state.age, `${state.name} repeals it.`, {}); } else pushEntry(state.age, `The repeal fails in Congress.`, {happy:-2}); }},
+      {label:'Leave it alone', run:() => {}}]}); }
+    list.push({w:3, prompt:'The national budget is up for debate.', opts:[
+      {label:'Cut taxes for everyone', run:() => { w.taxMult = Math.max(0.75, Math.round((w.taxMult - 0.05) * 100) / 100); P.approval += 6; headline('TAX CUTS SIGNED', `President ${state.name} lowers taxes across the board.`, 'policy', true); pushEntry(state.age, `${state.name} signs a tax cut.`, {happy:3}); }},
+      {label:'Raise the minimum wage', run:() => { w.wageMult = Math.round((w.wageMult + 0.06) * 100) / 100; P.approval += rint(0, 7); headline('MINIMUM WAGE RAISED', 'Low-wage workers get a raise.', 'policy', true); pushEntry(state.age, `${state.name} raises the minimum wage.`, {happy:3}); }},
+      {label:'Raise taxes to pay down debt', run:() => { w.taxMult = Math.min(1.3, Math.round((w.taxMult + 0.04) * 100) / 100); P.approval -= 5; e.inflation = Math.max(0, e.inflation - 0.004); headline('TAXES RAISED TO CUT THE DEFICIT', 'Paychecks shrink a little.', 'policy', true); pushEntry(state.age, `${state.name} raises taxes to cut the deficit.`, {}); }}]});
+  }
+  if(!pres && exec) list.push({w:3, prompt:`As ${OFFICES[i].title}, ${state.name} must balance the budget.`, opts:[
+    {label:'Fund schools and parks', run:() => { P.approval += rint(2, 7); pushEntry(state.age, `${state.name} funds new schools and parks.`, {happy:2}); }},
+    {label:'Hire more police', run:() => { P.approval += rint(-2, 6); pushEntry(state.age, `${state.name} expands the police force.`, {}); }},
+    {label:'Cut local taxes', run:() => { P.approval += rint(0, 6); if(gov) w.taxMult = Math.max(0.75, Math.round((w.taxMult - 0.02) * 100) / 100); pushEntry(state.age, `${state.name} cuts taxes.`, {}); }}]});
+  if(!exec) list.push({w:3, prompt:`A controversial bill comes up for a vote in ${state.name}'s chamber.`, opts:[
+    {label:'Vote with the party', run:() => { P.approval += rint(-3, 4); pushEntry(state.age, `${state.name} votes the party line.`, {}); }},
+    {label:'Break ranks and vote your conscience', run:() => { P.approval += rint(-6, 9); pushEntry(state.age, `${state.name} breaks with their party on a big vote.`, {fame:2}); }},
+    {label:'Abstain', run:() => { P.approval -= 2; pushEntry(state.age, `${state.name} sits the vote out.`, {}); }}]});
+  if(gov && w.events.some(x => x.key === 'disaster')) list.push({w:3, prompt:'A natural disaster has devastated a region.', opts:[
+    {label:'Rush emergency aid', run:() => { P.approval += 8; pushEntry(state.age, `${state.name} visits the disaster zone and rushes aid in.`, {fame:3}); }},
+    {label:'Let local officials handle it', run:() => { P.approval -= 9; pushEntry(state.age, `${state.name} is criticized for a slow response.`, {happy:-3}); }}]});
+  // temptation
+  const bribe = inflR(rint(2, 8) * 10000 * i, 1000);
+  list.push({w: 1 + (P.owed || 0), prompt:`${P.owed ? 'A big donor' : 'A lobbyist'} quietly offers ${state.name} ${fmt(bribe)} to steer a contract their way.`, opts:[
+    {label:'Take the money', run:() => { state.money += bribe; P.bribes++; P.owed = Math.max(0, (P.owed || 0) - 1); pushEntry(state.age, `${state.name} takes the money.`, {happy:2}); }},
+    {label:'Refuse and report it', run:() => { P.approval += 4; P.owed = 0; pushEntry(state.age, `${state.name} reports the bribe, and voters notice.`, {happy:2, image:4}); }}]});
+  return list;
+}
+function politicsYear(a, canAsk){
+  const P = POL();
+  if(P.former && P.former.until >= a && !state.crime.prison){ const fee = inflR(P.former.fee, 1000); state.money += fee; if(a === P.former.from + 1) pushEntry(a, `As a former ${P.former.title}, ${state.name} earns ${fmt(fee)} a year from speeches and books.`, {}); }
+  if(!inOffice()) return false;
+  const i = officeIdx(), o = OFFICES[i], w = state.world, e = state.econ;
+  // approval drifts back toward the middle and erodes with time in office
+  P.approval = Math.max(0, Math.min(100, Math.round(P.approval + rint(-5, 3) + (o.exec ? (e.recession ? -6 : w.events.some(x => x.key === 'boom') ? 4 : 0) : 0) + (45 - P.approval) / 6)));
+  // corruption catches up
+  if(P.bribes && Math.random() < 0.12 * P.bribes){
+    P.bribes = 0; P.scandal = a;
+    pushEntry(a, `Investigators uncover the bribes ${state.name} took in office.`, {happy:-10, image:-25, fame:6});
+    convertCoworkersToFriends(); state.job = null;
+    CR().arrests++; arrest({key:'bribery', charge:'bribery', ing:'taking bribes', felony:true, years:[2, 8]}, 0);
+    return true;
+  }
+  if(P.approval < 20 && Math.random() < 0.5){
+    pushEntry(a, `${state.name} is ${i === 5 ? 'impeached and removed from office' : 'recalled by angry voters'}.`, {happy:-15, fame:5});
+    leaveOffice(i, true); return false;
+  }
+  // terms end (the presidency follows the national election calendar)
+  if(i < 5 && a >= P.termEnd){
+    if(!canAsk) return false;
+    const c = inflR(o.cost[0] * 0.5, 100), chance = reelectChance();
+    presentCustom(`${state.name}'s term as ${o.title} is ending. Approval: ${P.approval}%.`, [
+      {label:`Run for reelection (${fmt(c)}, about ${Math.round(chance * 100)}% to win)`, run:() => { if(!canPay(c)){ pushEntry(a, `${state.name} can't fund a campaign and leaves office.`, {}); leaveOffice(i); return; } pay(c);
+        if(raceRoll(chance)){ P.termEnd = a + o.term; P.terms[i] = (P.terms[i] || 0) + 1; P.approval = Math.max(P.approval, 50); pushEntry(a, `${state.name} is reelected as ${o.title}.`, {happy:10, fame:2}); }
+        else { pushEntry(a, `${state.name} loses reelection as ${o.title}.`, {happy:-10}); leaveOffice(i); } }},
+      {label:'Step down', run:() => { pushEntry(a, `${state.name} chooses not to run again and leaves office as ${o.title}.`, {happy:2}); leaveOffice(i); }},
+    ]);
+    return true;
+  }
+  if(canAsk && Math.random() < 0.55){
+    const list = policyChoices(i); let x = Math.random() * list.reduce((t, c) => t + c.w, 0), c = list[0];
+    for(const l of list){ x -= l.w; if(x <= 0){ c = l; break; } }
+    presentCustom(c.prompt + ` (Approval ${P.approval}%)`, c.opts.map(o2 => ({label:o2.label, run:() => { o2.run(); P.approval = Math.max(0, Math.min(100, Math.round(P.approval))); }})));
+    return true;
+  }
+  return false;
+}
+function leaveOffice(i, disgraced){
+  const P = POL(), o = OFFICES[i];
+  if(state.job && state.job.track === 'Politics'){ convertCoworkersToFriends(); state.job = null; }
+  if(!disgraced && i >= 3) P.former = {title:o.title, fee:{3:150000, 4:400000, 5:1500000}[i], from:state.age, until:state.age + (i === 5 ? 10 : 5)};
+}
+// the presidency is decided on the national election calendar
+function presidentialRace(w){
+  const P = POL(), sitting = state.job && state.job.track === 'Politics' && state.job.rank === 5;
+  if(sitting){
+    if((P.terms[5] || 0) >= 2){ pushEntry(state.age, `${state.name} completes a second term as President and leaves office.`, {happy:6}); leaveOffice(5); return null; }
+    if(raceRoll(reelectChance())){ P.terms[5]++; P.termEnd = state.age + 4; P.approval = Math.max(P.approval, 50); pushEntry(state.age, `${state.name} wins reelection as President.`, {happy:12, fame:6}); return {won:true}; }
+    pushEntry(state.age, `${state.name} loses the presidential election and leaves the White House.`, {happy:-12}); leaveOffice(5); return {won:false};
+  }
+  if(P.campaign && P.campaign.office === 5){
+    const c = P.campaign; P.campaign = null;
+    if(raceRoll(winChance(5, c.style))){ const j = takeOffice(5); pushEntry(state.age, `${state.name} wins the election and becomes ${j.title} — salary now ${fmt(j.salary)}.`, {happy:20, fame:20}); return {won:true}; }
+    P.losses = (P.losses || 0) + 1;
+    pushEntry(state.age, `${state.name} loses the race for President.`, {happy:-10, fame:6}); return {won:false};
+  }
+  return null;
+}
+function govHtml(){
+  const w = state.world, P = POL(), a = state.age;
+  let h = '<div class="plabel">🏛 Government & politics</div>';
+  const laws = (w.laws || []).map(k => (WORLD_LAWS.find(l => l.key === k) || {}).head).filter(Boolean).map(x => x.toLowerCase().replace(/ (passed|becomes law|legalized|signed|protected by law)$/, ''));
+  h += `<div class="invrow"><div class="owned">${w.party ? 'Ruling party: <b>' + PARTIES[w.party].name + '</b>' : 'No national election yet'}${w.president ? ' · President ' + w.president : ''} · next national election ${electionWhen()}` +
+    `<br>Taxes ${Math.round((w.taxMult || 1) * 100)}% of normal · minimum wage ${Math.round((w.wageMult || 1) * 100)}% of today's${laws.length ? '<br>In force: ' + laws.join(', ') : ''}</div></div>`;
+  if(a < 18) return h;
+  if(inOffice()){
+    const i = officeIdx(), o = OFFICES[i];
+    h += `<div class="invrow"><div class="itop"><span><b>${o.title}</b>${P.party ? ' · ' + PARTY_NAMES[P.party] : ''}</span><span class="price">${P.approval}% approval</span></div>` +
+      `<div class="stat-track" style="margin:4px 0 6px;"><div class="stat-fill" style="width:${P.approval}%;background:var(--${P.approval >= 50 ? 'accent' : 'red'})"></div></div>` +
+      `<div class="owned">${i === 5 ? 'Term ' + (P.terms[5] || 1) + ' of 2 · next election ' + electionWhen() : 'Term ends at ' + P.termEnd}${P.laws ? ' · ' + P.laws + ' law' + (P.laws === 1 ? '' : 's') + ' changed' : ''}. Each year in office brings decisions; ${i === 5 ? 'as President they change taxes, wages, laws, war and peace for everyone.' : 'low approval can cost you the job.'}</div>` +
+      `<div class="btnrow-social" style="margin:8px 0 0;"><button onclick="civicAct('townhall')" ${state.done.civic_townhall ? 'disabled' : ''}>Hold a town hall</button><button onclick="resignOffice()">Resign</button></div></div>`;
+  } else if(P.campaign){
+    h += `<div class="status">Running for President. Election day is ${electionWhen()}.</div>`;
+  }
+  h += `<div class="invrow"><div class="owned">Party: <b>${P.party ? PARTY_NAMES[P.party] : 'none'}</b>${isVeteran() ? ' · veterans get a boost with voters' : ''}${felonyCount() ? ' · <span class="down">a felony record is a heavy burden</span>' : ''}</div><div class="btnrow-social" style="margin:8px 0 0;">` +
+    `<button onclick="partyPrompt();render()">${P.party ? 'Switch party' : 'Join a party'}</button>` +
+    `<button onclick="civicAct('volunteer')" ${state.done.civic_volunteer ? 'disabled' : ''}>Volunteer on a campaign</button>` +
+    `<button onclick="civicAct('donate')" ${state.done.civic_donate || !canPay(inflR(1000, 100)) ? 'disabled' : ''}>Donate (${fmt(inflR(1000, 100))})</button>` +
+    `<button onclick="civicAct('protest')" ${state.done.civic_protest ? 'disabled' : ''}>Join a protest</button></div></div>`;
+  for(let i = 1; i <= 5; i++){
+    if(inOffice() && i <= officeIdx()) continue;
+    const g = runGap(i), o = OFFICES[i];
+    if(g === 'experience in a lower office' && i > officeReach() + 1) continue;
+    h += `<button class="opt" ${g ? 'disabled' : ''} onclick="runForOffice(${i})"><span>Run for ${o.title} <span class="sub-meta">${o.term}-year term · ${fmt(startingSalary('Politics', i))}/yr · campaigns from ${fmt(styleCost(i, 'grass'))}</span></span><span class="meta">${g ? 'needs ' + g : 'about ' + Math.round(winChance(i, 'ads') * 100) + '% with ads'}</span></button>`;
+  }
+  return h;
+}
+function resignOffice(ok){
+  if(!inOffice()) return;
+  if(ok !== true) return askConfirm(`Resign as ${state.job.title}?`, 'Resign', () => resignOffice(true));
+  const i = officeIdx(); pushEntry(state.age, `${state.name} resigns as ${state.job.title}.`, {happy:-2}); leaveOffice(i); render();
+}
+
 // ---------- Achievements and milestones ----------
 // Achievements belong to the player, not to one life: they live in their own save and survive every new record.
 // Milestones are the firsts of a single life, kept on its timeline.
@@ -8355,6 +8802,15 @@ const ACHIEVEMENTS = [
   {k:'networker', cat:'Fame', icon:'🤝', tier:'silver', name:'Well Connected', desc:'Have 10 close professional connections', test:() => myNetwork().filter(r => r.closeness >= 50).length >= 10},
   {k:'whoyouknow', cat:'Career', icon:'🔗', tier:'bronze', name:"It's Who You Know", desc:'Land a job through a connection', on:/lands a job as .{1,60} thanks to/},
   {k:'board', cat:'Career', icon:'🪑', tier:'silver', name:'Board Member', desc:'Get a seat on a company board', test:() => !!state.boardSeat},
+  {k:'enlist', cat:'Career', icon:'🪖', tier:'bronze', name:'Enlisted', desc:'Join the military', test:() => !!state.mil},
+  {k:'medal', cat:'Career', icon:'🎖️', tier:'silver', name:'Decorated', desc:'Earn a military medal for valor', test:() => !!state.mil && state.mil.medals.some(m => m.name !== 'Purple Heart')},
+  {k:'moh', cat:'Career', icon:'⭐', tier:'gold', name:'Medal of Honor', desc:'Receive the highest military honor', secret:true, on:/awarded the Medal of Honor/},
+  {k:'veteran', cat:'Career', icon:'🇺🇸', tier:'silver', name:'Veteran', desc:'Leave the military with an honorable discharge', test:() => isVeteran()},
+  {k:'brass', cat:'Career', icon:'🎗', tier:'gold', name:'Top Brass', desc:'Become a General or Admiral', test:() => milActive() && state.job.rank >= 6},
+  {k:'elected', cat:'Career', icon:'🗳️', tier:'bronze', name:'Elected', desc:'Win your first election', test:() => !!state.pol && state.pol.wins >= 1},
+  {k:'reelected', cat:'Career', icon:'🔁', tier:'silver', name:'Four More Years', desc:'Win reelection', on:/is reelected as|wins reelection as President/},
+  {k:'lawmaker', cat:'Career', icon:'📜', tier:'gold', name:'Stroke of the Pen', desc:'Sign or repeal a law as President', test:() => !!state.pol && state.pol.laws >= 1},
+  {k:'peace', cat:'World', icon:'🕊', tier:'gold', name:'Peacemaker', desc:'End a war as President', secret:true, on:/brokers a peace deal|war ends in victory/},
   {k:'pandemic', cat:'World', icon:'😷', tier:'bronze', name:'Lived Through It', desc:'Live through a pandemic', test:() => state.ach.events.includes('pandemic')},
   {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
   {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
@@ -8386,6 +8842,9 @@ const MILESTONES = [
   {k:'inherit', icon:'🕯️', test:() => state.inheritedTotal > 0, text:() => 'Received an inheritance'},
   {k:'prison', icon:'⛓️', test:() => !!state.crime.prison, text:() => 'Went to prison'},
   {k:'board', icon:'🪑', test:() => !!state.boardSeat, text:() => 'Joined a company board through ' + state.boardSeat.from},
+  {k:'enlist', icon:'🪖', test:() => !!state.mil, text:() => 'Joined the ' + MIL_BRANCHES[state.mil.branch].name},
+  {k:'vet', icon:'🇺🇸', test:() => isVeteran(), text:() => 'Honorably discharged after ' + state.mil.years + ' years of service'},
+  {k:'elected', icon:'🗳️', test:() => !!state.pol && state.pol.wins >= 1, text:() => 'First elected, as ' + (state.job && state.job.track === 'Politics' ? state.job.title : 'a public official')},
   {k:'retired', icon:'⌚', test:() => state.retired, text:() => 'Retired'},
   {k:'age100', icon:'💯', test:() => state.age >= 100, text:() => 'Turned 100'},
 ];
