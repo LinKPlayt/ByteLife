@@ -365,6 +365,14 @@
   .tl-more{ font-size:11.5px; color:var(--muted); padding:3px 0 4px 35px; }
   #achModal .modal-card{ max-width:460px; max-height:84vh; overflow-y:auto; text-align:left; }
   #achModal h3{ margin:0 0 6px; font-family:'Fraunces',serif; font-size:20px; color:var(--ink); }
+  .chain{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; text-align:left; }
+  .chain.good{ border-left:3px solid var(--accent); } .chain.bad{ border-left:3px solid var(--red); } .chain.mixed{ border-left:3px solid var(--gold); }
+  .chain-h{ display:flex; justify-content:space-between; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:6px; }
+  .chain-age{ font-size:11.5px; color:var(--muted); white-space:nowrap; }
+  .chain-step{ display:flex; gap:9px; font-size:13px; color:var(--ink); line-height:1.35; }
+  .chain-step.last{ font-weight:700; }
+  .chain-step.pending{ color:var(--muted); font-style:italic; }
+  .chain-arrow{ color:var(--muted); font-size:11px; line-height:1; padding:2px 0 2px 35px; }
   #goHighlights{ text-align:left; display:grid; gap:8px; margin-bottom:16px; }
   #gameover{ display:none; text-align:center; }
   #gameover h2{ font-family:'Fraunces',serif; font-size:25px; font-weight:700; color:var(--ink); margin-bottom:8px; }
@@ -524,7 +532,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -1759,7 +1767,8 @@ function ageUpYear(){
   const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted));
   if(pets.cost) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked){ render(); return; }
+  const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
@@ -3023,8 +3032,10 @@ function worldEventsYear(a){
   // what it does to the economy this year
   const fx = worldFx();
   w.fxCache = fx;
-  if(fx.inflation){ e.inflation = Math.min(0.15, e.inflation + fx.inflation); e.cumInflation *= 1 + fx.inflation; }
-  if(fx.rate) e.rate = Math.min(0.14, e.rate + fx.rate);
+  // a world event adds to this year's price rise without ratcheting the underlying rate up year after year
+  e.boost = fx.inflation || 0;
+  if(e.boost) e.cumInflation *= 1 + e.boost;
+  if(fx.rate) e.rate = Math.min(0.14, e.rate + fx.rate * 0.3);
   if(fx.gas > (w.fx.gas || 1)) w.fx.gas = fx.gas;
   if(fx.flu > (w.fx.flu || 1)) w.fx.flu = fx.flu;
   if(fx.storm) w.fx.storm = true;
@@ -3175,7 +3186,7 @@ function worldEnd(a){
   w.wasRecession = e.recession;
   if(w.lastRate !== undefined && Math.abs(e.rate - w.lastRate) >= 0.006) headline(`CENTRAL BANK ${e.rate > w.lastRate ? 'RAISES' : 'CUTS'} RATES TO ${(e.rate * 100).toFixed(1)}%`, e.rate > w.lastRate ? 'Borrowing just got more expensive.' : 'Cheaper loans and mortgages ahead.', 'economy', state.loans.length > 0);
   w.lastRate = e.rate;
-  if(e.inflation >= 0.06) headline(`INFLATION HITS ${(e.inflation * 100).toFixed(1)}%`, 'Prices are rising fast at the store.', 'economy', true);
+  if(yrInfl() >= 0.06) headline(`INFLATION HITS ${(yrInfl() * 100).toFixed(1)}%`, 'Prices are rising fast at the store.', 'economy', true);
   const hp = H.trend * 100;
   const ownsProperty = state.assets.some(x => x.category === 'Homes' || x.rental);
   if(hp >= 5) headline(`HOUSING PRICES SURGE ${Math.round(hp)}%`, 'Buyers face bidding wars.', 'housing', ownsProperty);
@@ -4841,6 +4852,7 @@ function commitCrime(key){
     const delta = {money: amt, happy: c.happy || (amt > 0 ? 3 : 1)};
     if(c.health) delta.health = c.health;
     pushEntry(state.age, amt > 0 ? `${n} gets away with ${c.ing} and comes out ${fmt(amt)} ahead.` : `${n} gets away with ${c.ing}.`, delta);
+    if(c.felony && !hasThread('blackmail') && Math.random() < 0.3) seedThread('blackmail', {crime: c.key, ing: c.ing}, `Got away with ${c.ing}`, rint(1, 4), 'note');
   }
   render();
 }
@@ -5074,7 +5086,7 @@ function totalDebt(){
   return (state.creditCard ? state.creditCard.balance : 0) + state.loans.reduce((s,l) => s + l.balance, 0);
 }
 function netWorth(){
-  return state.money + state.savings + (state.trustFund || 0) + (state.retirement ? state.retirement.balance : 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value : 0) - totalDebt();
+  return state.money + state.savings + (state.trustFund || 0) + (state.retirement ? state.retirement.balance : 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value * bizShare(state.business) : 0) - totalDebt();
 }
 function toSavings(amt){ if(state.money < amt) return; state.money -= amt; state.savings += amt; render(); }
 function toChecking(amt){ if(state.savings < amt) return; state.savings -= amt; state.money += amt; render(); }
@@ -5223,6 +5235,7 @@ function incomeTaxBase(gross){
   }
   return tax;
 }
+const yrInfl = () => state.econ.inflation + (state.econ.boost || 0);
 function updateEconomy(a){
   const e = state.econ;
   if(e.recession){
@@ -5230,7 +5243,7 @@ function updateEconomy(a){
     if(e.recessionLeft <= 0){ e.recession = false; pushEntry(a, `The economy climbs out of recession.`, {happy:3}); }
   }
   e.rate = Math.max(0.01, Math.min(0.14, e.rate + (Math.random()+Math.random()-1)*0.01 + (0.04-e.rate)*0.1 + (e.recession?0.01:0)));
-  e.inflation = Math.max(-0.01, Math.min(0.12, e.inflation + (Math.random()+Math.random()-1)*0.008 + (0.025-e.inflation)*0.1 + (e.recession?0.012:0)));
+  e.inflation = Math.max(-0.01, Math.min(0.12, e.inflation + (Math.random()+Math.random()-1)*0.008 + (0.025-e.inflation)*0.1 + (e.recession?-0.006:0)));
   e.cumInflation *= (1 + e.inflation);
 }
 function creditScoreYear(a){
@@ -5393,6 +5406,7 @@ function suggestBizName(typeKey){
   const word = BIZ_WORD[typeKey] || 'Company', first = state.name.split(' ')[0];
   return Math.random() < 0.35 ? `${first}'s ${word}` : `${pick(BIZ_PREFIX)} ${pick(BIZ_PREFIX.concat(['Peak','Fox','Pine','Stone','River']))} ${word}`.replace(/^(\w+) \1 /, '$1 ');
 }
+const bizShare = b => b && b.cofounder ? 0.5 : 1;
 function bizName(b){ return (b && b.name) || (b ? bizType(b.type).name : ''); }
 function fillBizName(){ const el = document.getElementById('bizName'); if(el) el.value = suggestBizName(pick(BUSINESS_TYPES).key); }
 function renameBusiness(){
@@ -5469,9 +5483,11 @@ function applyBusinessLoan(){
 }
 function closeBusiness(ok){
   const b = state.business; if(!b) return;
-  if(ok !== true) return askConfirm(`Sell the business for ${fmt(Math.round(b.value * 0.7))}?`, "Sell", () => closeBusiness(true));
-  state.money += Math.round(b.value * 0.7);
-  pushEntry(state.age, `${state.name} sells ${bizName(b)} for ${fmt(Math.round(b.value*0.7))}.`, {happy:-2});
+  const sale = Math.round(b.value * 0.7 * bizShare(b));
+  if(ok !== true) return askConfirm(`Sell ${b.cofounder ? 'your half of ' : ''}the business for ${fmt(sale)}?`, "Sell", () => closeBusiness(true));
+  state.money += sale;
+  threads().forEach(t => { if(t.key === 'dropout' && b.cofounder && t.data.rel === b.cofounder) t.data.sold = true; });
+  pushEntry(state.age, `${state.name} sells ${b.cofounder ? 'their half of ' : ''}${bizName(b)} for ${fmt(sale)}.`, {happy:-2});
   state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
   state.business = null;
   render();
@@ -5481,8 +5497,8 @@ function ipoBusiness(){
   const nm = bizName(b), typed = document.getElementById('ipoTicker');
   const want = typed ? typed.value.toUpperCase().replace(/[^A-Z]/g, '') : '';
   const ticker = want.length >= 2 && want.length <= 5 && !state.market[want] ? want : tickerFor(nm);
-  const totalShares = 1000000, ipoPrice = +(b.value / totalShares).toFixed(2), sharesRetained = 600000;
-  const cashRaised = Math.round((totalShares - sharesRetained) * ipoPrice);
+  const totalShares = 1000000, ipoPrice = +(b.value / totalShares).toFixed(2), sharesRetained = Math.round(600000 * bizShare(b));
+  const cashRaised = Math.round(400000 * ipoPrice * bizShare(b));
   const newStock = {key:ticker, name:nm, sector:'IPO', base:ipoPrice, drift:0.07, vol:0.35, div:0, ipo:true};
   state.ipos.push(newStock);
   syncIpos();
@@ -5520,14 +5536,14 @@ function businessYear(a){
   if(Math.random() < failChance){
     if(profit > 0 && b.reputation >= 60 && Math.random() < 0.6){
       pushEntry(a, `${state.name}'s business hits a rough patch but its loyal customers carry it through.`, {happy:-3, biz:-15});
-      return profit - kept;
+      return Math.round((profit - kept) * bizShare(b));
     }
     pushEntry(a, `${bizName(b)} fails and shuts its doors.${totalDebt()>0 ? ' Any business loans remain due.' : ''}`, {happy:-12});
     state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
     state.business = null;
     return 0;
   }
-  return profit - kept;
+  return Math.round((profit - kept) * bizShare(b));
 }
 // ---- running the business: staff, upgrades, growth and yearly decisions ----
 const WAGE_MULT = {low:0.85, market:1, high:1.2}, WAGE_MORALE = {low:-4, market:0, high:3};
@@ -5664,7 +5680,7 @@ function bizPanelHtml(){
   const pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
   const meter = (v, col) => `<div class="stat-track" style="margin:4px 0 2px;"><div class="stat-fill" style="width:${v}%;background:var(--${col})"></div></div>`;
   const p = b.lastProfit, hasYear = b.history.length > 0;
-  let h = `<div class="status"><b>${bizName(b)}</b>${b.name ? ' · ' + t.name.toLowerCase() : ''}${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
+  let h = `<div class="status"><b>${bizName(b)}</b>${b.name ? ' · ' + t.name.toLowerCase() : ''}${b.cofounder ? ' · co-owned with ' + b.cofounderName + ' (you keep half the profits)' : ''}${b.franchises ? ' · ' + b.franchises + ' franchise' + (b.franchises > 1 ? 's' : '') : ''}<br>
     ${b.employees} employee${b.employees === 1 ? '' : 's'} · ${b.locations} location${b.locations === 1 ? '' : 's'} · valued at <b>${fmt(Math.round(b.value))}</b>` +
     (hasYear ? `<br>Last year: revenue ${fmt(b.lastRevenue)} · costs ${fmt(b.lastCosts)} · <span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? 'profit' : 'loss'} ${fmt(Math.abs(p))}</span>` : '') +
     (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
@@ -5713,12 +5729,8 @@ function bizPanelHtml(){
 function fileBankruptcy(ok){
   if(state.money > -3000 || state.bankrupt) return;
   if(ok !== true) return askConfirm("File for bankruptcy? Your credit will be wrecked for years.", "File", () => fileBankruptcy(true));
-  state.creditCard = null;
-  state.loans = state.loans.filter(l => l.type === 'Mortgage' || l.type === 'Car' || l.type === 'Student');
   state.money = 0;
-  adjustCredit(-130);
-  state.bankrupt = true; state.bankruptUntilAge = state.age + 4; state.bankruptcies++;
-  pushEntry(state.age, `${state.name} files for bankruptcy. Unsecured debts are discharged, but their credit is wrecked.`, {happy:-15});
+  declareBankruptcy();
   render();
 }
 function emergencyYear(a){
@@ -5809,7 +5821,7 @@ function yearlyFinances(a){
   if(a >= 65 && !state.job && !state.retired) retire(true);
   if(state.retired && state.pension > 0){
     income += Math.round(state.pension * 0.92);                          // after a modest tax
-    state.pension = Math.round(state.pension * (1 + Math.max(0, econ.inflation)));   // yearly cost-of-living adjustment
+    state.pension = Math.round(state.pension * (1 + Math.max(0, yrInfl())));   // yearly cost-of-living adjustment
   }
   if(state.savings > 0) state.savings += state.savings * savingsRate();
   state.cds = state.cds.filter(cd => {
@@ -6675,7 +6687,7 @@ function workYear(a){
   const boost = state.boost; state.boost = false;
   if(!j) return;
   j.years++; state.workYears++;
-  j.salary = Math.round(j.salary * (1 + Math.max(0, state.econ.inflation) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
+  j.salary = Math.round(j.salary * (1 + Math.max(0, yrInfl()) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
   if((state.world.laws || []).includes('fourDay')) applyDelta({happy:1});
   state.peakSalary = Math.max(state.peakSalary, j.salary);
   if(a >= 70){ retire(true); return; }
@@ -6739,7 +6751,7 @@ function mePanelHtml(){
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
-    ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value : 0], ["Trust fund", state.trustFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
+    ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
     '<div class="itop" style="border-top:1px solid var(--line);padding-top:7px;"><span><b>Total</b></span><span class="price"><b>' + fmt(netWorth()) + "</b></span></div>" +
     '<div class="owned">About ' + fmt(netWorth() / cum) + " in today's money. Prices have risen " + Math.round((cum - 1) * 100) + "% since the family line began.</div></div>";
@@ -6752,6 +6764,7 @@ function mePanelHtml(){
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
+  h += consequencesHtml();
   h += achMeHtml();
   h += worldEventsHtml();
   return h;
@@ -6902,6 +6915,7 @@ function dropOut(ok){
   if(ok !== true) return askConfirm(`Drop out of ${was.toLowerCase()}?`, "Drop out", () => dropOut(true));
   state.edu.school = null; state.edu.endAge = 0; state.edu.program = null;
   activateStudentLoan();
+  if(!hasThread('dropout')) seedThread('dropout', {school: was}, 'Dropped out of ' + was, 1);
   pushEntry(state.age, `${state.name} drops out of ${was}${state.loans.some(l=>l.type==='Student') ? ' — the student loan payments start regardless' : ''}.`, {happy:-4});
   render();
 }
@@ -6936,6 +6950,7 @@ function quitJob(ok){
   if(ok !== true) return askConfirm(`Quit your job as ${j.title}?`, "Quit", () => quitJob(true));
   state.job = null;
   convertCoworkersToFriends();
+  if(state.age < 60 && j.track !== 'Odd Jobs' && !hasThread('quit')) seedThread('quit', {title: j.title, track: j.track, rank: j.rank}, 'Quit their job as ' + j.title, 1);
   pushEntry(state.age, `${state.name} quits their job as ${j.title}.`, {happy:2});
   render();
 }
@@ -7065,7 +7080,7 @@ function renderPanel(){
     const econ = state.econ, c = state.creditCard;
     h += `<div class="status">Checking <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Savings <b>${fmt(state.savings)}</b>${state.cds.length ? ' &nbsp;·&nbsp; CDs <b>' + fmt(cdTotal()) + '</b>' : ''}<br>
       Credit Score <b>${state.creditScore}</b> (${creditTier(state.creditScore)})${state.bankrupt ? ' · <span style="color:var(--red)">bankrupt</span>' : ''}<br>
-      Interest Rate ${(econ.rate*100).toFixed(1)}% · Inflation ${(econ.inflation*100).toFixed(1)}%${econ.recession ? ' · <span style="color:var(--red)">Recession</span>' : ''}</div>`;
+      Interest Rate ${(econ.rate*100).toFixed(1)}% · Inflation ${(yrInfl()*100).toFixed(1)}%${econ.recession ? ' · <span style="color:var(--red)">Recession</span>' : ''}</div>`;
 
     if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
       Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
@@ -7456,6 +7471,536 @@ function showGameOver(){
   showHeirs();
 }
 
+// ---------- Consequences: big decisions start chains of events that play out over the years ----------
+// A thread remembers how it started and each turn it took; every step can branch, so the same first
+// decision can end in a fortune or in bankruptcy.
+const threads = () => state.threads || (state.threads = []);
+function seedThread(key, data, first, delay, step){
+  const th = {id:'t' + (state.threadSeq = (state.threadSeq || 0) + 1), key, step: step || 'start', due: state.age + (delay === undefined ? 1 : delay), data: data || {}, start: state.age, path:[{age: state.age, text: first}]};
+  threads().push(th);
+  return th;
+}
+const hasThread = key => threads().some(t => t.key === key);
+function nextStep(th, step, delay, note){ th.step = step; th.due = state.age + Math.max(1, delay || 1); if(note) th.path.push({age: state.age, text: note}); }
+function endThread(th, note, mood){
+  if(note) th.path.push({age: state.age, text: note});
+  th.mood = mood || 'mixed'; th.end = state.age;
+  state.threads = threads().filter(x => x !== th);
+  state.storyDone = (state.storyDone || []).concat([th]).slice(-12);
+}
+const thRel = th => th.data.rel ? findRel(th.data.rel) : null;
+function threadJob(track, rank){
+  const t = CAREERS[track][rank];
+  if(state.job) convertCoworkersToFriends();
+  state.job = {track, rank, title: t.title, salary: startingSalary(track, rank), years: 0};
+  return state.job;
+}
+// the core of bankruptcy, shared with the button in the Bank tab
+function declareBankruptcy(){
+  state.creditCard = null;
+  state.loans = state.loans.filter(l => l.type === 'Mortgage' || l.type === 'Car' || l.type === 'Student');
+  state.money = Math.max(0, state.money);
+  adjustCredit(-130);
+  state.bankrupt = true; state.bankruptUntilAge = state.age + 4; state.bankruptcies++;
+  pushEntry(state.age, `${state.name} files for bankruptcy. Unsecured debts are discharged, but their credit is wrecked.`, {happy:-15});
+}
+const unsecuredDebt = () => state.loans.filter(l => ['Personal', 'Collections', 'Business'].includes(l.type)).reduce((t, l) => t + l.balance, 0) + (state.creditCard ? state.creditCard.balance : 0) + Math.max(0, -state.money);
+const debtLoan = (amt, apr) => takeLoan('Personal', Math.round(amt), 5, apr || 0.14);
+const CHAIN_BIZ = ['coffee', 'onlinestore', 'agency', 'clothing', 'appstudio', 'photography', 'salon'];
+
+const CHAINS = {
+  // the example: dropping out sets off a whole possible life
+  dropout:{
+    title: th => 'Leaving ' + (th.data.school || 'school').toLowerCase(),
+    start(th, a){
+      if(state.job){ nextStep(th, 'meet', rint(1, 2), 'Went to work full-time as ' + state.job.title); return false; }
+      if(a < 16) return 'wait';
+      const j = threadJob('Retail', 0);
+      pushEntry(a, `With no degree to fall back on, ${state.name} takes a job as a ${j.title.toLowerCase()} for ${fmt(j.salary)} a year.`, {happy:-2});
+      nextStep(th, 'meet', rint(1, 2), `Took a low-paying job as a ${j.title.toLowerCase()}`);
+    },
+    meet(th, a){
+      if(!state.job) return endThread(th, 'Drifted from one thing to the next', 'mixed');
+      const r = newRel('Coworker', {age: clampAge(a + rint(-3, 6)), closeness: 58, traits: ['Ambitious', pick(['Funny', 'Loyal', 'Wise', 'Adventurous'])], origin: 'through work'});
+      th.data.rel = r.id;
+      pushEntry(a, `${state.name} hits it off with ${r.name}, a coworker who is always talking about starting something of their own.`, {happy:4});
+      nextStep(th, 'pitch', rint(1, 2), 'Met ' + r.name + ' at work');
+    },
+    pitch(th, a, ask){
+      const r = thRel(th);
+      if(!r) return endThread(th, 'Lost touch with the coworker who had big plans', 'mixed');
+      if(a < 21 || !ask) return 'wait';
+      if(state.business) return endThread(th, `Passed on ${r.name}'s idea while running their own business`, 'mixed');
+      const t = bizType(pick(CHAIN_BIZ)), half = Math.round(bizCost(t) / 2), short = Math.max(0, half - (state.money + state.savings));
+      th.data.type = t.key; th.data.cost = bizCost(t);
+      presentCustom(`${r.name} wants to start a ${t.name.toLowerCase()} and asks ${state.name} to be a co-founder. Each of them needs to put in ${fmt(half)}.`, [
+        {label: `Go all in as co-founders${short ? ' (borrowing ' + fmt(short) + ')' : ''}`, run: () => {
+          if(short){ if(state.bankrupt || state.creditScore < 480){ pushEntry(a, `${state.name} can't get a loan for their share, and ${r.name} goes ahead alone.`, {happy:-4}); return nextStep(th, 'road', rint(3, 5), 'Could not raise the money'); }
+            takeLoan('Business', short, 7, Math.max(0.08, state.econ.rate + 0.05)); state.money += short; }
+          pay(half);
+          const name = suggestBizName(t.key);
+          state.business = bizNormalize({type: t.key, employees: 2, locations: 1, price: 'normal', marketing: 0, reputation: 58, value: bizCost(t), startAge: a, lastProfit: null, name, cofounder: r.id, cofounderName: r.name});
+          th.data.bizName = name;
+          bump(r, 12);
+          pushEntry(a, `${state.name} and ${r.name} open ${name} together, each owning half.`, {happy:8});
+          nextStep(th, 'outcome', rint(3, 4), `Started ${name} with ${r.name}`);
+        }},
+        {label: 'Keep the steady paycheck', run: () => { bump(r, -4); pushEntry(a, `${state.name} tells ${r.name} it's too risky. ${r.name} decides to go it alone.`, {}); nextStep(th, 'road', rint(3, 5), `Passed on ${r.name}'s business idea`); }},
+      ]);
+      return true;
+    },
+    // the road not taken
+    road(th, a, ask){
+      const r = thRel(th);
+      if(!r) return endThread(th, 'Never found out how it would have gone', 'mixed');
+      if(Math.random() < 0.35){
+        if(!ask) return 'wait';
+        const opts = [{label: 'Stay where they are', run: () => endThread(th, `Watched ${r.name} get rich without them`, 'mixed')}];
+        if(!state.retired) opts.unshift({label: `Take ${r.name}'s job offer`, run: () => { const j = threadJob('Business', Math.min(3, CAREERS.Business.length - 1)); pushEntry(a, `${state.name} joins ${r.name}'s company as ${j.title}, at ${fmt(j.salary)} a year.`, {happy:8}); endThread(th, `Joined ${r.name}'s company as ${j.title}`, 'good'); }});
+        presentCustom(`${r.name}'s business is now worth millions. ${state.name} can't help wondering "what if?" ${r.name} offers them a senior job.`, opts);
+        applyDelta({happy:-6});
+        return true;
+      }
+      pushEntry(a, `${r.name}'s business goes under, taking their savings with it. ${state.name} dodged a bullet.`, {happy:3});
+      endThread(th, `${r.name}'s venture failed without them`, 'good');
+    },
+    outcome(th, a, ask){
+      const b = state.business, r = thRel(th);
+      if(!b || b.cofounder !== th.data.rel){
+        const listed = state.ipos.some(x => x.name === th.data.bizName);
+        if(listed) return endThread(th, 'Took the business public', 'good');
+        if(th.data.sold) return endThread(th, 'Sold the business', 'good');
+        nextStep(th, 'debt', 1, 'The business went under');
+        return CHAINS.dropout.debt(th, a, ask);
+      }
+      th.data.bizName = b.name;
+      const recent = b.history.slice(-3), avg = recent.length ? recent.reduce((x, y) => x + y, 0) / recent.length : 0;
+      if(avg > 0 && b.value >= th.data.cost * 1.4){
+        pushEntry(a, `${bizName(b)} takes off. ${state.name} and ${r ? r.name : 'their partner'} can barely keep up with demand.`, {happy:10, biz:20});
+        return nextStep(th, 'wealth', 2, 'The business took off');
+      }
+      if(avg <= 0){
+        if(!ask) return 'wait';
+        const more = inflR(15000, 500);
+        const opts = [{label: 'Shut it down', run: () => { state.business = null; nextStep(th, 'debt', 1, 'Shut the business down'); CHAINS.dropout.debt(th, a); }}];
+        if(!th.data.doubled && canPay(more)) opts.unshift({label: `Pour in another ${fmt(more)}`, run: () => { pay(more); th.data.doubled = true; b.reputation = clampRep(b.reputation + 10); b.growth = Math.min(0.6, b.growth + 0.2); pushEntry(a, `${state.name} puts another ${fmt(more)} into ${bizName(b)}.`, {}); nextStep(th, 'outcome', 2, 'Doubled down on the business'); }});
+        else if(!th.data.doubled) opts.unshift({label: `Borrow ${fmt(more)} to keep it alive`, run: () => { if(state.bankrupt){ state.business = null; nextStep(th, 'debt', 1, 'Could not borrow and had to close'); return CHAINS.dropout.debt(th, a); } takeLoan('Business', more, 7, Math.max(0.09, state.econ.rate + 0.06)); th.data.doubled = true; b.growth = Math.min(0.6, b.growth + 0.2); pushEntry(a, `${state.name} borrows ${fmt(more)} to keep ${bizName(b)} afloat.`, {happy:-2}); nextStep(th, 'outcome', 2, 'Borrowed to keep the business alive'); }});
+        presentCustom(`${bizName(b)} is losing money every month. ${r ? r.name + ' wants to keep fighting.' : ''}`, opts);
+        return true;
+      }
+      th.data.checks = (th.data.checks || 0) + 1;
+      if(th.data.checks >= 3) return endThread(th, 'Built a small, steady business', 'good');
+      nextStep(th, 'outcome', 2);
+    },
+    wealth(th, a, ask){
+      const b = state.business, r = thRel(th);
+      if(!b || b.cofounder !== th.data.rel) return endThread(th, 'Moved on from the business', 'mixed');
+      if(!ask) return 'wait';
+      const half = Math.round(b.value / 2), buy = Math.round(half * 0.9);
+      const opts = [
+        {label: `Sell your half to ${r ? r.name : 'your partner'} (${fmt(half)})`, run: () => { state.money += half; state.business = null; pushEntry(a, `${state.name} sells their half of ${bizName(b)} for ${fmt(half)}.`, {happy:10}); endThread(th, `Cashed out for ${fmt(half)}`, 'good'); }},
+        {label: 'Keep building it together', run: () => { if(r) bump(r, 8); endThread(th, 'Kept building the business together', 'good'); }},
+      ];
+      if(canPay(buy)) opts.unshift({label: `Buy ${r ? r.name : 'your partner'} out (${fmt(buy)})`, run: () => { pay(buy); delete b.cofounder; delete b.cofounderName; pushEntry(a, `${state.name} buys out ${r ? r.name : 'their partner'} and now owns all of ${bizName(b)}.`, {happy:8}); endThread(th, 'Bought out their partner and owns it all', 'good'); }});
+      presentCustom(`${bizName(b)} is worth about ${fmt(b.value)}. An investor wants in, and ${r ? r.name : 'their partner'} thinks it's time to decide the future.`, opts);
+      return true;
+    },
+    debt(th, a){
+      if(th.data.debtDone) return;
+      th.data.debtDone = true;
+      const owed = Math.round((th.data.cost || inflR(30000, 500)) * 0.6 / 500) * 500;
+      debtLoan(owed, 0.12);
+      pushEntry(a, `The failed business leaves ${state.name} personally on the hook for ${fmt(owed)} in leases and supplier bills.`, {happy:-8});
+      nextStep(th, 'collections', rint(1, 2), `Left owing ${fmt(owed)}`);
+    },
+    collections(th, a, ask){
+      const owed = unsecuredDebt();
+      if(owed < inflR(3000, 100)) return endThread(th, 'Paid off the debts', 'good');
+      if(!ask) return 'wait';
+      const parent = state.relationships.find(r => (r.type === 'Mother' || r.type === 'Father') && r.closeness >= 50);
+      const opts = [
+        {label: 'File for bankruptcy', run: () => { declareBankruptcy(); endThread(th, 'Filed for bankruptcy', 'bad'); }},
+        {label: 'Take a second job and grind it out', run: () => { const pay2 = inflR(14000, 500); state.money += pay2; pushEntry(a, `${state.name} works nights and weekends, putting an extra ${fmt(pay2)} toward the debt.`, {happy:-6, health:-3}); nextStep(th, 'collections', 2, 'Worked a second job to pay it down'); }},
+      ];
+      if(parent) opts.push({label: `Ask ${parent.name} for help`, run: () => {
+        if(Math.random() < 0.6){ const gift = Math.round(owed * 0.5); state.money += gift; bump(parent, -4); pushEntry(a, `${parent.name} helps out with ${fmt(gift)}.`, {happy:4}); nextStep(th, 'collections', 2, `${parent.name} helped pay the debt`); }
+        else { bump(parent, -12); pushEntry(a, `${parent.name} refuses to bail ${state.name} out.`, {happy:-5}); nextStep(th, 'collections', 1, 'Family refused to help'); }
+      }});
+      presentCustom(`Creditors are calling. ${state.name} owes about ${fmt(owed)} in unsecured debt.`, opts);
+      return true;
+    },
+  },
+
+  quit:{
+    title: th => 'Quitting as ' + th.data.title,
+    start(th, a, ask){
+      if(state.job) return endThread(th, 'Landed on their feet as ' + state.job.title, 'good');
+      if(state.retired) return endThread(th, 'Retired instead', 'mixed');
+      if(!ask) return 'wait';
+      presentCustom(`A year after quitting, ${state.name} still hasn't found work, and savings are thinning.`, [
+        {label: 'Go freelance', run: () => {
+          if(Math.random() < 0.35 + state.stats.smarts / 250 + (th.data.rank >= 2 ? 0.1 : 0)){ const inc = inflR(rint(25, 60) * 1000, 500); pushEntry(a, `${state.name} goes freelance and the clients come, earning ${fmt(inc)} in the first year.`, {money: inc, happy:8}); nextStep(th, 'freelance', 2, 'Went freelance, and clients came'); }
+          else { const lost = inflR(6000, 100); pushEntry(a, `${state.name} tries freelancing, but the work barely trickles in.`, {money:-lost, happy:-6}); nextStep(th, 'broke', 1, "Went freelance, and it didn't pay"); }
+        }},
+        {label: 'Take whatever job is out there', run: () => { const j = threadJob('Retail', rint(0, 1)); pushEntry(a, `${state.name} swallows their pride and takes a job as ${j.title}.`, {happy:-4}); endThread(th, 'Took a step down to ' + j.title, 'mixed'); }},
+        {label: 'Hold out for the right job', run: () => {
+          const track = CAREERS[th.data.track] ? th.data.track : 'Business', rank = Math.min((th.data.rank || 0) + 1, CAREERS[track].length - 1);
+          if(Math.random() < 0.45 && !rankGap(CAREERS[track][rank], track)){ const j = threadJob(track, rank); pushEntry(a, `The wait pays off: ${state.name} lands a job as ${j.title} at ${fmt(j.salary)}.`, {happy:12}); endThread(th, 'Waited it out and landed ' + j.title, 'good'); }
+          else { pushEntry(a, `The months drag on with no offers. ${state.name} starts to lose hope.`, {happy:-8}); if(Math.random() < 0.4) addCondition('depression', a); nextStep(th, 'broke', 1, 'Held out, and nothing came'); }
+        }},
+      ]);
+      return true;
+    },
+    freelance(th, a, ask){
+      if(Math.random() < 0.5 && !state.business && a >= 21){
+        if(!ask) return 'wait';
+        presentCustom(`${state.name}'s freelance work has more clients than one person can handle.`, [
+          {label: 'Turn it into a company', run: () => { const t = bizType('agency'), name = suggestBizName('agency'); state.business = bizNormalize({type:'agency', employees: 1, locations: 1, price:'normal', marketing: 0, reputation: 62, value: bizCost(t), startAge: a, lastProfit: null, name}); pushEntry(a, `${state.name} turns their freelance work into ${name}.`, {happy:10}); endThread(th, 'Turned freelancing into ' + name, 'good'); }},
+          {label: 'Stay solo and pick the best clients', run: () => { const inc = inflR(rint(40, 80) * 1000, 500); pushEntry(a, `${state.name} keeps it small and earns ${fmt(inc)} on their own terms.`, {money: inc, happy:6}); endThread(th, 'Built a freelance career on their own terms', 'good'); }},
+        ]);
+        return true;
+      }
+      const inc = inflR(rint(30, 55) * 1000, 500);
+      pushEntry(a, `${state.name}'s freelance work settles into a steady ${fmt(inc)} a year.`, {money: inc, happy:4});
+      endThread(th, 'Made a living freelancing', 'good');
+    },
+    broke(th, a, ask){
+      if(state.job) return endThread(th, 'Finally found work as ' + state.job.title, 'mixed');
+      if(!ask) return 'wait';
+      const short = inflR(8000, 100);
+      state.money -= short;
+      pushEntry(a, `Months without income pile up. ${state.name} falls ${fmt(short)} behind on bills.`, {happy:-6});
+      const fam = state.relationships.filter(r => ['Mother', 'Father', 'Sibling', 'Friend'].includes(r.type) && r.closeness >= 45);
+      const opts = [{label: 'Take any job to stop the bleeding', run: () => { const j = threadJob('Retail', 0); pushEntry(a, `${state.name} takes a job as ${j.title} to get back on their feet.`, {happy:-3}); endThread(th, 'Climbed back slowly from the bottom', 'mixed'); }},
+        {label: 'Put it on credit and keep looking', run: () => { debtLoan(short, 0.19); state.money += short; pushEntry(a, `${state.name} borrows to keep the lights on.`, {happy:-3}); endThread(th, 'Borrowed to get by and fell into debt', 'bad'); }}];
+      if(fam.length){ const f = pick(fam); opts.splice(1, 0, {label: `Borrow from ${f.name}`, run: () => { state.money += short; bump(f, -10); pushEntry(a, `${f.name} lends ${state.name} ${fmt(short)}, but things are awkward now.`, {happy:-2}); endThread(th, `Leaned on ${f.name} to get through`, 'mixed'); }}); }
+      presentCustom(`${state.name} is running out of money. What now?`, opts);
+      return true;
+    },
+  },
+
+  lend:{
+    title: th => 'A loan to ' + th.data.who,
+    due(th, a, ask){
+      const r = thRel(th), amt = th.data.amt;
+      if(!r) return endThread(th, 'The debt was never settled', 'mixed');
+      const roll = Math.random(), good = 0.45 + r.closeness / 250 + ((r.traits || []).includes('Loyal') ? 0.1 : 0);
+      if(roll < 0.15){
+        const back = Math.round(amt * rint(3, 8));
+        pushEntry(a, `${r.name} used ${state.name}'s loan to start a small business, and it worked. They insist on paying back ${fmt(back)}.`, {money: back, happy:10});
+        bump(r, 15); return endThread(th, `${r.name} turned the loan into a business and paid back ${fmt(back)}`, 'good');
+      }
+      if(roll < 0.15 + good * 0.85){
+        const back = Math.round(amt * 1.15);
+        pushEntry(a, `${r.name} pays ${state.name} back, with a little extra as thanks.`, {money: back, happy:4});
+        bump(r, 8); return endThread(th, `${r.name} paid it back with interest`, 'good');
+      }
+      if(!ask) return 'wait';
+      bump(r, -30);
+      presentCustom(`${r.name} has stopped returning ${state.name}'s calls about the ${fmt(amt)} they borrowed.`, [
+        {label: 'Take them to small-claims court', run: () => {
+          if(Math.random() < 0.55){ pushEntry(a, `The judge sides with ${state.name}. ${r.name} pays up, and the relationship is over.`, {money: amt, happy:2}); state.relationships = state.relationships.filter(x => x.id !== r.id); endThread(th, `Won in court and lost ${r.name}`, 'mixed'); }
+          else { pushEntry(a, `${state.name} loses in small-claims court.`, {money: -inflR(500, 50), happy:-6}); endThread(th, 'Lost in court and never saw the money', 'bad'); }
+        }},
+        {label: 'Let it go', run: () => { pushEntry(a, `${state.name} writes off the money and the friendship.`, {happy:-4}); endThread(th, 'Never saw the money again', 'bad'); }},
+      ]);
+      return true;
+    },
+    refused(th, a, ask){
+      const r = thRel(th);
+      if(!r) return endThread(th, 'They drifted apart', 'mixed');
+      const roll = Math.random();
+      if(roll < 0.5){ bump(r, 6); pushEntry(a, `${r.name} found the money elsewhere and tells ${state.name} there are no hard feelings.`, {happy:2}); return endThread(th, `${r.name} understood`, 'good'); }
+      if(roll < 0.8){ bump(r, -12); pushEntry(a, `${r.name} still brings up the time ${state.name} wouldn't help.`, {happy:-3}); return endThread(th, `${r.name} never forgave it`, 'bad'); }
+      if(!ask) return 'wait';
+      const need = Math.round(th.data.amt * 1.5);
+      const opts = [{label: 'Stay out of it', run: () => { bump(r, -15); pushEntry(a, `${r.name} loses their home. ${state.name} wonders if they could have stopped it.`, {happy:-6}); endThread(th, `${r.name} hit rock bottom alone`, 'bad'); }}];
+      if(canPay(need)) opts.unshift({label: `Help them now (${fmt(need)})`, run: () => { pay(need); bump(r, 20); pushEntry(a, `${state.name} steps in with ${fmt(need)} and helps ${r.name} get back on their feet.`, {happy:5}); endThread(th, 'Helped later, when it cost more', 'mixed'); }});
+      presentCustom(`Without the loan, ${r.name} fell into deeper trouble and now owes ${fmt(need)}.`, opts);
+      return true;
+    },
+  },
+
+  startup:{
+    title: th => 'Betting on ' + th.data.co,
+    round(th, a, ask){
+      const amt = th.data.amt, r = Math.random();
+      if(r < 0.08){ pushEntry(a, `${th.data.co}'s founder is charged with fraud. ${state.name}'s investment is worthless, and investors are hauled in for questioning.`, {happy:-8}); return endThread(th, 'The founder turned out to be a fraud', 'bad'); }
+      if(r < 0.28){ const x = Math.round(amt * rint(5, 20)); pushEntry(a, `${th.data.co} is bought by a tech giant! ${state.name}'s stake pays out ${fmt(x)}.`, {money: x, happy:15}); return endThread(th, `${th.data.co} was acquired, turning ${fmt(amt)} into ${fmt(x)}`, 'good'); }
+      if(r < 0.6){
+        if(!ask) return 'wait';
+        const more = Math.round(amt / 2);
+        const opts = [{label: 'Hold what you have', run: () => nextStep(th, 'exit', rint(2, 3), 'Held their stake')}];
+        if(canPay(more)) opts.unshift({label: `Invest another ${fmt(more)}`, run: () => { pay(more); th.data.amt += more; th.data.mult = 1.3; nextStep(th, 'exit', rint(2, 3), `Put in another ${fmt(more)}`); }});
+        presentCustom(`${th.data.co} is growing fast and raising a new round. Early investors can buy more.`, opts);
+        return true;
+      }
+      pushEntry(a, `${th.data.co} runs out of money and shuts down.`, {happy:-6});
+      endThread(th, `${th.data.co} folded and the ${fmt(amt)} was gone`, 'bad');
+    },
+    exit(th, a){
+      const amt = th.data.amt, r = Math.random(), m = th.data.mult || 1;
+      if(r < 0.3){ const x = Math.round(amt * rint(10, 40) * m); pushEntry(a, `${th.data.co} goes public in a blockbuster debut. ${state.name}'s shares are worth ${fmt(x)}.`, {money: x, happy:20}); return endThread(th, `${th.data.co} went public and paid out ${fmt(x)}`, 'good'); }
+      if(r < 0.65){ const x = Math.round(amt * (1.5 + Math.random() * 1.5)); pushEntry(a, `${th.data.co} is sold for a modest price. ${state.name} gets back ${fmt(x)}.`, {money: x, happy:4}); return endThread(th, `${th.data.co} sold for a modest gain`, 'good'); }
+      pushEntry(a, `${th.data.co} collapses after burning through its funding.`, {happy:-8});
+      endThread(th, `${th.data.co} collapsed and the money was lost`, 'bad');
+    },
+    passed(th, a){
+      if(Math.random() < 0.25){ pushEntry(a, `${th.data.co}, the startup ${state.name} passed on, is now worth billions.`, {happy:-6}); return endThread(th, `${th.data.co} became a giant without them`, 'mixed'); }
+      endThread(th, `${th.data.co} went nowhere. Good call`, 'good');
+    },
+  },
+
+  affair:{
+    title: th => 'An affair with ' + th.data.lover,
+    secret(th, a, ask){
+      const p = findRel(th.data.partner);
+      if(!p || !['Partner', 'Spouse'].includes(p.type)) return endThread(th, 'The affair faded once the relationship ended', 'mixed');
+      th.data.years = (th.data.years || 0) + 1;
+      if(Math.random() < 0.3 + th.data.years * 0.12){
+        if(!ask) return 'wait';
+        const l = thRel(th);
+        const breakup = note => { endRelationship(p); endThread(th, note, 'bad'); };
+        const opts = [
+          {label: 'Confess and beg forgiveness', run: () => {
+            if(Math.random() < 0.35 + p.closeness / 250){ const c = inflR(3000, 100); pay(c); bump(p, -25); pushEntry(a, `${p.name} agrees to couples counseling. Trust will take years to rebuild.`, {happy:-6, money: 0}); endThread(th, 'Confessed, and they stayed together', 'mixed'); }
+            else breakup('Confessed, and ' + p.name + ' left');
+          }},
+          {label: 'Deny everything', run: () => {
+            if(Math.random() < 0.3){ bump(p, -10); pushEntry(a, `${p.name} decides to believe ${state.name}. For now.`, {happy:-3}); nextStep(th, 'secret', 2, 'Denied it and was believed'); }
+            else { bump(p, -30); breakup('Denied it, got caught lying, and ' + p.name + ' left'); }
+          }},
+        ];
+        if(l) opts.push({label: `Leave ${p.name} for ${l.name}`, run: () => { endRelationship(p); l.type = 'Partner'; l.closeness = Math.max(l.closeness, 65); pushEntry(a, `${state.name} and ${l.name} make it official.`, {happy:4}); endThread(th, `Left ${p.name} for ${l.name}`, 'mixed'); }});
+        presentCustom(`${p.name} has found out about ${state.name} and ${th.data.lover}.`, opts);
+        return true;
+      }
+      if(th.data.years >= 3){
+        if(!ask) return 'wait';
+        presentCustom(`The affair with ${th.data.lover} has gone on for ${th.data.years} years without ${p.name} knowing.`, [
+          {label: 'End it for good', run: () => { const l = thRel(th); if(l) bump(l, -30); pushEntry(a, `${state.name} ends the affair. The guilt lingers.`, {happy:-4}); endThread(th, 'Ended it, and the secret was kept', 'mixed'); }},
+          {label: 'Keep it going', run: () => nextStep(th, 'secret', 1, 'Kept the affair going')},
+        ]);
+        return true;
+      }
+      applyDelta({happy: Math.random() < 0.5 ? 2 : -2});
+      nextStep(th, 'secret', 1);
+    },
+  },
+
+  blackmail:{
+    title: th => 'A witness to ' + th.data.ing,
+    note(th, a, ask){
+      if(!ask) return 'wait';
+      const c = CRIMES.find(x => x.key === th.data.crime), want = inflR(rint(5, 15) * 1000, 500);
+      const opts = [
+        {label: 'Refuse and call their bluff', run: () => {
+          if(Math.random() < 0.5){ CR().heat = Math.min(100, CR().heat + 40); CR().arrests++; pushEntry(a, `The blackmailer goes to the police. ${state.name} is arrested.`, {happy:-8}); arrest(c, 0); endThread(th, 'Refused, and was turned in', 'bad'); }
+          else { pushEntry(a, `${state.name} ignores the note, and nothing more comes of it.`, {happy:3}); endThread(th, 'Called the bluff', 'good'); }
+        }},
+        {label: 'Turn themselves in', run: () => { CR().arrests++; pushEntry(a, `${state.name} walks into a police station and confesses.`, {happy:-4}); arrest(c, 0); endThread(th, 'Confessed to the police', 'mixed'); }},
+      ];
+      if(canPay(want)) opts.unshift({label: `Pay them (${fmt(want)})`, run: () => { pay(want); pushEntry(a, `${state.name} pays ${fmt(want)} to keep the secret.`, {happy:-6}); nextStep(th, 'again', rint(1, 3), `Paid the blackmailer ${fmt(want)}`); th.data.want = want; }});
+      presentCustom(`An anonymous note arrives: "I saw what you did. ${fmt(want)}, or the police hear about ${th.data.ing}."`, opts);
+      return true;
+    },
+    again(th, a, ask){
+      if(Math.random() < 0.45) return endThread(th, 'The blackmailer was never heard from again', 'mixed');
+      if(!ask) return 'wait';
+      const c = CRIMES.find(x => x.key === th.data.crime), want = th.data.want * 2;
+      const opts = [
+        {label: 'Track them down', run: () => {
+          if(Math.random() < 0.4 + CR().skill / 200){ CR().heat = Math.min(100, CR().heat + 10); pushEntry(a, `${state.name} finds the blackmailer and scares them off for good.`, {happy:5}); endThread(th, 'Tracked down the blackmailer and ended it', 'good'); }
+          else { CR().heat = Math.min(100, CR().heat + 35); pushEntry(a, `${state.name}'s confrontation goes badly, and the police take an interest.`, {happy:-6}); endThread(th, 'A confrontation brought the police closer', 'bad'); }
+        }},
+        {label: 'Refuse to pay again', run: () => { if(Math.random() < 0.4){ CR().arrests++; pushEntry(a, `The blackmailer makes good on the threat. ${state.name} is arrested.`, {happy:-8}); arrest(c, 0); endThread(th, 'Refused, and was turned in', 'bad'); } else endThread(th, 'Refused, and the threats stopped', 'good'); }},
+      ];
+      if(canPay(want)) opts.unshift({label: `Pay again (${fmt(want)})`, run: () => { pay(want); th.data.want = want; pushEntry(a, `${state.name} pays the blackmailer ${fmt(want)}.`, {happy:-8}); nextStep(th, 'again', rint(1, 3), `Paid again, ${fmt(want)} this time`); }});
+      presentCustom(`The blackmailer is back, asking for ${fmt(want)}.`, opts);
+      return true;
+    },
+  },
+
+  gamble:{
+    title: () => 'The casino',
+    hooked(th, a, ask){
+      if(!ask) return 'wait';
+      th.data.stage = (th.data.stage || 1) + 1;
+      if(Math.random() < 0.1){
+        const win = inflR(rint(10, 50) * 1000, 500);
+        pushEntry(a, `${state.name} hits a huge win at the tables: ${fmt(win)}!`, {money: win, happy:12});
+        presentCustom(`${state.name} is up ${fmt(win)}. The dealer smiles.`, [
+          {label: 'Quit while ahead', run: () => endThread(th, `Walked away ${fmt(win)} richer`, 'good')},
+          {label: 'Let it ride', run: () => nextStep(th, 'hooked', 1, 'Won big and kept playing')},
+        ]);
+        return true;
+      }
+      const lost = inflR(rint(3, 9) * 1000 * th.data.stage, 500);
+      state.money -= lost; th.data.lost = (th.data.lost || 0) + lost;
+      pushEntry(a, `${state.name} loses ${fmt(lost)} chasing the next big win.`, {happy:-6});
+      const opts = [
+        {label: 'Chase the losses', run: () => nextStep(th, 'hooked', 1, `Lost ${fmt(lost)} and kept going`)},
+        {label: 'Get help and quit', run: () => { const c = inflR(1500, 100); pay(c); pushEntry(a, `${state.name} joins a support group and stops gambling.`, {happy:4, health:2}); endThread(th, `Got help after losing ${fmt(th.data.lost)}`, 'mixed'); }},
+      ];
+      if(state.money < -inflR(5000, 100)) opts.push({label: 'Borrow from a loan shark to win it back', run: () => { const amt = inflR(20000, 500); debtLoan(amt, 0.35); state.money += amt; pushEntry(a, `${state.name} borrows ${fmt(amt)} from someone who doesn't take no for an answer.`, {happy:-3}); nextStep(th, 'shark', 1, 'Borrowed from a loan shark'); }});
+      presentCustom(`${state.name} has lost ${fmt(th.data.lost)} so far. The urge to win it back is strong.`, opts);
+      return true;
+    },
+    shark(th, a, ask){
+      if(!ask) return 'wait';
+      if(Math.random() < 0.2){ const win = inflR(rint(30, 90) * 1000, 500); pushEntry(a, `Against all odds, ${state.name} wins it all back: ${fmt(win)}.`, {money: win, happy:15}); return endThread(th, 'Won it all back, somehow', 'good'); }
+      pushEntry(a, `The loan shark's people pay ${state.name} a visit.`, {health:-15, happy:-10});
+      const opts = [{label: 'File for bankruptcy', run: () => { declareBankruptcy(); endThread(th, 'Lost everything and filed for bankruptcy', 'bad'); }},
+        {label: 'Sell whatever they can', run: () => { const v = state.assets.filter(x => x.category !== 'Homes').reduce((t, x) => t + x.value, 0); state.assets = state.assets.filter(x => x.category === 'Homes'); state.money += v; pushEntry(a, `${state.name} sells off their belongings for ${fmt(v)}.`, {happy:-8}); endThread(th, 'Sold everything to pay the loan shark', 'bad'); }}];
+      presentCustom(`${state.name} owes far more than they can pay, and the people they owe are dangerous.`, opts);
+      return true;
+    },
+  },
+
+  move:{
+    title: () => 'Moving away for work',
+    settle(th, a){
+      const r = Math.random(), p = hasRel('Partner', 'Spouse');
+      if(r < 0.35 && !p){ const x = newRel('Partner', {age: clampAge(a + rint(-3, 3)), closeness: 60, origin: 'in the new city'}); pushEntry(a, `In the new city, ${state.name} meets ${x.name}, and sparks fly.`, {happy:10}); return endThread(th, `Met ${x.name} in the new city`, 'good'); }
+      const j = state.job;
+      if(r < 0.7 && j && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); pushEntry(a, `The move pays off: ${state.name} earns a promotion to ${j.title}.`, {happy:8}); return endThread(th, 'The career took off after the move', 'good'); }
+      bondDelta(['Mother', 'Father', 'Sibling'], -6);
+      pushEntry(a, `Far from family and old friends, ${state.name} feels lonely in the new city.`, {happy:-8});
+      endThread(th, 'Got the job, but felt lonely far from home', 'mixed');
+    },
+    stayed(th, a){
+      const par = state.relationships.find(r => r.type === 'Mother' || r.type === 'Father');
+      if(par && Math.random() < 0.55){ bump(par, 15); pushEntry(a, `When ${par.name} falls ill, ${state.name} is close enough to help every day.`, {happy:4}); return endThread(th, `Was there when ${par.name} needed them`, 'good'); }
+      pushEntry(a, `${state.name} sometimes wonders where the job across the country would have led.`, {happy:-2});
+      endThread(th, 'Stayed, and sometimes wonders "what if"', 'mixed');
+    },
+  },
+
+  whistle:{
+    title: th => 'The fraud at work',
+    fallout(th, a, ask){
+      if(Math.random() < 0.4){ pushEntry(a, `${state.name} is hailed as a hero when the fraud is exposed. Offers pour in.`, {happy:12, fame:8}); if(state.job) state.job.salary = Math.round(state.job.salary * 1.15); return endThread(th, 'Was hailed as a hero', 'good'); }
+      if(!ask) return 'wait';
+      const lost = state.job ? state.job.title : th.data.title;
+      state.job = null; convertCoworkersToFriends();
+      const fee = inflR(5000, 100);
+      const opts = [{label: 'Move on quietly', run: () => endThread(th, 'Was fired for speaking up and moved on', 'mixed')}];
+      if(canPay(fee)) opts.unshift({label: `Sue for wrongful termination (${fmt(fee)})`, run: () => {
+        pay(fee);
+        if(Math.random() < 0.55){ const s = inflR(rint(150, 600) * 1000, 1000); pushEntry(a, `${state.name} wins a ${fmt(s)} settlement.`, {money: s, happy:15}); endThread(th, `Won a ${fmt(s)} settlement`, 'good'); }
+        else { pushEntry(a, `${state.name} loses the lawsuit, and word gets around the industry.`, {happy:-8}); endThread(th, 'Lost the lawsuit and was blacklisted', 'bad'); }
+      }});
+      pushEntry(a, `${state.name} is fired from their job as ${lost} after reporting the fraud.`, {happy:-10});
+      presentCustom(`The company fired ${state.name} for blowing the whistle.`, opts);
+      return true;
+    },
+    scandal(th, a, ask){
+      if(Math.random() < 0.5){
+        const j = state.job; if(j && j.salary) j.salary = Math.round(j.salary * 1.1);
+        pushEntry(a, `The fraud ${state.name} kept quiet about never comes out, and the boss rewards their loyalty.`, {happy:-1});
+        return endThread(th, 'The secret held, and silence was rewarded', 'mixed');
+      }
+      if(!ask) return 'wait';
+      const still = state.job && state.job.track === th.data.track;
+      if(still){ state.job = null; convertCoworkersToFriends(); }
+      pushEntry(a, `The fraud at ${state.name}'s ${still ? '' : 'old '}company becomes national news.`, {happy:-6});
+      if(Math.random() < 0.35){ const c = Object.assign({}, CRIMES.find(x => x.key === 'fraud'), {charge: 'conspiracy to commit fraud'}); CR().arrests++; pushEntry(a, `Investigators charge ${state.name} for staying silent.`, {happy:-8}); arrest(c, 0); endThread(th, 'Was charged for staying silent', 'bad'); return true; }
+      endThread(th, still ? 'Lost their job when the company collapsed' : 'Watched the old company collapse from a safe distance', still ? 'bad' : 'mixed');
+    },
+  },
+};
+
+// how chains begin when no decision of the player's has started one
+const clampAge = n => Math.max(18, n);
+const STARTUP_NAMES = ['Nimbus', 'Quanta', 'Brightloop', 'Fernly', 'Kitebox', 'Orbitly', 'Pebble Labs', 'Sunroot', 'Vantage AI', 'Holloway', 'Tandem', 'Lumen'];
+const OPENERS = [
+  {key:'lend', min:18, max:85, w:1.2, cond:() => state.money + state.savings > inflR(4000, 100) && state.relationships.some(r => ['Friend', 'Sibling', 'Child'].includes(r.type) && r.age >= 18 && r.closeness >= 35), run(a){
+    const r = pick(state.relationships.filter(r => ['Friend', 'Sibling', 'Child'].includes(r.type) && r.age >= 18 && r.closeness >= 35));
+    const amt = Math.min(inflR(rint(2, 10) * 1000, 100), Math.round((state.money + state.savings) * 0.5 / 100) * 100);
+    presentCustom(`${r.name}, your ${relLabel(r)}, asks to borrow ${fmt(amt)}. They swear they'll pay it back.`, [
+      {label: 'Lend it', run: () => { pay(amt); pushEntry(a, `${state.name} lends ${r.name} ${fmt(amt)}.`, {}); seedThread('lend', {rel: r.id, who: r.name, amt}, `Lent ${r.name} ${fmt(amt)}`, rint(1, 3), 'due'); }},
+      {label: 'Say no', run: () => { bump(r, -8); pushEntry(a, `${state.name} turns down ${r.name}'s request for money.`, {}); seedThread('lend', {rel: r.id, who: r.name, amt}, `Refused to lend ${r.name} money`, rint(1, 3), 'refused'); }},
+    ]);
+  }},
+  {key:'startup', min:22, max:70, w:1, cond:() => state.money + state.savings > inflR(12000, 100), run(a){
+    const co = pick(STARTUP_NAMES), small = inflR(5000, 100), big = inflR(25000, 500);
+    const opts = [{label: `Invest ${fmt(small)}`, run: () => { pay(small); pushEntry(a, `${state.name} invests ${fmt(small)} in ${co}.`, {}); seedThread('startup', {co, amt: small}, `Invested ${fmt(small)} in ${co}`, rint(2, 3), 'round'); }},
+      {label: 'Pass', run: () => { seedThread('startup', {co, amt: 0}, `Passed on investing in ${co}`, rint(3, 5), 'passed'); }}];
+    if(canPay(big * 1.5)) opts.splice(1, 0, {label: `Invest ${fmt(big)}`, run: () => { pay(big); pushEntry(a, `${state.name} invests ${fmt(big)} in ${co}.`, {}); seedThread('startup', {co, amt: big}, `Invested ${fmt(big)} in ${co}`, rint(2, 3), 'round'); }});
+    presentCustom(`A founder pitches ${state.name} on ${co}, a young startup looking for early investors.`, opts);
+  }},
+  {key:'affair', min:22, max:70, w:0.7, cond:() => hasRel('Partner', 'Spouse') && !state.retired, run(a){
+    const p = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse');
+    const l = state.relationships.find(r => r.type === 'Coworker') || makeRel('Friend', {age: clampAge(a + rint(-6, 4)), closeness: 45, origin: 'at a party'});
+    presentCustom(`${state.name} feels a spark with ${l.name}. One evening, ${l.name} leans in for a kiss.`, [
+      {label: `Pull away and go home to ${p.name}`, run: () => { bump(p, 5); pushEntry(a, `${state.name} goes home to ${p.name}.`, {happy:1}); }},
+      {label: 'Give in', run: () => { if(!findRel(l.id)) state.relationships.push(l); bump(l, 20); pushEntry(a, `${state.name} begins a secret affair with ${l.name}.`, {happy:6}); seedThread('affair', {rel: l.id, lover: l.name, partner: p.id}, `Began an affair with ${l.name}`, 1, 'secret'); }},
+    ]);
+  }},
+  {key:'gamble', min:21, max:75, w:0.8, cond:() => state.money > inflR(3000, 100), run(a){
+    const win = inflR(rint(5, 20) * 100, 50);
+    state.money += win;
+    presentCustom(`Friends drag ${state.name} to a casino for the night. Beginner's luck: they walk out ${fmt(win)} richer.`, [
+      {label: 'Fun night, never again', run: () => pushEntry(a, `${state.name} pockets the ${fmt(win)} and leaves it at that.`, {happy:4})},
+      {label: 'Come back next weekend', run: () => { pushEntry(a, `${state.name} can't stop thinking about that win.`, {happy:3}); seedThread('gamble', {stage: 1, lost: 0}, `Won ${fmt(win)} at a casino and went back for more`, 1, 'hooked'); }},
+    ]);
+  }},
+  {key:'move', min:20, max:40, w:0.5, cond:() => !state.retired && !state.crime.prison, run(a){
+    const raise = 0.2;
+    presentCustom(`${state.name} gets a job offer across the country: ${Math.round(raise * 100)}% more pay, but far from everyone they know.`, [
+      {label: 'Take it and move', run: () => {
+        if(state.job) state.job.salary = Math.round(state.job.salary * (1 + raise));
+        else threadJob('Business', 0);
+        bondDelta(['Mother', 'Father', 'Sibling', 'Friend'], -10);
+        pushEntry(a, `${state.name} packs up and moves across the country${state.job ? ' to work as ' + state.job.title : ''}.`, {happy:3});
+        seedThread('move', {}, 'Moved across the country for work', rint(1, 2), 'settle');
+      }},
+      {label: 'Stay close to home', run: () => { bondDelta(['Mother', 'Father', 'Sibling'], 6); pushEntry(a, `${state.name} turns down the offer to stay near family.`, {}); seedThread('move', {}, 'Turned down a job far away to stay near family', rint(2, 4), 'stayed'); }},
+    ]);
+  }},
+  {key:'whistle', min:22, max:64, w:0.7, cond:() => !!state.job && state.job.track !== 'Odd Jobs' && state.job.rank >= 1, run(a){
+    const j = state.job;
+    presentCustom(`${state.name} discovers that their boss has been cooking the books.`, [
+      {label: 'Report it to the regulators', run: () => { pushEntry(a, `${state.name} reports the fraud to the authorities.`, {happy:2}); seedThread('whistle', {title: j.title, track: j.track}, 'Blew the whistle on their boss', 1, 'fallout'); }},
+      {label: 'Keep quiet and keep the job', run: () => { pushEntry(a, `${state.name} decides it's not their problem.`, {happy:-2}); seedThread('whistle', {title: j.title, track: j.track}, 'Kept quiet about the fraud', rint(1, 3), 'scandal'); }},
+    ]);
+  }},
+];
+function consequencesYear(a, canAsk){
+  let asked = false;
+  for(const th of threads().slice()){
+    if(th.due > a || state.crime.prison) continue;
+    const ch = CHAINS[th.key], fn = ch && ch[th.step];
+    if(!fn){ endThread(th); continue; }
+    const before = th.step, r = fn.call(ch, th, a, canAsk && !asked);
+    if(r === 'wait'){ th.due = a + 1; continue; }
+    if(r === true) asked = true;
+    else if(threads().includes(th) && th.step === before && th.due <= a) th.due = a + 1;
+  }
+  if(!asked && canAsk && threads().length < 3 && Math.random() < 0.12){
+    const ok = OPENERS.filter(o => a >= o.min && a <= o.max && !hasThread(o.key) && (!state.lastOpener || state.lastOpener[o.key] === undefined || a - state.lastOpener[o.key] >= 8) && o.cond());
+    if(ok.length){
+      let x = Math.random() * ok.reduce((t, o) => t + o.w, 0), o = ok[0];
+      for(const c of ok){ x -= c.w; if(x <= 0){ o = c; break; } }
+      (state.lastOpener || (state.lastOpener = {}))[o.key] = a;
+      o.run(a); asked = true;
+    }
+  }
+  return asked;
+}
+function threadHtml(th, done){
+  const ch = CHAINS[th.key], title = ch ? ch.title(th) : 'A turning point';
+  const icon = !done ? '⏳' : th.mood === 'good' ? '✅' : th.mood === 'bad' ? '❌' : '➖';
+  return `<div class="chain${done ? ' ' + th.mood : ''}"><div class="chain-h"><span>${icon} <b>${title}</b></span><span class="chain-age">${done ? 'age ' + th.start + '–' + th.end : 'since age ' + th.start}</span></div>` +
+    th.path.map((p, i) => `<div class="chain-step${i === th.path.length - 1 && done ? ' last' : ''}"><span class="tl-age">${p.age}</span>${p.text}</div>`).join('<div class="chain-arrow">↓</div>') +
+    (done ? '' : '<div class="chain-arrow">↓</div><div class="chain-step pending"><span class="tl-age"></span>to be continued…</div>') + '</div>';
+}
+function consequencesHtml(){
+  const live = threads(), done = (state.storyDone || []).slice(-4).reverse();
+  if(!live.length && !done.length) return '';
+  return '<div class="plabel">Chain reactions</div>' + live.map(th => threadHtml(th, false)).join('') + done.map(th => threadHtml(th, true)).join('');
+}
+
 // ---------- Achievements and milestones ----------
 // Achievements belong to the player, not to one life: they live in their own save and survive every new record.
 // Milestones are the firsts of a single life, kept on its timeline.
@@ -7549,6 +8094,8 @@ const ACHIEVEMENTS = [
   {k:'landlord', cat:'Business', icon:'🔑', tier:'silver', name:'Landlord', desc:'Own three rental properties', test:() => rentals().length >= 3},
   {k:'tycoon', cat:'Business', icon:'🏙️', tier:'gold', name:'Property Tycoon', desc:'Own 25 rental units', test:() => rentals().reduce((t, x) => t + (x.rental.units || 1), 0) >= 25},
 
+  {k:'butterfly', cat:'Life', icon:'🦋', tier:'silver', name:'Butterfly Effect', desc:'See one decision ripple through five turns of fate', test:() => (state.storyDone || []).some(t => t.path.length >= 5)},
+  {k:'dropoutrich', cat:'Business', icon:'🎒', tier:'gold', name:'Dropout to Riches', desc:'Drop out, start a business with a coworker, and come out on top', test:() => (state.storyDone || []).some(t => t.key === 'dropout' && t.mood === 'good' && t.path.length >= 5)},
   {k:'pandemic', cat:'World', icon:'😷', tier:'bronze', name:'Lived Through It', desc:'Live through a pandemic', test:() => state.ach.events.includes('pandemic')},
   {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
   {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
@@ -7678,6 +8225,8 @@ function achGameOverHtml(){
   let h = '';
   const ms = milestonesHtml(0);
   if(ms) h += '<div class="plabel">Highlights of a life</div>' + ms;
+  const turns = (state.storyDone || []).concat(threads());
+  if(turns.length) h += '<div class="plabel">Chain reactions</div>' + turns.map(th => threadHtml(th, !threads().includes(th))).join('');
   const got = lifeAch().got.map(k => ACHIEVEMENTS.find(x => x.k === k)).filter(Boolean);
   h += '<div class="plabel">Achievements this life</div><div class="invrow">' + (got.length ? '<div class="ach-chips">' + got.map(x => `<span class="ach-chip ${x.tier}">${x.icon} ${x.name}</span>`).join('') + '</div>' : '<div class="owned">No new achievements this time.</div>') +
     achSummary() + '<div class="btnrow-social" style="margin:8px 0 0;"><button onclick="openAchievements()">🏆 View all achievements</button></div></div>';
