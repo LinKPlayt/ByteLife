@@ -314,6 +314,18 @@
   .log-year .entry{ border-bottom:none; margin-bottom:6px; padding-bottom:0; }
   .log-year .entry:last-child{ margin-bottom:0; }
   .log-year:not(.current) .entry{ color:#4a544c; font-size:14px; }
+  /* newspaper */
+  .paper{ background:#FBFAF4; border:1px solid var(--line); border-radius:16px; padding:12px 15px 10px; margin-bottom:14px; box-shadow:0 2px 10px rgba(35,42,36,0.06); }
+  .paper-mast{ display:flex; justify-content:space-between; align-items:baseline; font-family:'Fraunces',serif; font-weight:700; font-size:17px; border-bottom:2px solid var(--ink); padding-bottom:5px; margin-bottom:6px; }
+  .paper-mast span:last-child{ font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:500; color:var(--muted); }
+  .hl{ display:flex; gap:9px; padding:6px 0; border-bottom:1px solid var(--line); font-size:13.5px; line-height:1.35; }
+  .hl:last-of-type{ border-bottom:none; }
+  .hl b{ font-family:'Fraunces',serif; font-weight:700; letter-spacing:.01em; }
+  .hl-tag{ font-size:15px; line-height:1.3; }
+  .hl-d{ color:var(--muted); font-size:12.5px; margin-top:1px; }
+  .hl-you{ font-size:10px; font-weight:800; color:var(--gold); background:rgba(185,132,44,0.12); padding:1px 6px; border-radius:99px; white-space:nowrap; vertical-align:2px; }
+  .paper-more{ background:none; border:none; color:var(--accent); font-size:12.5px; padding:6px 0 2px; text-decoration:underline; }
+  .paper-past{ font-size:11px; letter-spacing:.02em; color:var(--muted); padding:4px 0; border-top:1px dashed var(--line); line-height:1.45; }
   /* toast */
   .toast{ position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 92px); width:calc(100% - 36px); max-width:424px; transform:translate(-50%, 16px); opacity:0; pointer-events:none;
     background:var(--ink); color:#fff; padding:11px 14px; border-radius:13px; font-size:13.5px; line-height:1.45; box-shadow:0 8px 24px rgba(20,30,25,0.25); transition:opacity .2s ease, transform .2s ease; z-index:45; }
@@ -416,6 +428,7 @@
     <div class="scroll-area">
       <div class="choices" id="choices"></div>
       <div class="panel" id="panel"></div>
+      <div id="news"></div>
       <div class="plabel" style="margin-top:4px;">LOG</div>
       <div id="log"></div>
     </div>
@@ -477,7 +490,7 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
-    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]},
+    housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -515,7 +528,8 @@ function startLife(heir){
     const p = heir.pkg;
     pushEntry(state.age, `${name} steps into a new chapter at ${state.age}, carrying the family line forward as generation ${state.generation}.`, {});
     pushEntry(state.age, inheritText(name, p), {});
-  } else pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}. The record begins.`, {});
+  } else { state.world.year--; worldStart(0); worldEnd(0); }
+  if(!heir) pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}. The record begins.`, {});
   render();
   audioStartLife();
 }
@@ -1658,7 +1672,7 @@ function mortalityChance(age, health){
 function ageUp(){
   if(!state || !state.alive) return;
   state.panel = null; inYear = true;
-  try{ ageUpYear(); } finally{ inYear = false; }
+  try{ ageUpYear(); if(state.alive && newsDraft){ worldEnd(state.age); render(); } } finally{ inYear = false; newsDraft = null; }
   window.scrollTo({top:0, behavior:"smooth"});
 }
 function ageUpYear(){
@@ -1681,6 +1695,7 @@ function ageUpYear(){
   if(hasMyTrait('Moody')) applyDelta({happy: rint(-5, 5)});
   if(hasMyTrait('Flaky') && state.edu.school) state.edu.gpa = clamp(state.edu.gpa - 2);
   updateEconomy(a);
+  worldStart(a);
   trustYear(a);
   crimeYear(a);
   if(state.crime.prison){ prisonYear(a); render(); return; }
@@ -2025,7 +2040,7 @@ const CRYPTO = [
 const ALL_INSTR = STOCKS.map(x=>Object.assign({type:'stock'},x)).concat(CRYPTO.map(x=>Object.assign({type:'crypto'},x)));
 // companies taken public live in the save; this keeps the instrument lists in step with the current life
 function syncIpos(){
-  for(const list of [STOCKS, ALL_INSTR]) for(let i = list.length - 1; i >= 0; i--) if(list[i].sector === 'IPO' && !state.ipos.some(x => x.key === list[i].key)){ delete state.market[list[i].key]; list.splice(i, 1); }
+  for(const list of [STOCKS, ALL_INSTR]) for(let i = list.length - 1; i >= 0; i--) if((list[i].sector === 'IPO' || list[i].ipo) && !state.ipos.some(x => x.key === list[i].key)){ delete state.market[list[i].key]; list.splice(i, 1); }
   state.ipos.forEach(x => {
     if(!STOCKS.some(y => y.key === x.key)){ STOCKS.push(x); ALL_INSTR.push(Object.assign({type:'stock'}, x)); }
     if(!state.market[x.key]) state.market[x.key] = {price:x.base, prev:x.base};
@@ -2055,7 +2070,7 @@ const COMPANY_NEWS = [
 ];
 function updateMarket(a){
   const roll = Math.random();
-  const bias = roll < 0.07 ? -0.32 : roll > 0.93 ? 0.28 : 0;
+  const bias = (roll < 0.07 ? -0.32 : roll > 0.93 ? 0.28 : 0) + (state.world.fx.marketShock || 0);
   // a sector or two has a big year, good or bad
   const sectors = Array.from(new Set(STOCKS.map(x => x.sector).filter(x => !FUND_SECTORS.includes(x) && x !== 'IPO')));
   const swings = {};
@@ -2574,7 +2589,7 @@ function propertyEventYear(a){
   if(!owned.length || state.crime.prison || Math.random() > 0.35) return false;
   const x = pick(owned), r = x.rental, n = state.name, cum = state.econ.cumInflation, loc = locOf(r.loc);
   const kinds = ['nopay', 'repair', 'repair', 'renewal', 'offer'];
-  if(Math.random() < (loc.storms ? 0.12 : 0.04)) kinds.splice(0, kinds.length, 'disaster');
+  if(Math.random() < (loc.storms ? 0.12 : 0.04) * (state.world.fx.storm ? 4 : 1)) kinds.splice(0, kinds.length, 'disaster');
   if(r.cond < 35) kinds.push('lawsuit');
   const kind = pick(kinds);
   if(kind === 'disaster'){
@@ -2692,7 +2707,7 @@ function assetsYear(a){
     const property = t.category === 'Homes' || t.category === 'Real Estate';
     x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
     if(property && !x.rental) upkeep += x.value * t.upkeepPct;
-    if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation;
+    if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation * (state.world.fx.gas || 1);
   });
   if(upkeep <= 0) return;
   if(upkeep >= 20) pushEntry(a, `${state.name} covers maintenance and upkeep on their property.`, {money:-upkeep});
@@ -2822,6 +2837,162 @@ function relationshipsYear(a, prompted){
   moments.forEach(m => { if(m !== shown && m.fallback) m.fallback(); });
   if(shown){ presentCustom(shown.prompt, shown.opts); return true; }
   return false;
+}
+
+// ---------- The world: yearly news that changes the game ----------
+const CELEB_KINDS = {athlete:['striker','quarterback','tennis star','sprinter','point guard'], actor:['actor','film star'], musician:['pop star','rapper','rock singer'], politician:['senator','governor']};
+const SURNAMES = ['Vance','Sterling','Blake','Monroe','Hart','Okafor','Reyes','Lindqvist','Tanaka','Duval','Kowalski','Mbeki','Castellano','Ferreira','Nakamura','Adeyemi'];
+const W = () => state.world;
+function freshWorld(){ return {year: new Date().getFullYear(), celebs:[], fx:{}, medTech:0, taxMult:1, wageMult:1, news:[], ipoCount:0}; }
+function makeCeleb(kind, young){
+  return {name: pick(FRIENDS) + ' ' + pick(SURNAMES), kind, role: pick(CELEB_KINDS[kind]), age: young ? rint(19, 26) : rint(22, 50), active:true};
+}
+function ensureCelebs(){
+  const w = W();
+  while(w.celebs.filter(c => c.active).length < 8) w.celebs.push(makeCeleb(pick(Object.keys(CELEB_KINDS)), w.celebs.length >= 8));
+  if(w.celebs.length > 30) w.celebs = w.celebs.filter(c => c.active).concat(w.celebs.filter(c => !c.active).slice(-10));
+}
+let newsDraft = null;
+function headline(h, d, tag, mine){ if(newsDraft) newsDraft.push({h, d, tag, mine: !!mine}); }
+const TAG_ICON = {market:'📈', crash:'📉', economy:'🏦', housing:'🏠', jobs:'🏭', weather:'⛈', health:'🧬', policy:'🏛', crime:'🚨', celeb:'🎬', tech:'💡', you:'⭐'};
+const ownsStock = k => (state.portfolio[k] || 0) * ((state.market[k] || {}).price || 0) > 100;
+const owesStudent = () => state.loans.some(l => l.type === 'Student');
+// early in the year: things that happen in the world and shape the year ahead
+function worldStart(a){
+  const w = W(), n = state.name, fx = w.fx = {};
+  w.year++;
+  newsDraft = [];
+  ensureCelebs();
+  const r = () => Math.random();
+  // jobs
+  if(r() < 0.18){
+    const jobs = rint(3, 25) * 100, co = pick(STOCKS.filter(x => !FUND_SECTORS.includes(x.sector)));
+    fx.hiring = true;
+    headline(`${co.name.toUpperCase()} OPENS ${jobs.toLocaleString()} NEW JOBS`, 'Employers across the region are hiring again.', 'jobs', !state.job && a >= 16);
+  } else if(r() < 0.12){
+    const jobs = rint(5, 30) * 100;
+    fx.layoffs = true;
+    headline(`FACTORY CLOSES, ${jobs.toLocaleString()} JOBS LOST`, 'Layoffs ripple through local businesses.', 'jobs', !!state.job);
+  }
+  // weather
+  if(r() < 0.12){
+    fx.storm = true;
+    headline(pick(['MAJOR STORM APPROACHING', 'HURRICANE MAKES LANDFALL', 'RECORD FLOODS SWAMP THE COAST', 'WILDFIRES SPREAD ACROSS THE REGION']), 'Homeowners brace for damage.', 'weather', state.assets.some(x => x.category === 'Homes' || x.rental));
+  } else if(r() < 0.08) headline(pick(['HEAT WAVE BREAKS RECORDS', 'BLIZZARD SHUTS DOWN THE CITY', 'DROUGHT DECLARED']), 'Officials urge people to stay safe.', 'weather');
+  // health
+  if(r() < 0.025){
+    fx.flu = 4; fx.marketShock = -0.22;
+    if(!state.econ.recession){ state.econ.recession = true; state.econ.recessionLeft = rint(1, 2); }
+    headline('PANDEMIC DECLARED', 'Hospitals fill, borders close and markets reel.', 'health', true);
+  } else if(r() < 0.12){ fx.flu = 2.5; headline('NASTY FLU SEASON HITS HARD', 'Doctors urge people to get vaccinated.', 'health'); }
+  if(r() < 0.07 && w.medTech < 0.15){
+    w.medTech = Math.round((w.medTech + 0.04) * 100) / 100;
+    headline(pick(['BREAKTHROUGH CANCER TREATMENT APPROVED', 'NEW IMMUNOTHERAPY SHOWS STUNNING RESULTS']), 'Survival rates are expected to climb.', 'health', state.health.conditions.some(c => c.key === 'cancer'));
+  }
+  // policy
+  if(r() < 0.06){
+    const up = r() < 0.5; w.taxMult = Math.max(0.8, Math.min(1.25, w.taxMult + (up ? 0.06 : -0.06)));
+    headline(up ? 'INCOME TAXES RAISED' : 'TAX CUTS PASSED', up ? 'Paychecks will shrink a little.' : 'Workers will keep a bit more of each paycheck.', 'policy', !!state.job);
+  }
+  if(r() < 0.05){
+    w.wageMult = Math.round((w.wageMult + 0.05) * 100) / 100;
+    const low = state.job && ['Retail','Culinary','Odd Jobs'].includes(state.job.track);
+    if(low){ state.job.salary = Math.round(state.job.salary * 1.05 / 100) * 100; pushEntry(a, `${n}'s pay goes up with the new minimum wage.`, {happy:3}); }
+    headline('MINIMUM WAGE RAISED', 'Entry-level workers get a raise.', 'policy', low);
+  }
+  if(r() < 0.025){
+    const mine = owesStudent();
+    state.loans.filter(l => l.type === 'Student').forEach(l => { l.balance = Math.round(l.balance * 0.75); l.principal = Math.round(l.principal * 0.75); });
+    if(mine) pushEntry(a, `A quarter of ${n}'s student debt is forgiven.`, {happy:6});
+    headline('STUDENT LOAN FORGIVENESS SIGNED INTO LAW', 'Borrowers see a quarter of their balances wiped away.', 'policy', mine);
+  }
+  if(r() < 0.07){ fx.gas = 1.4; headline('GAS PRICES SOAR', 'Drivers feel the pinch at the pump.', 'economy', roadVehicles().length > 0); }
+  // crime
+  if(r() < 0.07){ fx.crimeWave = true; headline('CRIME WAVE SWEEPS THE CITY', 'Break-ins are up sharply this year.', 'crime', state.assets.some(x => x.category === 'Homes')); }
+  else if(r() < 0.06){ fx.crackdown = true; headline('POLICE LAUNCH MAJOR CRACKDOWN', 'More officers on the streets this year.', 'crime', state.crime.heat > 0 || state.crime.skill > 0); }
+  // tech: a new company goes public and can be traded
+  if(r() < 0.25 && w.ipoCount < 14){
+    const pre = pick(['Quanta','Nimbus','Vertex','Lumina','Helix','Nova','Cobalt','Zephyr','Orbit','Pulse','Aether','Kinetic']);
+    const kind = pick([['Labs','Tech'],['AI','AI'],['Robotics','Tech'],['Bio','Biotech'],['Energy','Energy'],['Pay','Financial'],['Cloud','Tech'],['Motors','Automotive']]);
+    let key = (pre.slice(0, 2) + kind[0].slice(0, 2)).toUpperCase(), i = 2;
+    while(state.market[key]) key = (pre.slice(0, 3) + i++).toUpperCase().slice(0, 5);
+    const stock = {key, name: pre + ' ' + kind[0], sector: kind[1], base: rint(12, 90), drift: 0.05 + Math.random() * 0.1, vol: 0.3 + Math.random() * 0.4, div: 0, ipo: true, worldIpo: true};
+    state.ipos.push(stock); syncIpos(); w.ipoCount++;
+    headline(`${stock.name.toUpperCase()} GOES PUBLIC`, `Shares of ${key} start trading at $${stock.base}.`, 'tech');
+  }
+  // celebrities
+  const live = w.celebs.filter(c => c.active);
+  live.forEach(c => { c.age++; if(c.age >= 88 && Math.random() < 0.3){ c.active = false; c.quietly = true; } });
+  if(live.length && r() < 0.75){
+    const c = pick(live), nm = c.name.toUpperCase();
+    if(c.kind === 'athlete' && c.age >= 32 && r() < 0.6){ c.active = false; headline(`FAMOUS ${c.role.toUpperCase()} ${nm} RETIRES`, `${c.name} hangs it up after ${c.age - 20} seasons.`, 'celeb'); }
+    else if(c.age >= 75 && r() < 0.4){ c.active = false; headline(`${nm} DIES AT ${c.age}`, `Tributes pour in for the beloved ${c.role}.`, 'celeb'); }
+    else headline(pick(c.kind === 'athlete' ? [`${nm} SIGNS RECORD CONTRACT`, `${nm} LEADS TEAM TO CHAMPIONSHIP`, `${nm} SUFFERS SEASON-ENDING INJURY`]
+                    : c.kind === 'actor' ? [`${nm} WINS GOLDEN REEL`, `${nm} CAST IN BLOCKBUSTER SEQUEL`, `${nm} QUITS SOCIAL MEDIA`]
+                    : c.kind === 'musician' ? [`${nm} RELEASES RECORD-BREAKING ALBUM`, `${nm} ANNOUNCES WORLD TOUR`, `${nm} CANCELS TOUR AMID SCANDAL`]
+                    : [`${nm} ANNOUNCES PRESIDENTIAL RUN`, `${nm} RESIGNS IN DISGRACE`, `${nm} WINS RE-ELECTION`]), `The ${c.role} is the talk of the town.`, 'celeb');
+  }
+  // a crime wave or storm can hit home right away
+  if(fx.crimeWave && state.assets.some(x => x.category === 'Homes') && r() < 0.25){
+    const loss = inflR(rint(10, 40) * 100, 50), cover = state.insurance.home ? 0.8 : 0;
+    pushEntry(a, `Burglars break into ${n}'s home during the crime wave${cover ? '; insurance covers most of the loss' : ''}.`, {money:-Math.round(loss * (1 - cover)), happy:-5});
+  }
+  if(fx.storm){
+    state.assets.filter(x => x.category === 'Homes' && !x.rental).forEach(x => {
+      if(r() < 0.35){ const dmg = Math.round(x.value * (0.02 + r() * 0.04)), cover = state.insurance.home ? 0.8 : 0; pushEntry(a, `The storm damages ${n}'s ${x.name.toLowerCase()}${cover ? '; insurance covers most of the repairs' : ', and there is no insurance'}.`, {money:-Math.round(dmg * (1 - cover)), happy:-4}); }
+    });
+  }
+}
+// late in the year: what actually happened in the markets, the economy and your own life
+function worldEnd(a){
+  const w = W(), e = state.econ, H = state.housing;
+  if(!newsDraft) newsDraft = [];
+  const idx = state.market.IDXF, pct = idx ? (idx.price - idx.prev) / idx.prev * 100 : 0;
+  const invested = portfolioValue() > 1000;
+  if(pct <= -12) headline(`MARKET CRASHES ${Math.round(-pct)}%`, 'Panic selling wipes out years of gains.', 'crash', invested);
+  else if(pct <= -6) headline(`STOCKS SLIDE ${Math.round(-pct)}%`, 'A rough year for investors.', 'crash', invested);
+  else if(pct >= 18) headline(`STOCKS SOAR ${Math.round(pct)}%`, 'A roaring bull market lifts nearly everything.', 'market', invested);
+  else if(pct >= 10) headline(`MARKETS CLIMB ${Math.round(pct)}%`, 'A strong year on Wall Street.', 'market', invested);
+  (state.marketNews || []).filter(x => x.key || /sector|stocks|Investors/.test(x.text)).slice(0, 2).forEach(x => headline(x.text.toUpperCase(), x.key ? `${x.key} shares ${x.up ? 'jump' : 'tumble'}.` : 'Investors take note.', x.up ? 'market' : 'crash', x.key && ownsStock(x.key)));
+  const ipoMoves = state.ipos.filter(s => s.worldIpo && state.market[s.key]).map(s => ({s, m:(state.market[s.key].price - state.market[s.key].prev) / state.market[s.key].prev})).filter(x => Math.abs(x.m) > 0.45);
+  ipoMoves.slice(0, 1).forEach(x => headline(`${x.s.name.toUpperCase()} ${x.m > 0 ? 'SOARS' : 'PLUNGES'} ${Math.round(Math.abs(x.m) * 100)}%`, x.m > 0 ? 'Early investors are celebrating.' : 'Investors run for the exits.', x.m > 0 ? 'tech' : 'crash', ownsStock(x.s.key)));
+  if(e.recession && !w.wasRecession) headline('RECESSION OFFICIALLY DECLARED', 'Economists warn of tough times ahead.', 'economy', true);
+  if(!e.recession && w.wasRecession) headline('RECESSION IS OVER', 'Growth returns and hiring picks up.', 'economy', true);
+  w.wasRecession = e.recession;
+  if(w.lastRate !== undefined && Math.abs(e.rate - w.lastRate) >= 0.006) headline(`CENTRAL BANK ${e.rate > w.lastRate ? 'RAISES' : 'CUTS'} RATES TO ${(e.rate * 100).toFixed(1)}%`, e.rate > w.lastRate ? 'Borrowing just got more expensive.' : 'Cheaper loans and mortgages ahead.', 'economy', state.loans.length > 0);
+  w.lastRate = e.rate;
+  if(e.inflation >= 0.06) headline(`INFLATION HITS ${(e.inflation * 100).toFixed(1)}%`, 'Prices are rising fast at the store.', 'economy', true);
+  const hp = H.trend * 100;
+  const ownsProperty = state.assets.some(x => x.category === 'Homes' || x.rental);
+  if(hp >= 5) headline(`HOUSING PRICES SURGE ${Math.round(hp)}%`, 'Buyers face bidding wars.', 'housing', ownsProperty);
+  else if(hp <= -6) headline(`HOUSING MARKET COLLAPSES, PRICES DOWN ${Math.round(-hp)}%`, 'Homeowners watch their equity vanish.', 'housing', ownsProperty);
+  // the player in the news
+  const f = state.fame;
+  if(f && f.level >= 45){
+    const won = f.awards.find(x => x.age === a), job = state.job;
+    if(won) headline(`${state.name.toUpperCase()} WINS ${won.name.replace(/^(the|a) /, '').toUpperCase()}`, 'A night to remember.', 'you', true);
+    else if(state.crime.record.some(x => x.age === a)) headline(`${state.name.toUpperCase()} CONVICTED`, 'Fans are stunned.', 'you', true);
+    else if(Math.random() < 0.4) headline(`${state.name.toUpperCase()} ${pick(job ? ['IS THE TALK OF THE TOWN', 'SPOTTED AT EXCLUSIVE PARTY', 'SIGNS MAJOR NEW DEAL'] : ['SPOTTED AT EXCLUSIVE PARTY', 'MAKES SURPRISE APPEARANCE'])}`, 'Everyone is talking about it.', 'you', true);
+  }
+  const playerIpo = state.ipos.find(s => !s.worldIpo && state.market[s.key] && state.log.some(l => l.age === a && /takes the business public/.test(l.text)));
+  if(playerIpo) headline(`${playerIpo.name.toUpperCase()} GOES PUBLIC`, `Founder ${state.name} rings the opening bell.`, 'you', true);
+  if(!newsDraft.length) headline(pick(['CITY OPENS NEW PARK DOWNTOWN', 'LOCAL BAKERY WINS NATIONAL PRIZE', 'NEW SUBWAY LINE OPENS', 'MUSEUM UNVEILS RARE EXHIBIT', 'STADIUM RENOVATION COMPLETE']), 'A quiet year in the news.', 'policy');
+  // keep the most important stories on the front page
+  const order = s => (s.mine ? 0 : 1) + (['crash','economy','housing','you'].includes(s.tag) ? 0 : 0.5);
+  w.news.push({year:w.year, age:a, items:newsDraft.sort((x, y) => order(x) - order(y)).slice(0, 6)});
+  if(w.news.length > 40) w.news.shift();
+  newsDraft = null;
+}
+function newsHtml(){
+  const w = W(); if(!w || !w.news.length) return '';
+  const latest = w.news[w.news.length - 1];
+  const item = s => `<div class="hl"><span class="hl-tag" aria-hidden="true">${TAG_ICON[s.tag] || '📰'}</span><div><b>${s.h}</b>${s.mine ? ' <span class="hl-you">affects you</span>' : ''}<div class="hl-d">${s.d}</div></div></div>`;
+  let h = `<div class="paper"><div class="paper-mast"><span>The Daily Ledger</span><span>${latest.year}</span></div>${latest.items.map(item).join('')}`;
+  if(w.news.length > 1){
+    h += `<button class="paper-more" onclick="state.showNews=!state.showNews;render()">${state.showNews ? 'Hide past headlines' : 'Past headlines'}</button>`;
+    if(state.showNews) h += w.news.slice(0, -1).reverse().slice(0, 15).map(y => `<div class="paper-past"><b>${y.year}</b> · ${y.items.slice(0, 3).map(s => s.h).join(' · ')}</div>`).join('');
+  }
+  return h + '</div>';
 }
 
 // ---------- Vehicles: condition, breakdowns, accidents and fun ----------
@@ -3933,6 +4104,7 @@ function applyHeir(h){
   state.movedOut = age >= 18;
   state.traits = (kid.traits || []).slice();
   state.pets = (old.pets || []).map(p => Object.assign({}, p)); state.petSeq = old.petSeq || 0;
+  if(old.world) state.world = old.world;
   if(old.fame && old.fame.peak >= 30){ state.fame.inherited = Math.round(old.fame.peak * 0.35); state.fame.level = Math.round(state.fame.inherited * 0.6); }
   state.health.history = Array.from(new Set((old.health ? old.health.history : []).concat(old.health ? old.health.conditions.filter(c => c.known && CONDITIONS[c.key].kind !== 'acute' && !CONDITIONS[c.key].mood && c.key !== 'addiction').map(c => c.key) : [])));
   state.will = old.will; state.trust = old.trust;
@@ -4147,6 +4319,7 @@ function onsetChance(key, d, a){
   if(a < d.min || (d.max && a > d.max)) return 0;
   const hb = H().habits, s = state.stats;
   let p = d.rate;
+  if((key === 'flu' || key === 'pneumonia') && state.world.fx.flu) p *= state.world.fx.flu;
   if(d.aging) p *= 1 + Math.max(0, a - 45) / 14;
   if(key === 'cancer' && a < 40) p *= 0.35;
   p *= Math.max(0.5, Math.min(2, 1 + (60 - s.health) / 80));
@@ -4208,7 +4381,7 @@ function treatmentPrompt(c){
 function cancerPrompt(c){
   const n = state.name, opts = CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).map(t => {
     const cost = medCost(t.cost);
-    return canPay(cost) ? {label:`${t.label} (${fmt(cost)}), about ${Math.round(t.cure[t.stages.indexOf(c.stage)] * 100)}% chance of remission`, run:() => cancerTreat(c.key, t.key)} : null;
+    return canPay(cost) ? {label:`${t.label} (${fmt(cost)}), about ${Math.round(Math.min(0.97, t.cure[t.stages.indexOf(c.stage)] + state.world.medTech) * 100)}% chance of remission`, run:() => cancerTreat(c.key, t.key)} : null;
   }).filter(Boolean);
   opts.push({label: opts.length ? 'Decline treatment' : 'Treatment is out of reach', run:() => pushEntry(state.age, `${n} decides against cancer treatment for now.`, {happy:-2})});
   presentCustom(`${n} is facing stage ${c.stage} cancer. What do they do?`, opts);
@@ -4241,7 +4414,7 @@ function cancerTreat(key, tkey){
   if(!c || !t || !t.stages.includes(c.stage) || state.done.cancerTx) return;
   const cost = medCost(t.cost); if(!ensureCash(cost)) return;
   state.money -= cost; state.done.cancerTx = true; c.treated = true;
-  if(Math.random() < t.cure[t.stages.indexOf(c.stage)]){
+  if(Math.random() < Math.min(0.97, t.cure[t.stages.indexOf(c.stage)] + state.world.medTech)){
     H().conditions = H().conditions.filter(x => x !== c);
     if(!H().history.includes('cancer')) H().history.push('cancer');
     pushEntry(state.age, `${state.name} goes through ${t.label.toLowerCase()} and the cancer goes into remission.`, Object.assign({}, t.hit, {happy:12}));
@@ -4414,7 +4587,7 @@ function heatLabel(h){ return h >= 70 ? "Wanted by police" : h >= 40 ? "High" : 
 function skillTier(s){ return s >= 70 ? "Mastermind" : s >= 40 ? "Professional" : s >= 15 ? "Amateur" : "Beginner"; }
 function crimeRisk(c){
   const k = CR();
-  const p = c.risk * (1 + k.heat / 80) * (1 - k.skill / 200) * (1 - state.stats.smarts / 400) * (k.probation > 0 ? 1.2 : 1);
+  const p = c.risk * (state.world.fx.crackdown ? 1.4 : 1) * (1 + k.heat / 80) * (1 - k.skill / 200) * (1 - state.stats.smarts / 400) * (k.probation > 0 ? 1.2 : 1);
   return Math.max(0.03, Math.min(0.92, p));
 }
 function crimePay(c){
@@ -4823,7 +4996,8 @@ function savingsPanelHtml(){
 
 function creditTier(s){ return s>=800?'Excellent': s>=740?'Very Good': s>=670?'Good': s>=580?'Fair':'Poor'; }
 function adjustCredit(d){ state.creditScore = Math.max(300, Math.min(850, Math.round(state.creditScore + d))); }
-function incomeTax(gross){
+function incomeTax(gross){ return incomeTaxBase(gross) * (state.world ? state.world.taxMult : 1); }
+function incomeTaxBase(gross){
   const brackets = [[40000,0.12],[100000,0.22],[Infinity,0.32]];
   let tax = 0, lower = 0;
   for(const [cap,rate] of brackets){
@@ -6009,7 +6183,7 @@ function startRankFor(track){
   }
   return best;
 }
-function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track), 100); }
+function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track) * (['Retail','Culinary','Odd Jobs'].includes(track) ? state.world.wageMult : 1), 100); }
 function eduSummary(){
   const e = ED();
   if(e.program) return e.program.name + ' · year ' + (e.program.year + 1) + ' of ' + e.program.years + (e.program.major && e.program.major !== 'Undecided' ? ' · ' + e.program.major : '');
@@ -6280,7 +6454,7 @@ function workYear(a){
     if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
-  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0)){
+  if(!info.elect && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0)){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
@@ -6491,7 +6665,7 @@ function applyJob(trackName){
   if(state.retired || state.age > 66) return;
   if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     if(state.job){
       convertCoworkersToFriends();
@@ -7041,6 +7215,7 @@ function render(){
     document.getElementById(`val-${k}`).textContent = state.stats[k];
   }
   queueSave();
+  const np = document.getElementById('news'); if(np) np.innerHTML = state.world ? newsHtml() : '';
   const log = document.getElementById('log');
   const groups = [];
   state.log.slice(-40).reverse().forEach(e => {
