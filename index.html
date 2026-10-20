@@ -8762,6 +8762,7 @@ function presentCrossroads(title, text, opts){
   sfxNow('fanfare');
   return true;
 }
+const callingTracks = () => ['Education', 'Culinary', 'Firefighting', 'Science', 'Trades'].filter(t => (!state.job || state.job.track !== t) && trackOpen(t) && !recordBlocks(t) && bestRankFor(t, 0) === 0);
 const notCareer = j => !j || ['Military', 'Politics', 'Odd Jobs'].includes(j.track);
 const drift = (types, keep) => {                         // moving away: weaker ties fade out, the rest cool
   const lost = [];
@@ -8877,6 +8878,109 @@ const CROSSROADS = [
       {label:'Keep life private', pros:['privacy and peace'], cons:['walk away from money and fame'], run:() => pushEntry(a, `${state.name} turns the network down.`, {happy:2})},
     ]);
   }},
+  {key:'heirloom', min:25, max:70, w:0.3, cond:() => !state.business && state.age >= 25, run(a){
+    const t = bizType('restaurant'), name = pick(['Rosa', 'Mae', 'Ida', 'Lou', 'Vera']) + "'s Kitchen", sale = inflR(rint(90, 160) * 1000, 1000);
+    return presentCrossroads('The family restaurant', `A great-aunt's will leaves ${state.name} ${name}, the restaurant the family has run for fifty years. It's losing money. A developer offers ${fmt(sale)} for the building.`, [
+      {label:'Keep it and save it', pros:['carry on a family legacy', 'a business of your own'], cons:['it is losing money', 'long hours'], run:() => {
+        state.business = bizNormalize({type:'restaurant', employees:4, locations:1, price:'normal', marketing:0, reputation:45, value:Math.round(bizCost(t) * 0.8), startAge:a, lastProfit:null, name});
+        bondDelta(['Mother', 'Father', 'Sibling'], 8);
+        pushEntry(a, `${state.name} takes over ${name}, determined to keep it alive.`, {happy:6});
+        seedThread('xr', {kind:'heirloom', name}, `Took over the family restaurant, ${name}`, rint(3, 5), 'heirloom');
+      }},
+      {label:`Sell it for ${fmt(sale)}`, pros:[`${fmt(sale)} in cash`], cons:['fifty years of family history gone', 'relatives will be upset'], run:() => {
+        bondDelta(['Mother', 'Father', 'Sibling'], -8);
+        pushEntry(a, `${state.name} sells ${name} to a developer for ${fmt(sale)}. It becomes condos.`, {money:sale, happy:-2});
+      }},
+    ]);
+  }},
+  {key:'calling', min:28, max:55, cond:() => !notCareer(state.job) && callingTracks().length > 0, run(a){
+    const j = state.job, track = pick(callingTracks()), t = CAREERS[track][0], pay = startingSalary(track, 0);
+    return presentCrossroads('Follow your calling?', `${state.name} has always dreamed of working in ${track.toLowerCase()}. Starting over means leaving ${j.title} (${fmt(j.salary)}) to begin as ${t.title} (${fmt(pay)}).`, [
+      {label:'Start over doing what you love', pros:['work that means something', 'a happier life'], cons:[`${fmt(Math.max(0, j.salary - pay))} a year less`, 'starting from the bottom'], run:() => {
+        const old = j.title; threadJob(track, 0);
+        pushEntry(a, `${state.name} leaves their job as ${old} to start over as ${state.job.title}.`, {happy:12});
+        seedThread('xr', {kind:'calling', track}, `Left ${old} to follow a calling in ${track.toLowerCase()}`, rint(4, 6), 'calling');
+      }},
+      {label:'Stay where the money is', pros:['financial security'], cons:['the dream stays a dream'], run:() => pushEntry(a, `${state.name} stays put. The dream goes back in the drawer.`, {happy:-4})},
+    ]);
+  }},
+  {key:'firstlove', min:35, max:65, cond:() => hasRel('Spouse') && state.relationships.length < 58, run(a){
+    const sp = state.relationships.find(r => r.type === 'Spouse'), name = freeName();
+    return presentCrossroads('A first love returns', `${name}, ${state.name}'s first love, is back in town, single, and says they never stopped thinking about ${state.name}. ${state.name} is married to ${sp.name}.`, [
+      {label:`Leave ${sp.name} for ${name}`, pros:['the love that got away', 'a second chance'], cons:[`a painful divorce from ${sp.name}`, 'half your cash and savings', 'the kids may resent it'], run:() => {
+        endRelationship(sp); bondDelta(['Child'], -10);
+        const l = newRel('Partner', {age: clampAge(a + rint(-2, 2)), closeness:80, origin:'your first love'}); l.name = name;
+        pushEntry(a, `${state.name} leaves ${sp.name} and starts over with ${name}.`, {happy:6});
+        seedThread('xr', {kind:'firstlove', rel:l.id, who:name}, `Left their marriage for ${name}, their first love`, rint(2, 4), 'firstlove');
+      }},
+      {label:`Stay with ${sp.name}`, pros:['keep the life you built', `${sp.name} never needs to know`], cons:['always wonder'], run:() => { bump(sp, 8); pushEntry(a, `${state.name} says goodbye to ${name} and goes home to ${sp.name}.`, {happy:-3}); }},
+    ]);
+  }},
+  {key:'baby', min:28, max:44, cond:() => state.relationships.some(r => (r.type === 'Spouse' || (r.type === 'Partner' && r.livingTogether)) && r.closeness >= 40) && !hasRel('Child'), run(a){
+    const p = state.relationships.find(r => r.type === 'Spouse' || (r.type === 'Partner' && r.livingTogether));
+    return presentCrossroads('A child?', `${p.name} wants to start a family. ${state.name} isn't sure they're ready, and time isn't on their side.`, [
+      {label:'Have a baby', pros:['a child of your own', `a deeper bond with ${p.name}`], cons:['years of costs', 'less freedom'], run:() => {
+        bump(p, 12);
+        ensureCash(inflR(2000, 100)); state.money -= inflR(2000, 100);
+        const c = newRel('Child', {age:0, closeness:80, origin:'your child'}); c.coParent = p.id;
+        pushEntry(a, `${state.name} and ${p.name} welcome a baby, ${c.name}.`, {happy:12});
+      }},
+      {label:'Not now, maybe never', pros:['freedom and money'], cons:[`${p.name} wanted this badly`], run:() => {
+        bump(p, -15); pushEntry(a, `${state.name} tells ${p.name} they don't want children.`, {happy:-2});
+        seedThread('xr', {kind:'nobaby', rel:p.id, who:p.name}, `Chose not to have children with ${p.name}`, rint(2, 4), 'nobaby');
+      }},
+    ]);
+  }},
+  {key:'office', min:35, max:65, w:0.6, cond:() => !inOffice() && !POL().campaign && felonyCount() === 0 && !milActive() && !rankGap(CAREERS.Politics[3], 'Politics'), run(a){
+    const P = POL(), party = P.party && P.party !== 'independent' ? P.party : pick(['progressive', 'conservative']), chance = Math.min(0.85, winChance(3, 'blitz') + 0.12);
+    return presentCrossroads('The party comes calling', `Leaders of the ${PARTY_NAMES[party]} Party ask ${state.name} to run for State Senate, with the party's money behind them. They give ${state.name} about a ${Math.round(chance * 100)}% chance.`, [
+      {label:'Run for State Senate', pros:['a seat of real power', 'a path to Governor or President'], cons:[state.job ? 'leave your job' : 'give up your privacy', 'public scrutiny forever', 'you could lose'], run:() => {
+        P.party = party; state.done.ran = true;
+        if(state.job && state.job.track !== 'Politics'){ convertCoworkersToFriends(); state.job = null; }
+        if(!resolveElection(3, chance)) pushEntry(a, `${state.name} goes back to private life.`, {});
+      }},
+      {label:'Stay out of politics', pros:['a quiet, private life'], cons:['never know what you could have changed'], run:() => pushEntry(a, `${state.name} politely turns the party down.`, {})},
+    ]);
+  }},
+  {key:'witness', min:20, max:70, w:0.2, cond:() => !state.crime.prison && !inOffice() && !milActive(), run(a){
+    return presentCrossroads('The witness', `${state.name} sees a crime boss murder a man. Prosecutors want ${state.name} to testify, which means entering witness protection: a new name, a new city, and no contact with anyone from before.`, [
+      {label:'Testify and disappear', pros:['justice is done', 'protection and a stipend'], cons:['lose every friend', state.job ? 'lose your job' : 'start from zero', 'family only in secret'], run:() => {
+        drift(['Friend', 'Coworker', 'Contact', 'Partner'], 101); bondDelta(['Mother', 'Father', 'Sibling', 'Child'], -20);
+        if(state.job){ leaveRoleFor('witness'); convertCoworkersToFriends(); state.job = null; }
+        pushEntry(a, `${state.name} testifies, and the crime boss is convicted. Then ${state.name} vanishes into witness protection.`, {money:inflR(50000, 1000), happy:-10, fame:3});
+        seedThread('xr', {kind:'witness'}, 'Testified against a crime boss and entered witness protection', rint(2, 4), 'witness');
+      }},
+      {label:'Stay silent', pros:['keep your life and your safety'], cons:['a killer walks free', 'it will haunt you'], run:() => {
+        pushEntry(a, `${state.name} tells the police they didn't see anything.`, {happy:-8});
+        seedThread('xr', {kind:'silent'}, 'Stayed silent about a murder', rint(2, 5), 'silent');
+      }},
+    ]);
+  }},
+  {key:'kidney', min:21, max:65, w:0.35, cond:() => state.relationships.some(r => r.type === 'Sibling' && r.age < 75) && state.stats.health >= 50, run(a){
+    const s = state.relationships.find(r => r.type === 'Sibling' && r.age < 75);
+    return presentCrossroads('A kidney for your sibling', `${s.name}'s kidneys are failing. ${state.name} is a match, and the waiting list could take years ${s.name} doesn't have.`, [
+      {label:'Donate a kidney', pros:[`save ${s.name}'s life`, 'a bond that lasts forever'], cons:['major surgery', 'your health takes a lasting hit'], run:() => {
+        bump(s, 40); pushEntry(a, `${state.name} gives ${s.name} a kidney. The surgery is a success.`, {health:-10, happy:10});
+        seedThread('xr', {kind:'kidney', rel:s.id, who:s.name}, `Gave a kidney to ${s.name}`, rint(2, 4), 'kidney');
+      }},
+      {label:'Say no', pros:['keep your health'], cons:[`${s.name} may not survive the wait`], run:() => {
+        if(Math.random() < 0.45){ state.relationships = state.relationships.filter(r => r.id !== s.id); pushEntry(a, `${s.name} dies waiting for a kidney.`, {happy:-18, family:-10}); addMilestone('🕯️', `Lost ${s.name}, who needed a kidney`); }
+        else { bump(s, -30); pushEntry(a, `${s.name} finds a donor in time, but never quite forgives ${state.name}.`, {happy:-6}); }
+      }},
+    ]);
+  }},
+  {key:'sail', min:40, max:62, cond:() => !notCareer(state.job) && netWorth() / state.econ.cumInflation >= 300000, run(a){
+    const cost = inflR(70000, 1000), j = state.job;
+    return presentCrossroads('Sail around the world?', `${state.name} could quit as ${j.title}, buy a sailboat and spend two years sailing around the world. It would cost about ${fmt(cost)}.`, [
+      {label:'Quit and set sail', pros:['the adventure of a lifetime', 'see the world'], cons:[`${fmt(cost)}`, `give up a ${fmt(j.salary)} salary`, 'a hard return to work'], run:() => {
+        pay(cost); leaveRoleFor('sail'); convertCoworkersToFriends(); state.job = null;
+        const ports = ['Tahiti', 'Fiji', 'Cape Town', 'Bali', 'the Galápagos'].filter(x => !state.travel.places.includes(x)); state.travel.places.push(...ports); state.travel.trips += 1;
+        pushEntry(a, `${state.name} quits their job, buys a sailboat and sets off around the world.`, {happy:15, health:5});
+        seedThread('xr', {kind:'sail', job:j.title, track:j.track, rank:j.rank}, `Quit as ${j.title} to sail around the world`, 2, 'sail');
+      }},
+      {label:'Keep working', pros:['savings keep growing'], cons:['someday may never come'], run:() => pushEntry(a, `${state.name} pins a map of the oceans above their desk and keeps working.`, {happy:-3})},
+    ]);
+  }},
 ];
 function crossroadsYear(a){
   if(a < 22 || state.crime.prison) return false;
@@ -8892,7 +8996,53 @@ function crossroadsYear(a){
 }
 // what the big decisions led to, years later
 CHAINS.xr = {
-  title: th => ({soldco:'Selling ' + th.data.name, keepco:'Keeping ' + th.data.name, allin:'Going all in', idea:'The idea not chased', topjob:'The top job', abroad:'A life in ' + th.data.place, orphans:'Raising two more', tv:'Life on TV'})[th.data.kind] || 'A crossroads',
+  title: th => ({soldco:'Selling ' + th.data.name, keepco:'Keeping ' + th.data.name, allin:'Going all in', idea:'The idea not chased', topjob:'The top job', abroad:'A life in ' + th.data.place, orphans:'Raising two more', tv:'Life on TV', heirloom:'The family restaurant', calling:'Following a calling', firstlove:'A first love', nobaby:'No children', witness:'Witness protection', silent:'The silence', kidney:'A kidney', sail:'Around the world'})[th.data.kind] || 'A crossroads',
+  heirloom(th, a){
+    const b = state.business;
+    if(!b || bizName(b) !== th.data.name) return endThread(th, `${th.data.name} changed hands`, 'mixed');
+    const r = Math.random();
+    if(r < 0.45){ b.value = Math.round(b.value * rint(2, 4)); b.reputation = clampRep(b.reputation + 25); pushEntry(a, `${th.data.name} is packed every night again. The family legacy is saved.`, {happy:12, family:8}); return endThread(th, `Brought ${th.data.name} back to life`, 'good'); }
+    if(r < 0.8){ pushEntry(a, `Despite everything, ${th.data.name} closes for good.`, {happy:-10}); state.relationships.forEach(x => { if(x.familyBiz) x.familyBiz = false; }); state.business = null; return endThread(th, `Couldn't save ${th.data.name}`, 'bad'); }
+    endThread(th, `${th.data.name} limps along`, 'mixed');
+  },
+  calling(th, a){
+    if(Math.random() < 0.6){ const j = state.job; if(j && j.track === th.data.track && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); }
+      pushEntry(a, `${state.name} has never been happier at work.`, {happy:10}); return endThread(th, 'Found real fulfillment', 'good'); }
+    pushEntry(a, `${state.name} loves the work but misses the old paycheck more than they expected.`, {happy:-6}); endThread(th, 'Loved the work, missed the money', 'mixed');
+  },
+  firstlove(th, a){
+    const l = thRel(th);
+    if(!l) return endThread(th, `${th.data.who} is gone from their life`, 'mixed');
+    if(Math.random() < 0.55){ bump(l, 10); pushEntry(a, `${state.name} and ${l.name} are as happy as they were at seventeen.`, {happy:10}); return endThread(th, 'It was as good as they remembered', 'good'); }
+    pushEntry(a, `Nostalgia wasn't love. ${state.name} and ${l.name} split up.`, {happy:-10}); state.relationships = state.relationships.filter(x => x.id !== l.id);
+    endThread(th, 'Nostalgia was not enough', 'bad');
+  },
+  nobaby(th, a){
+    const p = thRel(th);
+    if(!p) return endThread(th, 'The relationship ended anyway', 'mixed');
+    if(Math.random() < 0.35){ pushEntry(a, `${p.name} realizes they can't give up on having children and leaves.`, {happy:-10}); endRelationship(p); return endThread(th, `${p.name} left to have a family`, 'bad'); }
+    bump(p, 6); pushEntry(a, `${state.name} and ${p.name} build a full life together, just the two of them.`, {happy:4}); endThread(th, 'A full life, just the two of them', 'good');
+  },
+  witness(th, a){
+    if(Math.random() < 0.15){ pushEntry(a, `The crime boss's people find ${state.name}. They survive the attack, barely.`, {health:-30, happy:-15}); return endThread(th, 'They were found, and barely survived', 'bad'); }
+    pushEntry(a, `${state.name}'s new life is quiet and safe. The man they testified against will never leave prison.`, {happy:6});
+    endThread(th, 'Justice was done, and they stayed safe', 'good');
+  },
+  silent(th, a){
+    if(Math.random() < 0.35){ pushEntry(a, `The crime boss ${state.name} wouldn't testify against kills again. ${state.name} reads about it in the paper.`, {happy:-12}); return endThread(th, 'The killer struck again', 'bad'); }
+    endThread(th, 'They carried the secret quietly', 'mixed');
+  },
+  kidney(th, a){
+    const s = thRel(th);
+    if(Math.random() < 0.15){ pushEntry(a, `Complications from the surgery leave ${state.name} weaker than before.`, {health:-10}); return endThread(th, 'Complications took a toll', 'mixed'); }
+    if(s){ bump(s, 10); pushEntry(a, `${s.name} is thriving, and never lets a birthday pass without thanking ${state.name}.`, {happy:6}); }
+    endThread(th, s ? `${th.data.who} is alive and well because of them` : 'They saved a life', 'good');
+  },
+  sail(th, a){
+    pushEntry(a, `${state.name} sails home after two years at sea, sunburned and changed.`, {happy:8, health:4});
+    if(state.age < 64 && !state.job && Math.random() < 0.6 && CAREERS[th.data.track]){ const rank = Math.max(0, Math.min(th.data.rank, bestRankFor(th.data.track, th.data.rank))); if(!rankGap(CAREERS[th.data.track][rank], th.data.track)){ threadJob(th.data.track, rank); return endThread(th, 'Came home changed, and back to work', 'good'); } }
+    endThread(th, 'Came home changed', 'good');
+  },
   soldco(th, a){
     const r = Math.random(), big = Math.round(th.data.offer * rint(6, 12) / 1000) * 1000;
     if(r < 0.4){ pushEntry(a, `${th.data.name}, the company ${state.name} sold, is now worth ${fmt(big)}.`, {happy:-6}); return endThread(th, `It became worth ${fmt(big)} without them`, 'mixed'); }
