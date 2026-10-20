@@ -365,6 +365,12 @@
   .tl-more{ font-size:11.5px; color:var(--muted); padding:3px 0 4px 35px; }
   #achModal .modal-card{ max-width:460px; max-height:84vh; overflow-y:auto; text-align:left; }
   #achModal h3{ margin:0 0 6px; font-family:'Fraunces',serif; font-size:20px; color:var(--ink); }
+  .decision.crossroads{ border:2px solid var(--accent); background:linear-gradient(180deg, var(--accent-soft), var(--surface)); box-shadow:0 6px 22px rgba(44,74,66,0.22); }
+  .decision.crossroads .decision-label{ color:var(--accent); }
+  .xr-title{ font-family:'Fraunces',serif; font-size:19px; font-weight:700; color:var(--ink); margin:2px 0 6px; }
+  .xr-opt{ display:flex; flex-direction:column; gap:2px; text-align:left; }
+  .xr-line{ font-size:12.5px; font-weight:500; }
+  .xr-line.up{ color:var(--accent); } .xr-line.down{ color:var(--red); }
   .chain{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; text-align:left; }
   .chain.good{ border-left:3px solid var(--accent); } .chain.bad{ border-left:3px solid var(--red); } .chain.mixed{ border-left:3px solid var(--gold); }
   .chain-h{ display:flex; justify-content:space-between; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:6px; }
@@ -532,7 +538,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -1751,7 +1757,7 @@ function ageUpYear(){
   crimeYear(a);
   if(state.crime.prison){ prisonYear(a); render(); return; }
   const schoolPrompted = schoolYear(a);
-  const prompted = healthYear(a, !schoolPrompted) || schoolPrompted;
+  const prompted = healthYear(a, !schoolPrompted) || schoolPrompted || crossroadsYear(a);   // a crossroads takes the year's main decision
   yearlyFinances(a);
   workYear(a);
   loansYear(a);
@@ -6820,6 +6826,7 @@ function mePanelHtml(){
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
+  h += crossroadsHtml();
   h += consequencesHtml();
   h += achMeHtml();
   h += worldEventsHtml();
@@ -8018,19 +8025,6 @@ const OPENERS = [
       {label: 'Come back next weekend', run: () => { pushEntry(a, `${state.name} can't stop thinking about that win.`, {happy:3}); seedThread('gamble', {stage: 1, lost: 0}, `Won ${fmt(win)} at a casino and went back for more`, 1, 'hooked'); }},
     ]);
   }},
-  {key:'move', min:20, max:40, w:0.5, cond:() => !state.retired && !state.crime.prison, run(a){
-    const raise = 0.2;
-    presentCustom(`${state.name} gets a job offer across the country: ${Math.round(raise * 100)}% more pay, but far from everyone they know.`, [
-      {label: 'Take it and move', run: () => {
-        if(state.job) state.job.salary = Math.round(state.job.salary * (1 + raise));
-        else threadJob('Business', 0);
-        bondDelta(['Mother', 'Father', 'Sibling', 'Friend'], -10);
-        pushEntry(a, `${state.name} packs up and moves across the country${state.job ? ' to work as ' + state.job.title : ''}.`, {happy:3});
-        seedThread('move', {}, 'Moved across the country for work', rint(1, 2), 'settle');
-      }},
-      {label: 'Stay close to home', run: () => { bondDelta(['Mother', 'Father', 'Sibling'], 6); pushEntry(a, `${state.name} turns down the offer to stay near family.`, {}); seedThread('move', {}, 'Turned down a job far away to stay near family', rint(2, 4), 'stayed'); }},
-    ]);
-  }},
   {key:'whistle', min:22, max:64, w:0.7, cond:() => !!state.job && state.job.track !== 'Odd Jobs' && state.job.rank >= 1, run(a){
     const j = state.job;
     presentCustom(`${state.name} discovers that their boss has been cooking the books.`, [
@@ -8751,6 +8745,216 @@ function resignOffice(ok){
   const i = officeIdx(); pushEntry(state.age, `${state.name} resigns as ${state.job.title}.`, {happy:-2}); leaveOffice(i); render();
 }
 
+// ---------- Crossroads: rare decisions that change the whole shape of a life ----------
+// Each one shows what is at stake on both sides, is remembered in the Me tab, and keeps playing out for years.
+const xrList = () => state.crossroads || (state.crossroads = []);
+function presentCrossroads(title, text, opts){
+  const shown = presentCustom(`<div class="xr-title">⚡ A crossroads · ${title}</div>${text}`, opts.map(o => ({
+    label: `<span class="xr-opt"><b>${o.label}</b>${(o.pros || []).map(p => `<span class="xr-line up">→ ${p}</span>`).join('')}${(o.cons || []).map(c => `<span class="xr-line down">→ ${c}</span>`).join('')}</span>`,
+    run: () => {
+      xrList().push({age: state.age, title, chose: o.label, other: opts.filter(x => x !== o).map(x => x.label)});
+      addMilestone('⚡', title + ': ' + o.label.charAt(0).toLowerCase() + o.label.slice(1));
+      o.run();
+    }})));
+  if(shown === false) return false;
+  const d = document.querySelector('#choices .decision');
+  if(d){ d.classList.add('crossroads'); d.querySelector('.decision-label').textContent = 'Life-changing decision · age ' + state.age; }
+  sfxNow('fanfare');
+  return true;
+}
+const notCareer = j => !j || ['Military', 'Politics', 'Odd Jobs'].includes(j.track);
+const drift = (types, keep) => {                         // moving away: weaker ties fade out, the rest cool
+  const lost = [];
+  state.relationships.slice().forEach(r => { if(!types.includes(r.type)) return; if(r.closeness < keep){ lost.push(r.name); state.relationships = state.relationships.filter(x => x.id !== r.id); } else bump(r, -20); });
+  return lost;
+};
+const CROSSROADS = [
+  {key:'move', min:22, max:55, cond:() => !notCareer(state.job), run(a){
+    const j = state.job, raise = Math.max(inflR(40000, 1000), Math.round(j.salary * 0.35 / 1000) * 1000), city = pick(['Seattle', 'Austin', 'Denver', 'Boston', 'Miami', 'Chicago', 'San Francisco', 'Atlanta', 'Phoenix', 'New York']);
+    const friends = state.relationships.filter(r => ['Friend', 'Coworker', 'Contact'].includes(r.type)).length;
+    return presentCrossroads('The job across the country', `${state.name} is offered a ${j.title} job in ${city}, across the country, for ${fmt(j.salary + raise)} a year.`, [
+      {label:'Accept and move', pros:[`+${fmt(raise)} a year`, 'a fresh start in a new city'], cons:[friends ? 'some friendships will fade' : 'leaving everyone behind', 'far from family'], run:() => {
+        j.salary += raise; j.years = 0;
+        const lost = drift(['Friend', 'Coworker', 'Contact'], 60); bondDelta(['Mother', 'Father', 'Sibling'], -12);
+        pushEntry(a, `${state.name} packs up and moves to ${city}, starting at ${fmt(j.salary)}.${lost.length ? ' Over time they lose touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy:4});
+        seedThread('move', {}, `Moved to ${city} for a ${fmt(raise)} raise`, rint(1, 2), 'settle');
+      }},
+      {label:'Decline and stay home', pros:['keep every relationship', 'family stays close'], cons:['miss the opportunity', 'wonder what might have been'], run:() => {
+        bondDelta(['Mother', 'Father', 'Sibling'], 6); bondDelta(['Friend'], 4);
+        pushEntry(a, `${state.name} turns down the job in ${city} and stays close to the people they love.`, {happy:2});
+        seedThread('move', {}, `Turned down a job in ${city} to stay near family`, rint(2, 4), 'stayed');
+      }},
+    ]);
+  }},
+  {key:'sellco', min:25, max:85, cond:() => state.business && state.business.value * bizShare(state.business) >= inflR(150000, 1000) && !state.business.xrKept, run(a){
+    const b = state.business, mine = b.value * bizShare(b), offer = Math.round(mine * (1.4 + Math.random() * 0.8) / 1000) * 1000, dream = Math.round(mine * rint(5, 8) / 1000) * 1000;
+    const who = b.cofounder ? `${b.cofounderName}, ${state.name}'s business partner, wants to sell ${bizName(b)}` : `A buyer wants ${bizName(b)}`;
+    return presentCrossroads('Sell the company?', `${who}. The offer for ${state.name}'s stake: ${fmt(offer)}.`, [
+      {label:`Sell for ${fmt(offer)}`, pros:[`${fmt(offer)} in cash today`, 'no more risk or stress'], cons:['never know how big it could have been'], run:() => {
+        const nm = bizName(b);
+        threads().forEach(t => { if(t.key === 'dropout' && b.cofounder && t.data.rel === b.cofounder) t.data.sold = true; });
+        state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
+        state.business = null; state.money += offer;
+        pushEntry(a, `${state.name} sells ${nm} for ${fmt(offer)}.`, {happy:12});
+        seedThread('xr', {kind:'soldco', name:nm, offer}, `Sold ${nm} for ${fmt(offer)}`, rint(4, 6), 'soldco');
+      }},
+      {label:'Keep it and bet on the future', pros:[`it could be worth ${fmt(dream)}`], cons:['or it could be worth $0'], run:() => {
+        b.xrKept = true;
+        if(b.cofounder){ const p = findRel(b.cofounder); if(p) bump(p, -10); }
+        pushEntry(a, `${state.name} turns the offer down and keeps building ${bizName(b)}.`, {happy:2});
+        seedThread('xr', {kind:'keepco', name:bizName(b), dream}, `Turned down ${fmt(offer)} for ${bizName(b)}`, rint(3, 5), 'keepco');
+      }},
+    ]);
+  }},
+  {key:'allin', min:24, max:50, cond:() => !notCareer(state.job) && state.job.rank >= 1 && !state.business && !state.bankrupt, run(a){
+    const j = state.job, seed = inflR(40000, 1000), t = bizType(pick(['tech', 'appstudio', 'agency', 'clothing']));
+    return presentCrossroads('Go all in?', `${state.name} has an idea for a ${t.name.toLowerCase()} they can't stop thinking about. Doing it means quitting as ${j.title} and putting ${fmt(seed)} on the line.`, [
+      {label:'Quit and go all in', pros:['own something that is truly theirs', 'a shot at real wealth'], cons:[`lose a ${fmt(j.salary)} salary`, `${fmt(seed)} at risk`, 'most startups fail'], run:() => {
+        if(!canPay(seed)){ takeLoan('Business', seed, 7, Math.max(0.08, state.econ.rate + 0.05)); state.money += seed; }
+        pay(seed); convertCoworkersToFriends(); state.job = null;
+        const name = suggestBizName(t.key);
+        state.business = bizNormalize({type:t.key, employees:2, locations:1, price:'normal', marketing:0, reputation:60, value:Math.round(seed * 1.2), startAge:a, lastProfit:null, name});
+        pushEntry(a, `${state.name} quits their job and launches ${name}.`, {happy:10});
+        seedThread('xr', {kind:'allin', name, seed}, `Quit as ${j.title} to launch ${name}`, rint(3, 4), 'allin');
+      }},
+      {label:'Keep the steady job', pros:['security and a paycheck'], cons:['the idea stays an idea'], run:() => {
+        pushEntry(a, `${state.name} decides the risk is too big and keeps their job.`, {happy:-2});
+        seedThread('xr', {kind:'idea', name:t.name.toLowerCase()}, `Kept the job instead of launching a ${t.name.toLowerCase()}`, rint(4, 7), 'idea');
+      }},
+    ]);
+  }},
+  {key:'topjob', min:30, max:58, cond:() => !notCareer(state.job) && state.job.rank >= 1 && bestRankFor(state.job.track, state.job.rank + 2) > state.job.rank, run(a){
+    const j = state.job, L = CAREERS[j.track], to = bestRankFor(j.track, j.rank + 2), sal = Math.round(startingSalary(j.track, to) * 1.1 / 100) * 100;
+    return presentCrossroads('The big promotion', `${state.name}'s boss offers them the ${L[to].title} job at ${fmt(sal)} a year. Everyone knows it means 80-hour weeks.`, [
+      {label:`Become ${L[to].title}`, pros:[`${fmt(sal)} a year`, 'power and prestige'], cons:['brutal hours', 'health and relationships will suffer'], run:() => {
+        j.rank = to; j.title = L[to].title; j.salary = Math.max(j.salary, sal); j.years = 0;
+        bondDelta(['Partner', 'Spouse', 'Child'], -8);
+        pushEntry(a, `${state.name} takes the job as ${j.title}.`, {happy:8, health:-4});
+        seedThread('xr', {kind:'topjob', title:j.title}, `Took the ${j.title} job`, rint(2, 4), 'topjob');
+      }},
+      {label:'Turn it down for balance', pros:['time with family', 'health intact'], cons:['the career may stall'], run:() => {
+        bondDelta(['Partner', 'Spouse', 'Child'], 6);
+        pushEntry(a, `${state.name} turns down the promotion to keep their evenings.`, {happy:3});
+      }},
+    ]);
+  }},
+  {key:'abroad', min:24, max:55, cond:() => state.relationships.some(r => (r.type === 'Partner' || r.type === 'Spouse') && r.closeness >= 40), run(a){
+    const p = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse'), place = pick(CITIES.concat(['Tokyo', 'Sydney', 'London', 'Paris']));
+    return presentCrossroads('Follow love abroad?', `${p.name} has been offered a dream job in ${place} and asks ${state.name} to come along.`, [
+      {label:`Move to ${place} with ${p.name}`, pros:[`a stronger bond with ${p.name}`, 'an adventure abroad'], cons:[state.job ? 'leave your job behind' : 'start over', 'friends and family far away'], run:() => {
+        if(state.job){ leaveRoleFor('abroad'); convertCoworkersToFriends(); state.job = null; }
+        bump(p, 20); drift(['Friend', 'Coworker', 'Contact'], 55); bondDelta(['Mother', 'Father', 'Sibling'], -15);
+        pushEntry(a, `${state.name} and ${p.name} move to ${place}.`, {happy:10});
+        seedThread('xr', {kind:'abroad', place, rel:p.id, who:p.name}, `Moved to ${place} with ${p.name}`, rint(1, 3), 'abroad');
+      }},
+      {label:'Stay, and hope it survives', pros:['keep your life as it is'], cons:[`${p.name} may not wait`], run:() => {
+        if(Math.random() < 0.5){ pushEntry(a, `${p.name} takes the job in ${place} anyway, and the relationship can't survive the distance.`, {happy:-6}); endRelationship(p); }
+        else { bump(p, -25); pushEntry(a, `${p.name} turns the job down for ${state.name}, but something between them has shifted.`, {happy:-3}); }
+      }},
+    ]);
+  }},
+  {key:'orphans', min:25, max:62, w:0.35, cond:() => state.relationships.filter(r => r.type === 'Child' && r.age < 18).length < 3 && state.relationships.length < 56, run(a){
+    const kids = [rint(3, 7), rint(8, 12)];
+    return presentCrossroads('Two children need a home', `${state.name}'s cousin dies suddenly, leaving two children, ${kids[0]} and ${kids[1]}, with no one else to take them in.`, [
+      {label:'Raise them as your own', pros:['two children who will love you', 'a bigger family'], cons:['years of costs', 'less freedom and sleep'], run:() => {
+        kids.forEach(k => { const c = newRel('Child', {age:k, closeness:55, origin:'adopted after a family tragedy'}); c.adopted = true; });
+        pushEntry(a, `${state.name} takes in their cousin's two children and becomes their parent.`, {happy:4, money:-inflR(5000, 100)});
+        seedThread('xr', {kind:'orphans'}, 'Took in two orphaned children', rint(6, 9), 'orphans');
+      }},
+      {label:'Let others take them', pros:['life stays as it is'], cons:['they go into foster care', 'it may weigh on you'], run:() => {
+        pushEntry(a, `${state.name} can't take the children in. They go into foster care.`, {happy:-8, family:-5});
+      }},
+    ]);
+  }},
+  {key:'tv', min:20, max:50, w:0.4, cond:() => state.fame.level < 40 && !state.crime.prison, run(a){
+    const fee = inflR(rint(100, 250) * 1000, 1000);
+    return presentCrossroads('Your life on TV?', `A network wants to film ${state.name}'s life for a reality series, paying ${fmt(fee)}.`, [
+      {label:'Sign the contract', pros:[`${fmt(fee)}`, 'instant fame'], cons:['no privacy', 'family under a spotlight', 'scandals are ratings'], run:() => {
+        bondDelta(['Partner', 'Spouse', 'Mother', 'Father', 'Sibling', 'Child'], -8);
+        pushEntry(a, `${state.name}'s reality show premieres, and suddenly strangers know their name.`, {money:fee, fame:25, happy:6});
+        seedThread('xr', {kind:'tv'}, 'Starred in a reality show', 2, 'tv');
+      }},
+      {label:'Keep life private', pros:['privacy and peace'], cons:['walk away from money and fame'], run:() => pushEntry(a, `${state.name} turns the network down.`, {happy:2})},
+    ]);
+  }},
+];
+function crossroadsYear(a){
+  if(a < 22 || state.crime.prison) return false;
+  const last = xrList().length ? xrList()[xrList().length - 1].age : 15;
+  if(a - last < 7 || Math.random() > 0.3) return false;
+  const ok = CROSSROADS.filter(c => a >= c.min && a <= c.max && !(state.xrUsed || []).includes(c.key) && c.cond());
+  if(!ok.length) return false;
+  let x = Math.random() * ok.reduce((t, o) => t + (o.w || 1), 0), c = ok[0];
+  for(const o of ok){ x -= o.w || 1; if(x <= 0){ c = o; break; } }
+  if(Math.random() > (c.w || 1)) return false;          // the rarer crossroads don't always come
+  (state.xrUsed || (state.xrUsed = [])).push(c.key);
+  return c.run(a) !== false;
+}
+// what the big decisions led to, years later
+CHAINS.xr = {
+  title: th => ({soldco:'Selling ' + th.data.name, keepco:'Keeping ' + th.data.name, allin:'Going all in', idea:'The idea not chased', topjob:'The top job', abroad:'A life in ' + th.data.place, orphans:'Raising two more', tv:'Life on TV'})[th.data.kind] || 'A crossroads',
+  soldco(th, a){
+    const r = Math.random(), big = Math.round(th.data.offer * rint(6, 12) / 1000) * 1000;
+    if(r < 0.4){ pushEntry(a, `${th.data.name}, the company ${state.name} sold, is now worth ${fmt(big)}.`, {happy:-6}); return endThread(th, `It became worth ${fmt(big)} without them`, 'mixed'); }
+    if(r < 0.7){ pushEntry(a, `${th.data.name} goes bankrupt under its new owners. ${state.name} sold at exactly the right time.`, {happy:6}); return endThread(th, 'It collapsed after they sold: perfect timing', 'good'); }
+    endThread(th, 'They never looked back', 'good');
+  },
+  keepco(th, a){
+    const b = state.business;
+    if(!b || bizName(b) !== th.data.name) return endThread(th, 'The business changed hands before the bet played out', 'mixed');
+    const r = Math.random();
+    if(r < 0.35){ b.value = Math.round(b.value * rint(4, 7)); b.reputation = clampRep(b.reputation + 15); pushEntry(a, `${bizName(b)} explodes in value. Keeping it was the call of a lifetime: ${state.name}'s stake is worth ${fmt(b.value * bizShare(b))}.`, {happy:15, fame:4}); return endThread(th, `The bet paid off: now worth ${fmt(b.value)}`, 'good'); }
+    if(r < 0.65){ pushEntry(a, `${bizName(b)} collapses. ${state.name} ends up with nothing for the company they wouldn't sell.`, {happy:-15});
+      state.relationships.forEach(x => { if(x.familyBiz) x.familyBiz = false; }); state.business = null; return endThread(th, 'It collapsed, and the offer was gone', 'bad'); }
+    endThread(th, 'It kept growing slowly, neither boom nor bust', 'mixed');
+  },
+  allin(th, a){
+    const b = state.business;
+    if(!b || bizName(b) !== th.data.name) return endThread(th, `${th.data.name} didn't make it`, 'bad');
+    const r = Math.random();
+    if(r < 0.3){ b.value = Math.round(Math.max(b.value, th.data.seed) * rint(8, 15)); b.employees += rint(5, 15); pushEntry(a, `${th.data.name} takes off beyond anyone's dreams. It's now worth ${fmt(b.value)}.`, {happy:18, fame:6}); return endThread(th, `${th.data.name} became worth ${fmt(b.value)}`, 'good'); }
+    if(r < 0.7){ const owed = Math.round(th.data.seed * 0.6 / 500) * 500; debtLoan(owed, 0.12); pushEntry(a, `${th.data.name} runs out of money and closes, leaving ${state.name} ${fmt(owed)} in debt.`, {happy:-14});
+      state.business = null; return endThread(th, `${th.data.name} failed, leaving ${fmt(owed)} of debt`, 'bad'); }
+    endThread(th, `${th.data.name} became a modest, real business`, 'good');
+  },
+  idea(th, a){
+    if(Math.random() < 0.35){ pushEntry(a, `Someone else launches a ${th.data.name} almost exactly like the one ${state.name} dreamed up, and it's a hit.`, {happy:-7}); return endThread(th, 'Someone else built it, and it worked', 'mixed'); }
+    endThread(th, 'The steady path held up', 'good');
+  },
+  topjob(th, a){
+    if(Math.random() < 0.4){ addCondition('anxiety', a); bondDelta(['Partner', 'Spouse'], -12); pushEntry(a, `Years of 80-hour weeks catch up with ${state.name}. They burn out.`, {health:-10, happy:-12}); return endThread(th, 'The hours led to burnout', 'bad'); }
+    const bonus = state.job ? Math.round(state.job.salary * 0.3) : 0;
+    pushEntry(a, `${state.name} thrives at the top${bonus ? ' and earns a ' + fmt(bonus) + ' bonus' : ''}.`, {money:bonus, happy:6});
+    endThread(th, 'They thrived at the top', 'good');
+  },
+  abroad(th, a){
+    const p = thRel(th);
+    if(Math.random() < 0.6){
+      if(!state.job && state.age < 64){ const track = pick(['Business', 'Education', 'Technology', 'Culinary']), rank = Math.max(0, bestRankFor(track, 2)); if(!rankGap(CAREERS[track][rank], track)) threadJob(track, rank); }
+      if(p) bump(p, 10); newRel('Friend', {age: clampAge(a + rint(-5, 5)), closeness:50, origin:'in ' + th.data.place});
+      pushEntry(a, `${state.name} builds a happy life in ${th.data.place}${state.job ? ', working as ' + state.job.title : ''}.`, {happy:10});
+      return endThread(th, `Built a happy life in ${th.data.place}`, 'good');
+    }
+    pushEntry(a, `${state.name} never quite feels at home in ${th.data.place}.`, {happy:-8});
+    endThread(th, `Homesick in ${th.data.place}`, p ? 'mixed' : 'bad');
+  },
+  orphans(th, a){
+    const kids = state.relationships.filter(r => r.adopted && r.type === 'Child');
+    pushEntry(a, kids.length ? `Raising ${kids.map(k => k.name).join(' and ')} turned out to be the hardest and best thing ${state.name} ever did.` : `${state.name} often thinks about the children they took in.`, {happy:8, family:6});
+    endThread(th, 'The hardest and best thing they ever did', 'good');
+  },
+  tv(th, a){
+    const r = Math.random();
+    if(r < 0.45){ const pay = inflR(rint(200, 600) * 1000, 1000); pushEntry(a, `${state.name}'s show is a hit and gets a spinoff.`, {money:pay, fame:15, happy:6}); return endThread(th, 'The show made them a star', 'good'); }
+    if(r < 0.75){ pushEntry(a, `The show airs a fight that turns ${state.name} into a national punchline.`, {image:-25, happy:-10, fame:5}); return endThread(th, 'The cameras caught their worst moment', 'bad'); }
+    pushEntry(a, `The show is canceled, and the fame fades.`, {happy:-3}); endThread(th, 'The fame faded as fast as it came', 'mixed');
+  },
+};
+function crossroadsHtml(){
+  const x = xrList(); if(!x.length) return '';
+  return '<div class="plabel">⚡ Crossroads</div><div class="timeline">' + x.map(c => `<div class="tl-row"><span class="tl-age">${c.age}</span><span class="tl-tx"><b>${c.title}</b><br>Chose: ${c.chose}${c.other.length ? ' <span style="color:var(--muted)">· not: ' + c.other.join(', ') + '</span>' : ''}</span></div>`).join('') + '</div>';
+}
+
 // ---------- Achievements and milestones ----------
 // Achievements belong to the player, not to one life: they live in their own save and survive every new record.
 // Milestones are the firsts of a single life, kept on its timeline.
@@ -8858,6 +9062,7 @@ const ACHIEVEMENTS = [
   {k:'reelected', cat:'Career', icon:'🔁', tier:'silver', name:'Four More Years', desc:'Win reelection', on:/is reelected as|wins reelection as President/},
   {k:'lawmaker', cat:'Career', icon:'📜', tier:'gold', name:'Stroke of the Pen', desc:'Sign or repeal a law as President', test:() => !!state.pol && state.pol.laws >= 1},
   {k:'peace', cat:'World', icon:'🕊', tier:'gold', name:'Peacemaker', desc:'End a war as President', secret:true, on:/brokers a peace deal|war ends in victory/},
+  {k:'crossroads', cat:'Life', icon:'⚡', tier:'silver', name:'Road Less Traveled', desc:'Face four life-changing crossroads in one life', test:() => xrList().length >= 4},
   {k:'pandemic', cat:'World', icon:'😷', tier:'bronze', name:'Lived Through It', desc:'Live through a pandemic', test:() => state.ach.events.includes('pandemic')},
   {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
   {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
@@ -8991,6 +9196,7 @@ function achGameOverHtml(){
   let h = '';
   const ms = milestonesHtml(0);
   if(ms) h += '<div class="plabel">Highlights of a life</div>' + ms;
+  h += crossroadsHtml();
   const turns = (state.storyDone || []).concat(threads());
   if(turns.length) h += '<div class="plabel">Chain reactions</div>' + turns.map(th => threadHtml(th, !threads().includes(th))).join('');
   const got = lifeAch().got.map(k => ACHIEVEMENTS.find(x => x.k === k)).filter(Boolean);
