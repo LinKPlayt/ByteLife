@@ -1142,7 +1142,7 @@ const CHOICE_EVENTS = [
     {label:'Dust off the instruments', delta:{happy:9,friends:5}},
     {label:'Some things are best left in the past', delta:{happy:-1}}],
   [45,75,n=>`${n} is offered early retirement with a modest package.`,
-    {label:'Take it', delta:{happy:6,money:20000}, effect:()=>{ if(state.job && state.age >= 60) retire(true); else if(state.job){ convertCoworkersToFriends(); state.job = null; } }},
+    {label:'Take it', delta:{happy:6,money:20000}, effect:()=>{ if(state.job && state.age >= 60) retire(true); else if(state.job){ leaveRoleFor('early retirement'); convertCoworkersToFriends(); state.job = null; } }},
     {label:'Keep working', delta:{}},'job'],
   [60,90,n=>`${n}'s children want them to move closer.`,
     {label:'Move near the family', delta:{happy:4,family:8,friends:-4,money:-3000}},
@@ -1168,6 +1168,114 @@ const CHOICE_EVENTS = [
   [18,70,n=>`The economy is booming, and ${n}'s friends are all buying stocks.`,
     {label:'Join the frenzy ($5,000)', risk:0.55, win:{money:9000,happy:5}, lose:{money:-5000,happy:-5}, winText:'Their picks soar.', loseText:'They buy right at the top.'},
     {label:'Stay disciplined', delta:{smarts:1}},'boom&afford',1.5],
+  // ---- decisions that come with each career ----
+  [24,65,n=>`A patient's family begs ${n} to try an experimental treatment the hospital hasn't approved.`,
+    {label:'Follow the rules', delta:{happy:-3,smarts:1}},
+    {label:'Fight the hospital board for it', risk:0.5, win:{happy:8,rep:5}, lose:{happy:-5}, winText:'The board approves it, and the patient recovers.', loseText:'The board refuses, and the fight costs political capital.'},'doctor',6],
+  [24,65,n=>`${n} is offered a prestigious research fellowship abroad for a year.`,
+    {label:'Go', delta:{smarts:6,happy:4,family:-4}, effect:()=>{ if(state.job) state.job.salary = Math.round(state.job.salary * 1.06 / 100) * 100; }},
+    {label:'Stay with your patients', delta:{happy:2}},'doctor',4.5],
+  [26,70,n=>`${n} learns their client is almost certainly guilty.`,
+    {label:'Defend them with everything you have', risk:0.5, win:{money:15000,rep:6}, lose:{happy:-4}, winText:'They win the case, and the firm is thrilled.', loseText:'They lose the case.'},
+    {label:'Withdraw from the case', delta:{happy:2,money:-3000}},'lawyer',6],
+  [26,70,n=>`A firm offers ${n} partnership, if they bring in a huge client within a year.`,
+    {label:'Chase the rainmaker client', risk:0.45, win:{money:40000,happy:8}, lose:{happy:-6,health:-3}, winText:'They land the client and make partner.', loseText:'The client signs with a rival.', onWin:()=>{ const j = state.job; if(j && CAREERS[j.track][j.rank + 1]){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); } }},
+    {label:'Keep a sane schedule', delta:{happy:2}},'lawyer',4.5],
+  [22,60,n=>`${n}'s startup employer offers stock options instead of a raise.`,
+    {label:'Take the options', risk:0.25, win:{money:60000,happy:10}, lose:{happy:-2}, winText:'Years later the company is acquired and the options pay off big.', loseText:'The options end up worthless.'},
+    {label:'Take the raise', delta:{happy:2}, effect:()=>{ if(state.job) state.job.salary = Math.round(state.job.salary * 1.08 / 100) * 100; }},'techie',6],
+  [22,60,n=>`${n} discovers a serious security hole in their company's app.`,
+    {label:'Report it and fix it quietly', delta:{rep:4,smarts:2}, effect:()=>{ state.boost = true; }},
+    {label:'Sell it to a shady buyer', risk:0.6, win:{money:25000}, lose:{happy:-10,rep:-15}, winText:'Nobody ever finds out.', loseText:'It is traced back to them, and they are fired.', onLose:()=>{ if(state.job){ convertCoworkersToFriends(); state.job = null; } }},'techie',4.5],
+  [22,65,n=>`A struggling student of ${n}'s is about to drop out.`,
+    {label:'Tutor them after school for free', delta:{happy:8,health:-1}},
+    {label:'Refer them to a counselor', delta:{happy:1}},'teacher',6],
+  [22,65,n=>`${n}'s school board wants to ban a book from the curriculum.`,
+    {label:'Speak out against it', risk:0.55, win:{happy:6,rep:5}, lose:{happy:-6}, winText:'The ban is dropped.', loseText:'They are reprimanded.'},
+    {label:'Keep their head down', delta:{happy:-2}},'teacher',4.5],
+  [20,60,n=>`A food critic is coming to ${n}'s restaurant tonight.`,
+    {label:'Cook the signature dish', risk:0.6, win:{happy:8,fame:3,money:2000}, lose:{happy:-5}, winText:'The review is glowing.', loseText:'The review is brutal.'},
+    {label:'Try something bold and new', risk:0.35, win:{happy:12,fame:8,money:5000}, lose:{happy:-7}, winText:'The critic calls it the dish of the year.', loseText:'The critic hates it.'},'chef',6],
+  [20,60,n=>`${n}'s partner on patrol plants evidence on a suspect.`,
+    {label:'Report it to internal affairs', risk:0.6, win:{happy:5,rep:6}, lose:{happy:-6,friends:-6}, winText:'Justice is done, and they are respected for it.', loseText:'The whole precinct turns cold on them.'},
+    {label:'Look the other way', delta:{happy:-6}},'cop',6],
+  [20,55,n=>`${n}'s fire crew is called to a building that might collapse, with someone still inside.`,
+    {label:'Go in', risk:0.75, win:{happy:10,fame:4}, lose:{health:-20,happy:-4}, winText:'They carry a child out just before the roof gives way.', loseText:'They are hurt when a beam falls.'},
+    {label:'Follow the order to hold back', delta:{happy:-5}},'firefighter',6],
+  [24,60,n=>`A storm builds on ${n}'s flight path.`,
+    {label:'Divert to another airport', delta:{happy:1,smarts:1}},
+    {label:'Push through', risk:0.85, win:{happy:3}, lose:{happy:-10,health:-5,rep:-6}, winText:'They land on time.', loseText:'A rough landing triggers an investigation.'},'pilot',4.5],
+  [24,60,n=>`${n}'s lab results don't match the big theory they've spent years on.`,
+    {label:'Publish the truth', delta:{smarts:4,happy:-3,rep:4}},
+    {label:'Massage the data', risk:0.6, win:{happy:5,money:5000}, lose:{happy:-12,rep:-20}, winText:'Nobody notices.', loseText:'A replication study exposes them, and they are fired.', onLose:()=>{ if(state.job){ convertCoworkersToFriends(); state.job = null; } }},'scientist',6],
+  [22,60,n=>`${n} spots a trading opportunity that bends the firm's risk rules.`,
+    {label:'Make the trade', risk:0.5, win:{money:20000,happy:6}, lose:{happy:-8,money:-5000}, winText:'It pays off, and the bonus is huge.', loseText:'It goes wrong, and they are written up.'},
+    {label:'Stay inside the rules', delta:{smarts:1}},'finance',6],
+  [18,40,n=>`A rival team offers ${n} a bigger contract.`,
+    {label:'Sign with the rival', delta:{happy:4,fans:-6,money:30000}},
+    {label:'Stay loyal to the fans', delta:{fans:8,happy:3}},'athlete',6],
+  [18,60,n=>`A tabloid offers ${n} money to dish dirt on a famous co-star.`,
+    {label:'Take the money', delta:{money:15000,image:-12,friends:-4}},
+    {label:'Refuse', delta:{image:4}},'performer',6],
+  [18,60,n=>`A customer at ${n}'s store screams at a young coworker.`,
+    {label:'Step in', delta:{happy:4,friends:3}},
+    {label:'Call a manager', delta:{happy:1}},'retail',4.5],
+  [20,65,n=>`A homeowner asks ${n} to do a job for cash, off the books.`,
+    {label:'Take the cash job', risk:0.85, win:{money:4000}, lose:{money:-2000,happy:-4}, winText:'Easy money.', loseText:'They are caught and fined for working unlicensed.'},
+    {label:'Do it properly, with a contract', delta:{money:2500,smarts:1}},'trades',4.5],
+  // ---- relationships and family ----
+  [18,35,n=>`${n}'s partner wants to move in together.`,
+    {label:'Move in', delta:{partner:8,happy:4}, effect:()=>{ const p = state.relationships.find(r => r.type === 'Partner'); if(p) p.livingTogether = true; }},
+    {label:'Not yet', delta:{partner:-5}},'dating',1],
+  [25,50,n=>`${n}'s in-laws want to move in "for a little while."`,
+    {label:'Welcome them', delta:{partner:6,happy:-4,money:-1500}},
+    {label:'Help them find their own place', delta:{partner:-4,money:-1000}},'spouse',1],
+  [25,60,n=>`${n} finds out their partner has been hiding credit card debt.`,
+    {label:'Pay it off together', delta:{money:-5000,partner:4}},
+    {label:'Make them pay it themselves', delta:{partner:-6,happy:-2}},'partner',1],
+  [30,55,n=>`${n}'s teenager is caught sneaking out at night.`,
+    {label:'Ground them for a month', delta:{family:-4,happy:-1}},
+    {label:'Talk it through calmly', risk:0.6, win:{family:6,happy:3}, lose:{family:-2}, winText:'They open up for the first time in ages.', loseText:'It goes in one ear and out the other.'},'teenKid',1.5],
+  [30,60,n=>`${n}'s child wants to drop out of college to pursue music.`,
+    {label:'Support the dream', delta:{family:8,happy:2}},
+    {label:'Insist they finish', delta:{family:-6}},'adultKid',1],
+  [35,70,n=>`${n}'s siblings fight over who will care for an aging parent.`,
+    {label:'Take on the caregiving', delta:{happy:-4,health:-2,family:8,money:-2000}},
+    {label:'Pay for professional help', delta:{money:-6000,family:2}},'agingParent&sibling',1],
+  [40,75,n=>`${n} is asked to be godparent to a friend's baby.`,
+    {label:'Accept with honor', delta:{happy:6,friends:6}},
+    {label:'Decline gently', delta:{friends:-2}},'friends',1],
+  [50,90,n=>`${n}'s family is planning a big reunion.`,
+    {label:'Host it ($1,500)', delta:{money:-1500,happy:8,family:8}},
+    {label:'Just show up', delta:{happy:4,family:3}},null,1],
+  // ---- money, health and the rest of life ----
+  [18,40,n=>`${n} is offered a credit card with a huge sign-up bonus.`,
+    {label:'Sign up and pay it off monthly', delta:{money:400,credit:6}},
+    {label:'Pass', delta:{}}],
+  [22,60,n=>`${n}'s car is stolen.`,
+    {label:'Buy a cheap replacement ($5,000)', delta:{money:-5000,happy:-2}},
+    {label:'Go car-free', delta:{health:3,happy:-4}},'car',1],
+  [25,70,n=>`${n} gets a call saying their bank account was hacked.`,
+    {label:'Hang up and call the bank directly', delta:{happy:-1,smarts:1}},
+    {label:'Give the caller the details they ask for', risk:0.15, win:{happy:1}, lose:{money:-3000,happy:-6}, winText:'It really was the bank.', loseText:'It was the scammers.'}],
+  [30,70,n=>`A doctor tells ${n} they need to lose weight or face serious problems.`,
+    {label:'Overhaul diet and exercise', delta:{health:8,happy:-2,looks:2}},
+    {label:'Try some pills from the internet', risk:0.3, win:{health:3,looks:2}, lose:{health:-6,money:-500}, winText:'They actually help a bit.', loseText:'They are useless and make them sick.'},null,1],
+  [40,80,n=>`${n} is told they need knee surgery.`,
+    {label:'Have the surgery ($6,000)', delta:{money:-6000,health:6,happy:-2}},
+    {label:'Live with the pain', delta:{health:-4,happy:-4}},null,0.8],
+  [20,60,n=>`${n} wins two tickets to a sold-out championship game.`,
+    {label:'Go and bring a friend', delta:{happy:8,friends:4}},
+    {label:'Sell them for cash', delta:{money:1200}}],
+  [25,65,n=>`A retiring neighbor offers to sell ${n} their vacation cabin at a fair price.`,
+    {label:'Buy it ($80,000)', delta:{money:-80000,happy:8}, effect:()=>{ state.assetSeq++; state.assets.push({id:'a' + state.assetSeq, key:'cabin', name:'Vacation Cabin', category:'Homes', value:infl(85000), boughtPrice:infl(80000), boughtAge:state.age, cond:75}); }},
+    {label:'Keep renting vacations', delta:{}},'wealthy',0.8],
+  [60,95,n=>`${n} is asked to give up their driver's license after a near-miss.`,
+    {label:'Hand over the keys', delta:{happy:-5,health:2}},
+    {label:'Keep driving', risk:0.8, win:{happy:2}, lose:{health:-15,happy:-6,money:-3000}, winText:'Nothing bad happens.', loseText:'They have an accident.'},'car',1.2],
+  [65,100,n=>`${n} is offered a spot in a clinical trial for a new longevity drug.`,
+    {label:'Join the trial', risk:0.6, win:{health:8,happy:4}, lose:{health:-6}, winText:'They feel ten years younger.', loseText:'The side effects are rough.'},
+    {label:'Decline', delta:{}},null,0.8],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
@@ -1187,10 +1295,11 @@ function fill(t){
   return t.replace(/\{mypet\}/g, mine).replace(/\{mydog\}/g, dog).replace(/\{n\}/g, state.name).replace(/\{f\}/g, f).replace(/\{h\}/g, h).replace(/\{c\}/g, c).replace(/\{pet\}/g, p).replace(/\{food\}/g, d).replace(/\{rel\}/g, state.evTarget ? state.evTarget.name : 'a friend');
 }
 function loseEvPet(){ if(state.evPet) state.pets = (state.pets || []).filter(p => p.id !== state.evPet); state.evPet = null; }
+const inTrack = (t, minRank) => !!(state.job && state.job.track === t && state.job.rank >= (minRank || 0));
 const worldHas = k => !!(state.world && (state.world.events || []).some(e => e.key === k));
 const hasRel = (...types) => state.relationships.some(r => types.includes(r.type));
 const COND = {
-  job:()=>!!state.job, school:()=>!!state.edu.school, college:()=>!!state.edu.program && ['college','community'].includes(state.edu.program.kind),
+  job:()=>!!state.job && !['Military', 'Politics'].includes(state.job.track), school:()=>!!state.edu.school, college:()=>!!state.edu.program && ['college','community'].includes(state.edu.program.kind),
   poor:()=>state.money < 0, rich:()=>state.money > infl(20000), saver:()=>state.savings >= infl(5000),
   afford:()=>state.money + state.savings >= infl(15000), indebted:()=>totalDebt() > infl(5000),
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
@@ -1211,6 +1320,14 @@ const COND = {
   smoker:()=>!!(state.health && state.health.habits.smoke), drinker:()=>!!(state.health && state.health.habits.drink),
   record:()=>!!(state.crime && state.crime.record.some(x => !x.expunged && !x.juvenile)), grad:()=>EDU_RANK[state.edu.level] >= 3,
   partnered:()=>hasRel('Partner','Spouse'),
+  dating:()=>state.relationships.some(r => r.type === 'Partner' && !r.livingTogether),
+  agingParent:()=>state.relationships.some(r => (r.type === 'Mother' || r.type === 'Father') && r.age >= 72),
+  wealthy:()=>state.money + state.savings >= infl(100000),
+  // careers
+  doctor:()=>inTrack('Medicine', 2), lawyer:()=>inTrack('Law', 1), techie:()=>inTrack('Technology'), teacher:()=>inTrack('Education', 1), chef:()=>inTrack('Culinary', 1),
+  cop:()=>inTrack('Law Enforcement'), firefighter:()=>inTrack('Firefighting'), pilot:()=>inTrack('Aviation', 2), scientist:()=>inTrack('Science', 1), finance:()=>inTrack('Finance'),
+  athlete:()=>inTrack('Sports', 1), performer:()=>inTrack('Acting', 1) || inTrack('Music', 1), retail:()=>inTrack('Retail'), trades:()=>inTrack('Trades'),
+  soldier:()=>inTrack('Military'), politician:()=>inTrack('Politics', 1),
   // what is happening in the world right now
   recession:()=>!!state.econ.recession, boom:()=>worldHas('boom'), pandemic:()=>worldHas('pandemic'), war:()=>worldHas('war'), fuel:()=>worldHas('fuel'),
   inflation:()=>worldHas('inflation'), ai:()=>worldHas('ai'), disaster:()=>worldHas('disaster'), housingcrash:()=>worldHas('housingcrash'), housingboom:()=>worldHas('housingboom'), bear:()=>worldHas('bear'),
@@ -1682,6 +1799,59 @@ const BANK = [
   E(10,80,'{n} helps neighbors clean up after the disaster',[['and the community pulls together',{happy:4,friends:4,health:-2}]],'disaster'),
   E(25,80,'{n} watches home prices fall in the housing crash',[['and wonders if it is time to buy',{smarts:1}]],'housingcrash'),
   E(25,80,'{n} gets a letter offering to buy their home for a record price',[['and keeps it on the fridge',{happy:3}]],'housingboom&home'),
+  // ---- on the job, by career ----
+  E(24,70,'{n} saves a patient everyone else had given up on',[['and the family sends a card every year',{happy:8,rep:4}]],'doctor',4.5),
+  E(24,70,'{n} works a brutal 36-hour shift',[['and sleeps for an entire day afterwards',{health:-4,happy:-3}]],'doctor',4.5),
+  E(26,70,'{n} wins a case nobody thought could be won',[['and the firm celebrates',{happy:7,money:5000}]],'lawyer',4.5),
+  E(26,70,'{n} pulls an all-nighter preparing for trial',[['and the coffee stops working',{health:-3,smarts:1}]],'lawyer',3.6),
+  E(22,60,'{n} ships a feature used by millions',[['and the team throws a party',{happy:6,smarts:2}]],'techie',4.5),
+  E(22,60,'{n} gets paged at 3am for a server outage',[['and fixes it in their pajamas',{happy:-3,smarts:1}]],'techie',4.5),
+  E(22,65,'{n} gets a thank-you letter from a former student',[['who just graduated college',{happy:9}]],'teacher',4.5),
+  E(22,65,'{n} spends their own money on classroom supplies',[['again',{money:-400,happy:-1}]],'teacher',3.6),
+  E(18,60,'{n}\'s kitchen gets slammed during a Saturday rush',[['and they never miss a plate',{happy:5,smarts:1}],['and everything goes wrong at once',{happy:-4}]],'chef',4.5),
+  E(20,60,'{n} talks someone down from a dangerous situation',[['and earns a commendation',{happy:6,rep:4}]],'cop',4.5),
+  E(20,55,'{n} rescues a cat from a tree',[['and the photo goes viral',{happy:5,fans:5}]],'firefighter',4.5),
+  E(24,65,'{n} lands a plane safely after an engine failure',[['and the passengers applaud',{happy:8,fame:3}]],'pilot',3.6),
+  E(24,65,'{n}\'s research is published in a top journal',[['and the citations pour in',{smarts:4,happy:6,rep:4}]],'scientist',4.5),
+  E(22,60,'{n} makes a call that saves the fund millions',[['and the bonus reflects it',{money:12000,happy:5}]],'finance',4.5),
+  E(18,40,'{n} scores the winning point in a big game',[['and the crowd chants their name',{happy:10,fans:10,fame:3}]],'athlete',4.5),
+  E(18,40,'{n} pulls a hamstring in practice',[['and sits out for weeks',{health:-6,happy:-5}]],'athlete',3.6),
+  E(18,60,'{n} gets recognized on the street for a recent role',[['and signs an autograph',{happy:4,fame:1}]],'performer',4.5),
+  E(18,60,'{n} gets a standing ovation',[['and floats home',{happy:8,fame:2}]],'performer',3.6),
+  E(16,60,'{n} survives Black Friday at the store',[['barely',{happy:-3,health:-2}]],'retail',4.5),
+  E(18,65,'{n} finishes a job a customer calls "perfect"',[['and gets three referrals from it',{happy:5,money:1500}]],'trades',4.5),
+  E(18,40,'{n} gets a care package from home while on base',[['and shares it with the whole unit',{happy:6,friends:3}]],'soldier',4.5),
+  E(25,80,'{n} gets an angry letter from a voter',[['and an even nicer one the next day',{happy:2}]],'politician',4.5),
+  // ---- home, family and relationships ----
+  E(18,30,'{n} goes on a terrible first date',[['and turns it into a great story',{happy:2}]],'single'),
+  E(20,40,'{n} gets set up by a friend',[['and it actually goes well',{happy:5}],['and it is painfully awkward',{happy:-2}]],'single&friends'),
+  E(22,60,'{n} and their partner start a new tradition',[['of Sunday pancakes',{partner:5,happy:4}]],'partner'),
+  E(25,60,'{n} forgets their anniversary',[['and makes up for it with a grand gesture',{partner:2,money:-300}],['and sleeps on the couch',{partner:-6,happy:-3}]],'spouse'),
+  E(25,60,'{n} renews their wedding vows',[['in front of everyone they love',{partner:10,happy:8,money:-2000}]],'spouse',0.6),
+  E(30,60,'{n} attends a school play',[['where their kid plays a tree with total commitment',{happy:6,family:4}]],'youngKid'),
+  E(35,60,'{n} teaches their teenager to drive',[['and survives',{happy:2,family:4,health:-1}]],'teenKid'),
+  E(40,70,'{n} helps their adult child move apartments',[['and their back regrets it',{family:5,health:-2}]],'adultKid'),
+  E(45,80,'{n} becomes the family\'s designated holiday host',[['and the kitchen is never cleaner',{family:6,money:-600,happy:3}]]),
+  E(30,90,'{n} gets an unexpected call from {rel}',[['who just wanted to say they love them',{happy:6,bond:5}]],null,1,['Mother','Father','Sibling','Child']),
+  // ---- money and work in general ----
+  E(18,65,'{n} finds a forgotten savings bond',[['worth more than they expected',{money:800,happy:3}]]),
+  E(20,60,'{n} gets a surprise raise',[['without even asking',{happy:5}]],'job',0.8),
+  E(20,65,'{n}\'s company has a terrible holiday party',[['and the photos haunt them for years',{happy:-1,friends:2}]],'job'),
+  E(25,65,'{n}\'s new boss is a nightmare',[['and the office mood sinks',{happy:-5}]],'job'),
+  E(25,65,'{n} is named employee of the year',[['and gets a plaque and a bonus',{happy:6,money:2000}]],'job',0.7),
+  E(25,80,'{n}\'s accountant finds a deduction they missed',[['for the last three years',{money:2500,happy:3}]]),
+  E(30,80,'{n}\'s house needs a new roof',[['and the bill is painful',{money:-9000,happy:-4}]],'home'),
+  E(30,80,'{n}\'s water heater bursts',[['flooding the garage',{money:-2500,happy:-3}]],'home'),
+  // ---- health, travel and the later years ----
+  E(18,60,'{n} tries a juice cleanse',[['and quits on day two',{happy:-1}],['and feels oddly great',{health:2,happy:2}]]),
+  E(20,70,'{n}\'s flight is canceled',[['and they make friends at the airport bar',{happy:2,friends:2}]],'traveler'),
+  E(25,80,'{n} gets lost in {c}',[['and finds the best meal of the trip',{happy:6}]],'traveler'),
+  E(35,80,'{n} needs reading glasses',[['and pretends they don\'t for a while',{looks:-1,happy:-1}]]),
+  E(40,85,'{n} gets their first gray hair',[['and decides it looks distinguished',{happy:1}]]),
+  E(55,90,'{n} gets a hearing aid',[['and is amazed at what they were missing',{happy:3}]]),
+  E(60,95,'{n} joins a walking club',[['and walks five miles every morning',{health:4,happy:4,friends:3}]]),
+  E(65,100,'{n} becomes a regular at the local diner',[['where the waitress knows their order by heart',{happy:4}]]),
+  E(70,110,'{n} celebrates their birthday with a surprise party',[['and cries happy tears',{happy:9,family:5}]]),
 ];
 
 // more two-option decisions
@@ -2601,6 +2771,7 @@ function investRow(x){
 // ---------- Assets: homes, cars, jewelry, collectibles ----------
 const ASSET_CATALOG = {
   Homes: [
+    {key:'cabin', name:'Vacation Cabin', price:85000, appreciation:0.030, vol:0.06, upkeepPct:0.012},
     {key:'condo', name:'Downtown Condo', price:180000, appreciation:0.030, vol:0.06, upkeepPct:0.012},
     {key:'starter', name:'Starter House', price:280000, appreciation:0.035, vol:0.05, upkeepPct:0.011},
     {key:'suburb', name:'Suburban House', price:450000, appreciation:0.040, vol:0.05, upkeepPct:0.010},
@@ -6712,7 +6883,7 @@ function choosePayment(c, major){
 }
 function enrollProgram(c, major, method, aid, who){
   const e = ED();
-  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  if(state.job){ leaveRoleFor('school'); convertCoworkersToFriends(); state.job = null; }
   e.program = {kind:c.kind, key:c.key, name:c.name, tier:c.key, major, years:c.years, year:0, award:c.award, aid:aid || 0, changedMajor:false};
   e.school = c.name; e.financeMethod = method; e.gpa = Math.max(55, Math.min(80, e.gpa || 60)); e.endAge = state.age + c.years;
   pushEntry(state.age, `${state.name} starts at ${c.name}${major !== 'Undecided' && c.kind !== 'community' ? ' studying ' + major : ''}${who === 'parents' ? ', with help from their parents' : method === 'loan' ? ' on student loans' : aid >= 1 ? ' on a full scholarship' : ''}.`, {happy:6});
@@ -6721,7 +6892,7 @@ function startTrade(t){
   const e = ED(), cost = inflR(8000, 100);
   if(!ensureCash(cost)){ pushEntry(state.age, `${state.name} can't afford trade school right now.`, {}); return; }
   state.money -= cost;
-  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  if(state.job){ leaveRoleFor('school'); convertCoworkersToFriends(); state.job = null; }
   e.program = {kind:'trade', key:t.key, name:t.name, major:t.major, tracks:t.tracks, years:1, year:0, award:null, aid:0};
   e.school = t.name; e.financeMethod = 'paid'; e.endAge = state.age + 1;
   pushEntry(state.age, `${state.name} enrolls in ${t.name.toLowerCase()}.`, {happy:3});
@@ -6753,7 +6924,7 @@ function gradGap(g){
 }
 function enrollGrad(g, method){
   const e = ED(), last = degrees().filter(d => d.major).slice(-1)[0];
-  if(state.job){ convertCoworkersToFriends(); state.job = null; }
+  if(state.job){ leaveRoleFor('school'); convertCoworkersToFriends(); state.job = null; }
   e.program = {kind:'grad', key:g.key, name:g.school, years:g.years, year:0, award:g.award, degree:g.degree, major: g.key === 'master' || g.key === 'phd' ? (last ? last.major : 'Undecided') : null, tracks:g.tracks || [], stipend:g.stipend || 0, aid:0, tuition:g.tuition};
   e.school = g.school; e.financeMethod = method; e.gpa = Math.max(65, e.gpa); e.endAge = state.age + g.years;
   pushEntry(state.age, `${state.name} starts ${g.name.toLowerCase()}${method === 'loan' ? ' on student loans' : ''}.`, {happy:5});
@@ -8176,7 +8347,7 @@ const OPENERS = [
       {label: 'Come back next weekend', run: () => { pushEntry(a, `${state.name} can't stop thinking about that win.`, {happy:3}); seedThread('gamble', {stage: 1, lost: 0}, `Won ${fmt(win)} at a casino and went back for more`, 1, 'hooked'); }},
     ]);
   }},
-  {key:'whistle', min:22, max:64, w:0.7, cond:() => !!state.job && state.job.track !== 'Odd Jobs' && state.job.rank >= 1, run(a){
+  {key:'whistle', min:22, max:64, w:0.7, cond:() => !!state.job && !['Odd Jobs', 'Military', 'Politics'].includes(state.job.track) && state.job.rank >= 1, run(a){
     const j = state.job;
     presentCustom(`${state.name} discovers that their boss has been cooking the books.`, [
       {label: 'Report it to the regulators', run: () => { pushEntry(a, `${state.name} reports the fraud to the authorities.`, {happy:2}); seedThread('whistle', {title: j.title, track: j.track}, 'Blew the whistle on their boss', 1, 'fallout'); }},
@@ -8556,9 +8727,9 @@ function combatPrompt(a){
   return true;
 }
 function militaryYear(a, canAsk){
-  const m = MIL(), j = state.job;
+  let m = MIL(); const j = state.job;
   // a career soldier from an old save or an inherited life
-  if(j && j.track === 'Military' && (!m || m.status !== 'active')) state.mil = Object.assign(m || {branch:'army', medals:[], deployments:0, combat:0, years:0, gi:false}, {status:'active', discharge:null, start:a, termEnd:a + 4});
+  if(j && j.track === 'Military' && (!m || m.status !== 'active')) m = state.mil = Object.assign(m || {branch:'army', medals:[], deployments:0, combat:0, years:0, gi:false}, {status:'active', discharge:null, start:a, termEnd:a + 4});
   if(state.mil && state.mil.pension && state.mil.status === 'veteran'){ state.mil.pension = Math.round(state.mil.pension * (1 + Math.max(0, yrInfl())) / 100) * 100; state.money += state.mil.pension; }
   if(state.mil && state.mil.status === 'active' && !(j && j.track === 'Military')){      // left service some other way (retirement age, inheritance)
     state.mil.status = 'veteran'; state.mil.discharge = state.mil.discharge || 'honorable'; state.mil.left = a;
