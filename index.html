@@ -368,6 +368,7 @@
   .decision.crossroads{ border:2px solid var(--accent); background:linear-gradient(180deg, var(--accent-soft), var(--surface)); box-shadow:0 6px 22px rgba(44,74,66,0.22); }
   .decision.crossroads .decision-label{ color:var(--accent); }
   .xr-title{ font-family:'Fraunces',serif; font-size:19px; font-weight:700; color:var(--ink); margin:2px 0 6px; }
+  .xr-news{ font-size:12.5px; font-weight:600; color:var(--muted); background:var(--surface-2); border-radius:8px; padding:5px 8px; margin:0 0 7px; }
   .xr-opt{ display:flex; flex-direction:column; gap:2px; text-align:left; }
   .xr-line{ font-size:12.5px; font-weight:500; }
   .xr-line.up{ color:var(--accent); } .xr-line.down{ color:var(--red); }
@@ -1075,6 +1076,98 @@ const CHOICE_EVENTS = [
   [18,80,n=>`A last-minute deal pops up: a week in {c} for half price.`,
     {label:'Book it ($1,200)', delta:{money:-1200,happy:9}, effect:()=>{ TV().trips++; }},
     {label:'Not this time', delta:{}},'afford'],
+  // ---- more choices ----
+  [6,10,n=>`${n} finds a stray kitten in the rain.`,
+    {label:'Beg to keep it', risk:0.5, win:{happy:8}, lose:{happy:-4}, winText:'Their parents give in.', loseText:'It goes to a shelter instead.', onWin:()=>{ if(myPets().length < 6) newPet('cat', {age:0}); }},
+    {label:'Take it to a shelter', delta:{happy:2,smarts:1}}],
+  [8,12,n=>`${n} is offered a part in a local commercial.`,
+    {label:'Do it', delta:{happy:5,money:300,fame:2}},
+    {label:'Too embarrassing', delta:{}}],
+  [10,14,n=>`${n} sees a classmate being bullied.`,
+    {label:'Stand up for them', risk:0.6, win:{happy:6,friends:4}, lose:{health:-4,happy:-2}, winText:'The bully backs off and they make a new friend.', loseText:'It ends in a scuffle.'},
+    {label:'Tell a teacher', delta:{happy:2,smarts:1}},'school',1,
+    {label:'Look away', delta:{happy:-4}}],
+  [13,16,n=>`${n}'s friends dare them to skip school for a day.`,
+    {label:'Skip it', risk:0.6, win:{happy:6}, lose:{happy:-4,gpa:-3}, winText:'It is the best day of the year.', loseText:'They get caught and grounded.'},
+    {label:'Go to class', delta:{smarts:1}},'school'],
+  [15,18,n=>`${n} is offered a summer internship that doesn't pay.`,
+    {label:'Take it for the experience', delta:{smarts:4,happy:-1}},
+    {label:'Get a paying summer job', delta:{money:2000}}],
+  [17,19,n=>`${n} can take a gap year to travel before what comes next.`,
+    {label:'Take the gap year', delta:{happy:9,smarts:2,money:-3000}},
+    {label:'Go straight on', delta:{smarts:1}}],
+  [18,30,n=>`${n}'s best friend is moving abroad.`,
+    {label:'Throw them a huge send-off', delta:{happy:4,friends:6,money:-300}},
+    {label:'Say goodbye quietly', delta:{happy:-2}}],
+  [18,35,n=>`${n} is offered a great apartment, but it's 40% over budget.`,
+    {label:'Take it anyway', delta:{happy:6,money:-4000}},
+    {label:'Keep looking', delta:{}},'renter'],
+  [20,40,n=>`${n} is invited to try skydiving.`,
+    {label:'Jump', risk:0.97, win:{happy:10,health:1}, lose:{health:-20,happy:-6}, winText:'It is the rush of a lifetime.', loseText:'A bad landing breaks an ankle.'},
+    {label:'Watch from the ground', delta:{}},null,1],
+  [21,45,n=>`${n} is asked to be in a friend's wedding party on the other side of the world.`,
+    {label:'Go ($2,500)', delta:{happy:7,friends:6,money:-2500}},
+    {label:'Send a gift and regrets', delta:{friends:-3,money:-200}},'friends'],
+  [22,45,n=>`${n}'s company offers to pay for a professional certification.`,
+    {label:'Study nights and weekends', delta:{smarts:5,happy:-3}, effect:()=>{ if(state.job) state.job.salary = Math.round(state.job.salary * 1.05 / 100) * 100; }},
+    {label:'Pass for now', delta:{}},'job'],
+  [22,55,n=>`${n} gets an anonymous tip about a "can't lose" investment.`,
+    {label:'Put in $5,000', risk:0.15, win:{money:15000,happy:6}, lose:{money:-5000,happy:-6}, winText:'Against all odds, it pays off.', loseText:'It was a scam.'},
+    {label:'Delete the message', delta:{smarts:1}},'afford'],
+  [25,50,n=>`${n} is asked to give a toast at a friend's wedding.`,
+    {label:'Write something heartfelt', risk:0.7, win:{happy:6,friends:5}, lose:{happy:-4}, winText:'There is not a dry eye in the room.', loseText:'They forget half of it.'},
+    {label:'Wing it', risk:0.4, win:{happy:6,friends:4}, lose:{happy:-5,friends:-2}, winText:'It brings the house down.', loseText:'The jokes fall flat.'},'friends'],
+  [25,60,n=>`${n}'s neighbor asks to cut down a tree on the property line.`,
+    {label:'Agree', delta:{happy:1}},
+    {label:'Refuse and keep the shade', delta:{happy:2}},'home'],
+  [25,65,n=>`${n} witnesses a hit-and-run.`,
+    {label:'Chase down the plate number', delta:{happy:5,smarts:1}},
+    {label:'Stay with the injured person', delta:{happy:6}}],
+  [26,60,n=>`${n} is offered a promotion that means moving to the night shift.`,
+    {label:'Take it', delta:{health:-4,happy:-2,partner:-4}, effect:()=>{ if(state.job) state.job.salary = Math.round(state.job.salary * 1.15 / 100) * 100; }},
+    {label:'Keep the day shift', delta:{}},'job'],
+  [28,55,n=>`${n}'s partner wants to get a second dog.`,
+    {label:'Sure, the more the merrier', delta:{happy:5,partner:4,money:-400}, effect:()=>{ if(myPets().length < 6) newPet('dog', {age:rint(1, 4)}); }},
+    {label:'One is enough', delta:{partner:-2}},'partner&dog'],
+  [30,60,n=>`${n} is asked to coach a youth sports team.`,
+    {label:'Volunteer', delta:{happy:6,health:2,friends:3}},
+    {label:'Too busy', delta:{}}],
+  [30,65,n=>`${n} gets a letter saying they're owed an old inheritance, if they pay a $500 fee.`,
+    {label:'Pay the fee', risk:0.05, win:{money:20000,happy:10}, lose:{money:-500,happy:-4}, winText:'It is real.', loseText:'It is a scam.'},
+    {label:'Throw it out', delta:{smarts:1}}],
+  [35,65,n=>`${n} is offered a seat on a local charity's board.`,
+    {label:'Accept', delta:{happy:5,friends:4,smarts:1}},
+    {label:'Decline', delta:{}}],
+  [40,70,n=>`${n}'s old band wants to get back together for one last show.`,
+    {label:'Dust off the instruments', delta:{happy:9,friends:5}},
+    {label:'Some things are best left in the past', delta:{happy:-1}}],
+  [45,75,n=>`${n} is offered early retirement with a modest package.`,
+    {label:'Take it', delta:{happy:6,money:20000}, effect:()=>{ if(state.job && state.age >= 60) retire(true); else if(state.job){ convertCoworkersToFriends(); state.job = null; } }},
+    {label:'Keep working', delta:{}},'job'],
+  [60,90,n=>`${n}'s children want them to move closer.`,
+    {label:'Move near the family', delta:{happy:4,family:8,friends:-4,money:-3000}},
+    {label:'Stay put', delta:{family:-3}},'adultKid'],
+  [65,95,n=>`${n} is invited to share their life story with a local history project.`,
+    {label:'Tell it all', delta:{happy:7,smarts:1}},
+    {label:'Some stories stay private', delta:{}}],
+  // ---- when the news reaches home ----
+  [18,64,n=>`With the recession deepening, ${n}'s employer asks staff to take a 10% pay cut to avoid layoffs.`,
+    {label:'Accept the cut', delta:{happy:-3}, effect:()=>{ if(state.job) state.job.salary = Math.round(state.job.salary * 0.9 / 100) * 100; }},
+    {label:'Refuse and risk it', risk:0.6, win:{happy:2}, lose:{happy:-8}, winText:'They keep their full pay.', loseText:'They are let go.', onLose:()=>{ if(state.job && !['Military','Politics'].includes(state.job.track)){ convertCoworkersToFriends(); state.job = null; } }},'recession&job',2],
+  [16,80,n=>`The pandemic has shut everything down. How does ${n} spend the long months at home?`,
+    {label:'Learn something new online', delta:{smarts:5,happy:2}},
+    {label:'Check on elderly neighbors', delta:{happy:5,friends:3}},'pandemic',2,
+    {label:'Binge every show ever made', delta:{happy:4,health:-2}}],
+  [18,80,n=>`Prices are soaring. ${n} could stock up on essentials now before they rise further.`,
+    {label:'Stock up before prices rise', delta:{money:150,happy:1,smarts:1}},
+    {label:'Buy as usual', delta:{}},'inflation',1.5],
+  [18,80,n=>`A disaster has left families in ${n}'s region homeless.`,
+    {label:'Open their home to a family', delta:{happy:8,money:-1500}},
+    {label:'Donate $500', delta:{happy:4,money:-500}},'disaster',2,
+    {label:'Stay out of it', delta:{happy:-2}}],
+  [18,70,n=>`The economy is booming, and ${n}'s friends are all buying stocks.`,
+    {label:'Join the frenzy ($5,000)', risk:0.55, win:{money:9000,happy:5}, lose:{money:-5000,happy:-5}, winText:'Their picks soar.', loseText:'They buy right at the top.'},
+    {label:'Stay disciplined', delta:{smarts:1}},'boom&afford',1.5],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
@@ -1094,6 +1187,7 @@ function fill(t){
   return t.replace(/\{mypet\}/g, mine).replace(/\{mydog\}/g, dog).replace(/\{n\}/g, state.name).replace(/\{f\}/g, f).replace(/\{h\}/g, h).replace(/\{c\}/g, c).replace(/\{pet\}/g, p).replace(/\{food\}/g, d).replace(/\{rel\}/g, state.evTarget ? state.evTarget.name : 'a friend');
 }
 function loseEvPet(){ if(state.evPet) state.pets = (state.pets || []).filter(p => p.id !== state.evPet); state.evPet = null; }
+const worldHas = k => !!(state.world && (state.world.events || []).some(e => e.key === k));
 const hasRel = (...types) => state.relationships.some(r => types.includes(r.type));
 const COND = {
   job:()=>!!state.job, school:()=>!!state.edu.school, college:()=>!!state.edu.program && ['college','community'].includes(state.edu.program.kind),
@@ -1117,6 +1211,9 @@ const COND = {
   smoker:()=>!!(state.health && state.health.habits.smoke), drinker:()=>!!(state.health && state.health.habits.drink),
   record:()=>!!(state.crime && state.crime.record.some(x => !x.expunged && !x.juvenile)), grad:()=>EDU_RANK[state.edu.level] >= 3,
   partnered:()=>hasRel('Partner','Spouse'),
+  // what is happening in the world right now
+  recession:()=>!!state.econ.recession, boom:()=>worldHas('boom'), pandemic:()=>worldHas('pandemic'), war:()=>worldHas('war'), fuel:()=>worldHas('fuel'),
+  inflation:()=>worldHas('inflation'), ai:()=>worldHas('ai'), disaster:()=>worldHas('disaster'), housingcrash:()=>worldHas('housingcrash'), housingboom:()=>worldHas('housingboom'), bear:()=>worldHas('bear'),
   ambitious:()=>hasMyTrait('Ambitious'), funny:()=>hasMyTrait('Funny'), adventurous:()=>hasMyTrait('Adventurous'), generous:()=>hasMyTrait('Generous'),
   wise:()=>hasMyTrait('Wise'), loyal:()=>hasMyTrait('Loyal'), moody:()=>hasMyTrait('Moody'), flaky:()=>hasMyTrait('Flaky'),
 };
@@ -1531,6 +1628,60 @@ const BANK = [
   E(18,90,'{n} picks up a hitchhiker',[['who turns out to be fascinating company',{happy:4,smarts:1}],['and spends an uneasy hour',{happy:-2}]],'car'),
   E(18,95,'{n} flips through photos from past trips',[['and starts planning the next one',{happy:4}]],'traveler'),
   E(18,95,'{n} gets a postcard from a friend made while traveling',[['and smiles all day',{happy:4,friends:2}]],'traveler'),
+  // ---- more everyday moments ----
+  E(3,6,'{n} insists on dressing themselves for a week',[['and wears a cape to everything',{happy:4}],['and causes a sock crisis every morning',{happy:1}]]),
+  E(4,8,'{n} loses a first tooth',[['and the tooth fairy is generous',{happy:4,money:5}],['and swallows it by accident',{happy:-1}]]),
+  E(5,9,'{n} learns to ride a bike',[['after a hundred wobbly tries',{happy:5,health:2}],['and skins both knees on the first day',{health:-2,happy:2}]]),
+  E(6,11,'{n} builds a blanket fort that takes over the living room',[['and refuses to leave it for a weekend',{happy:5}]]),
+  E(7,12,'{n} wins the class spelling bee',[['with a word nobody else could spell',{smarts:3,happy:5}]],'school'),
+  E(8,13,'{n} breaks a neighbor\'s window with a ball',[['and does chores to pay for it',{happy:-2,smarts:1}],['and runs before anyone sees',{happy:1}]]),
+  E(9,13,'{n} starts collecting rocks',[['and the collection fills a whole shelf',{smarts:2,happy:3}]]),
+  E(12,16,'{n} gets braces',[['and hates every photo for two years',{happy:-3,looks:2}]]),
+  E(13,17,'{n} gets a part-time job at a {food} stand',[['and smells like it all summer',{money:900,happy:1}]]),
+  E(14,17,'{n} stays up all night finishing a project',[['and it gets the best grade in class',{smarts:3,health:-2}],['and falls asleep in the presentation',{happy:-3}]],'school'),
+  E(15,18,'{n} fails a driving test',[['by rolling through a stop sign',{happy:-4}],['and passes the second time with flying colors',{happy:3}]]),
+  E(16,19,'{n} goes to prom',[['and dances until the lights come on',{happy:7,looks:1}],['and the date is a disaster',{happy:-3}]]),
+  E(18,24,'{n} moves into a tiny apartment with three roommates',[['and they become lifelong friends',{happy:5,friends:4}],['and nobody ever washes a dish',{happy:-3}]]),
+  E(18,30,'{n} adopts a houseplant and keeps it alive',[['against all odds',{happy:3}]]),
+  E(19,30,'{n} goes viral for a bad haircut',[['and leans into the joke',{happy:2,fans:5}]],'social'),
+  E(20,35,'{n} runs their first 10k',[['and is hooked on running',{health:5,happy:4}],['and limps for a week afterwards',{health:1,happy:1}]]),
+  E(21,40,'{n} learns to cook properly',[['and hosts a dinner that friends still talk about',{happy:5,friends:3,health:2}]]),
+  E(22,45,'{n}\'s identity is stolen online',[['and it takes months to sort out',{money:-800,happy:-5,credit:-20}],['but the bank catches it fast',{happy:-1}]]),
+  E(22,50,'{n} gets a parking ticket on the worst possible day',[['and frames it as a reminder',{money:-75,happy:-1}]],'car'),
+  E(24,50,'{n}\'s apartment floods from the unit upstairs',[['and the landlord pays for everything',{happy:-2}],['and they lose a lot of belongings',{money:-1500,happy:-5}]],'renter'),
+  E(25,55,'{n} gets food poisoning from {food}',[['and swears off it for a year',{health:-5,happy:-3}]]),
+  E(25,60,'{n} finds an old letter from {rel}',[['and calls them right away',{happy:5,bond:6}]],null,1,['Friend','Sibling']),
+  E(26,55,'{n}\'s neighbor turns out to be a famous author',[['and they become friends',{happy:4,smarts:2}]]),
+  E(28,60,'{n} finally takes the trip to {c} they always talked about',[['and it lives up to every dream',{happy:9,money:-2500}]],'afford'),
+  E(30,60,'{n} discovers a talent for {h}',[['and wonders why they waited so long',{happy:6,smarts:1}]]),
+  E(30,65,'{n} gets a surprise refund from the tax office',[['and treats themselves',{money:1200,happy:4}]]),
+  E(30,70,'{n}\'s basement turns out to have mold',[['and fixing it is expensive',{money:-4000,health:-2,happy:-4}]],'home'),
+  E(32,60,'{n} gets roped into organizing a high school reunion',[['and it\'s a huge success',{happy:6,friends:4}],['and nobody RSVPs',{happy:-3}]]),
+  E(35,65,'{n} runs into an old teacher',[['who remembers them fondly',{happy:5}]]),
+  E(35,70,'{n} wins a raffle at a charity dinner',[['and the prize is a weekend away',{happy:6}]]),
+  E(40,70,'{n} reads their old diary',[['and laughs until they cry',{happy:5}],['and cringes at every page',{happy:-1}]]),
+  E(40,75,'{n} plants a vegetable garden',[['and grows far too many zucchinis',{happy:4,health:2}]]),
+  E(45,80,'{n} discovers a long-lost cousin through a DNA test',[['and the family tree grows',{happy:5,family:3}],['and uncovers a family secret',{happy:-2,family:-3}]]),
+  E(50,80,'{n} takes up ballroom dancing',[['and turns out to be a natural',{happy:6,health:3}]]),
+  E(55,85,'{n} becomes the neighborhood\'s unofficial handyman',[['and everyone owes them a favor',{happy:4,friends:3}]]),
+  E(60,95,'{n} teaches a grandchild an old family recipe',[['and it becomes a tradition',{happy:6,family:5}]],'grandkids'),
+  E(65,100,'{n} writes letters to everyone they love',[['and the replies fill a shoebox',{happy:7,family:4}]]),
+  E(70,105,'{n} gets a smartphone lesson from a teenager',[['and starts sending far too many emoji',{happy:4,smarts:1}]]),
+  // ---- the world outside: events that only happen when the news is happening ----
+  E(16,80,'{n} volunteers at a food bank during the recession',[['and sees how many people are struggling',{happy:3,smarts:1}]],'recession'),
+  E(18,70,'{n}\'s hours get cut as the recession bites',[['and money gets tight',{money:-2000,happy:-4}]],'recession&job'),
+  E(18,70,'{n} gets a bonus thanks to the booming economy',[['and celebrates with friends',{money:3000,happy:5}]],'boom&job'),
+  E(10,80,'{n} learns to bake bread during the pandemic lockdown',[['and it becomes a lifelong hobby',{happy:4}]],'pandemic'),
+  E(16,80,'{n} catches the virus going around',[['and recovers after two rough weeks',{health:-8,happy:-4}],['and barely notices',{health:-2}]],'pandemic'),
+  E(18,80,'{n} reconnects with old friends over video calls during the pandemic',[['and the friendships come back to life',{happy:4,friends:5}]],'pandemic'),
+  E(16,70,'{n} joins a march against the war',[['and feels part of something bigger',{happy:3}]],'war'),
+  E(18,80,'{n} writes letters to soldiers overseas',[['and one writes back',{happy:5}]],'war'),
+  E(18,80,'{n} waits hours in line for gas during the fuel shortage',[['and starts biking to work',{health:3,happy:-3}]],'fuel'),
+  E(18,80,'{n} watches grocery prices climb week after week',[['and starts clipping coupons',{money:200,smarts:1}]],'inflation'),
+  E(18,70,'{n} tries out the new AI tools everyone is talking about',[['and they save hours every week',{smarts:2,happy:3}],['and finds them a little unsettling',{happy:-1}]],'ai'),
+  E(10,80,'{n} helps neighbors clean up after the disaster',[['and the community pulls together',{happy:4,friends:4,health:-2}]],'disaster'),
+  E(25,80,'{n} watches home prices fall in the housing crash',[['and wonders if it is time to buy',{smarts:1}]],'housingcrash'),
+  E(25,80,'{n} gets a letter offering to buy their home for a record price',[['and keeps it on the fridge',{happy:3}]],'housingboom&home'),
 ];
 
 // more two-option decisions
@@ -1834,7 +1985,7 @@ function presentChoice(ev){
     label,
     run:()=>{
       let d = o.delta || {}, extra = '';
-      if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); if(!win && o.onLose) o.onLose(); }
+      if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); if(!win && o.onLose) o.onLose(); if(win && o.onWin) o.onWin(); }
       if(o.effect) o.effect();
       pushEntry(state.age, `${promptText} — ${state.name} chose: ${label.charAt(0).toLowerCase() + label.slice(1)}.${extra}`, scaleMoneyDelta(d));
     }
@@ -8749,10 +8900,12 @@ function resignOffice(ok){
 // Each one shows what is at stake on both sides, is remembered in the Me tab, and keeps playing out for years.
 const xrList = () => state.crossroads || (state.crossroads = []);
 function presentCrossroads(title, text, opts){
-  const shown = presentCustom(`<div class="xr-title">⚡ A crossroads · ${title}</div>${text}`, opts.map(o => ({
+  const news = xrCurrent && newsFor(xrCurrent).line;
+  const headline = news || '';
+  const shown = presentCustom(`<div class="xr-title">⚡ A crossroads · ${title}</div>${headline ? '<div class="xr-news">📰 ' + headline + '</div>' : ''}${text}`, opts.map(o => ({
     label: `<span class="xr-opt"><b>${o.label}</b>${(o.pros || []).map(p => `<span class="xr-line up">→ ${p}</span>`).join('')}${(o.cons || []).map(c => `<span class="xr-line down">→ ${c}</span>`).join('')}</span>`,
     run: () => {
-      xrList().push({age: state.age, title, chose: o.label, other: opts.filter(x => x !== o).map(x => x.label)});
+      xrList().push({age: state.age, title, chose: o.label, other: opts.filter(x => x !== o).map(x => x.label), news: headline || ''});
       addMilestone('⚡', title + ': ' + o.label.charAt(0).toLowerCase() + o.label.slice(1));
       o.run();
     }})));
@@ -8763,6 +8916,29 @@ function presentCrossroads(title, text, opts){
   return true;
 }
 const callingTracks = () => ['Education', 'Culinary', 'Firefighting', 'Science', 'Trades'].filter(t => (!state.job || state.job.track !== t) && trackOpen(t) && !recordBlocks(t) && bestRankFor(t, 0) === 0);
+// the headlines change the stakes: offers, costs and odds move with the world
+function newsFor(key){
+  const boom = worldHas('boom'), rec = !!state.econ.recession, bear = worldHas('bear'), n = {line:'', mult:1, odds:0};
+  if(key === 'move'){ if(boom){ n.line = 'The economy is booming, and companies are competing hard for talent.'; n.mult = 1.3; } else if(rec) n.line = 'In this recession, an offer like this may not come again.'; }
+  else if(key === 'sellco'){ if(boom){ n.line = 'Markets are booming, and buyers are paying record prices.'; n.mult = 1.3; } else if(rec || bear){ n.line = 'With the economy down, buyers are scarce and offers are low.'; n.mult = 0.65; } }
+  else if(key === 'allin'){ if(boom){ n.line = 'Investors are pouring money into new companies.'; n.odds = 0.12; } else if(rec){ n.line = 'Starting a company in a recession is risky, though some of the best were born in one.'; n.odds = -0.12; } }
+  else if(key === 'topjob' && rec) n.line = 'In a recession, turning down a promotion is a bigger gamble.';
+  else if(key === 'abroad' && worldHas('war')) n.line = 'With war overseas, moving abroad feels riskier than ever.';
+  else if(key === 'sail' && worldHas('fuel')){ n.line = 'Fuel shortages have made the voyage pricier.'; n.mult = 1.3; }
+  else if(key === 'calling' && worldHas('ai')) n.line = 'AI is reshaping office work, and many people are rethinking their careers.';
+  else if(key === 'tv' && worldHas('pandemic')){ n.line = 'Stuck at home, the whole country is watching reality TV.'; n.mult = 1.4; }
+  else if(key === 'heirloom'){ if(worldHas('housingcrash')){ n.line = 'The housing crash has sunk what the building is worth.'; n.mult = 0.7; } else if(worldHas('housingboom')){ n.line = 'The housing boom has developers paying top dollar.'; n.mult = 1.4; } }
+  else if(key === 'firstlove' && worldHas('pandemic')) n.line = 'Months of lockdown have everyone reconsidering their lives.';
+  else if(key === 'office' && (rec || worldHas('war'))) n.line = 'In hard times, voters are looking for new leaders.';
+  // the crossroads that only exist because of the news open with its headline
+  const HEAD = {buyout: rec ? 'RECESSION DEEPENS AS COMPANIES SLASH JOBS' : 'AUTOMATION SWEEPS THROUGH OFFICES', retrain:'AI IS REWRITING EVERY INDUSTRY', enlistwar:'NATION AT WAR: VOLUNTEERS NEEDED',
+    buylow:'HOUSING MARKET CRASHES: FORECLOSURES SOAR', sellhigh:'HOME PRICES HIT ALL-TIME HIGH', newindustry:'A NEW INDUSTRY IS BORN', dispensary:'CANNABIS LEGALIZED: GREEN RUSH BEGINS',
+    countryside:'PANDEMIC EMPTIES THE CITIES', crashbuy:'STOCKS CRASH AS INVESTORS PANIC'};
+  if(HEAD[key]) n.line = '"' + HEAD[key] + '"';
+  return n;
+}
+const newTrack = () => ['Green Energy', 'Space Industry'].find(t => trackOpen(t) && (!state.job || state.job.track !== t) && !recordBlocks(t) && bestRankFor(t, startRankFor(t)) >= 0) || null;
+let xrCurrent = null;
 const notCareer = j => !j || ['Military', 'Politics', 'Odd Jobs'].includes(j.track);
 const drift = (types, keep) => {                         // moving away: weaker ties fade out, the rest cool
   const lost = [];
@@ -8771,7 +8947,7 @@ const drift = (types, keep) => {                         // moving away: weaker 
 };
 const CROSSROADS = [
   {key:'move', min:22, max:55, cond:() => !notCareer(state.job), run(a){
-    const j = state.job, raise = Math.max(inflR(40000, 1000), Math.round(j.salary * 0.35 / 1000) * 1000), city = pick(['Seattle', 'Austin', 'Denver', 'Boston', 'Miami', 'Chicago', 'San Francisco', 'Atlanta', 'Phoenix', 'New York']);
+    const j = state.job, raise = Math.round(Math.max(inflR(40000, 1000), j.salary * 0.35) * newsFor('move').mult / 1000) * 1000, city = pick(['Seattle', 'Austin', 'Denver', 'Boston', 'Miami', 'Chicago', 'San Francisco', 'Atlanta', 'Phoenix', 'New York']);
     const friends = state.relationships.filter(r => ['Friend', 'Coworker', 'Contact'].includes(r.type)).length;
     return presentCrossroads('The job across the country', `${state.name} is offered a ${j.title} job in ${city}, across the country, for ${fmt(j.salary + raise)} a year.`, [
       {label:'Accept and move', pros:[`+${fmt(raise)} a year`, 'a fresh start in a new city'], cons:[friends ? 'some friendships will fade' : 'leaving everyone behind', 'far from family'], run:() => {
@@ -8788,7 +8964,7 @@ const CROSSROADS = [
     ]);
   }},
   {key:'sellco', min:25, max:85, cond:() => state.business && state.business.value * bizShare(state.business) >= inflR(150000, 1000) && !state.business.xrKept, run(a){
-    const b = state.business, mine = b.value * bizShare(b), offer = Math.round(mine * (1.4 + Math.random() * 0.8) / 1000) * 1000, dream = Math.round(mine * rint(5, 8) / 1000) * 1000;
+    const b = state.business, mine = b.value * bizShare(b), offer = Math.round(mine * (1.4 + Math.random() * 0.8) * newsFor('sellco').mult / 1000) * 1000, dream = Math.round(mine * rint(5, 8) / 1000) * 1000;
     const who = b.cofounder ? `${b.cofounderName}, ${state.name}'s business partner, wants to sell ${bizName(b)}` : `A buyer wants ${bizName(b)}`;
     return presentCrossroads('Sell the company?', `${who}. The offer for ${state.name}'s stake: ${fmt(offer)}.`, [
       {label:`Sell for ${fmt(offer)}`, pros:[`${fmt(offer)} in cash today`, 'no more risk or stress'], cons:['never know how big it could have been'], run:() => {
@@ -8816,7 +8992,7 @@ const CROSSROADS = [
         const name = suggestBizName(t.key);
         state.business = bizNormalize({type:t.key, employees:2, locations:1, price:'normal', marketing:0, reputation:60, value:Math.round(seed * 1.2), startAge:a, lastProfit:null, name});
         pushEntry(a, `${state.name} quits their job and launches ${name}.`, {happy:10});
-        seedThread('xr', {kind:'allin', name, seed}, `Quit as ${j.title} to launch ${name}`, rint(3, 4), 'allin');
+        seedThread('xr', {kind:'allin', name, seed, odds:newsFor('allin').odds}, `Quit as ${j.title} to launch ${name}`, rint(3, 4), 'allin');
       }},
       {label:'Keep the steady job', pros:['security and a paycheck'], cons:['the idea stays an idea'], run:() => {
         pushEntry(a, `${state.name} decides the risk is too big and keeps their job.`, {happy:-2});
@@ -8839,7 +9015,7 @@ const CROSSROADS = [
       }},
     ]);
   }},
-  {key:'abroad', min:24, max:55, cond:() => state.relationships.some(r => (r.type === 'Partner' || r.type === 'Spouse') && r.closeness >= 40), run(a){
+  {key:'abroad', min:24, max:55, cond:() => !worldHas('pandemic') && state.relationships.some(r => (r.type === 'Partner' || r.type === 'Spouse') && r.closeness >= 40), run(a){
     const p = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse'), place = pick(CITIES.concat(['Tokyo', 'Sydney', 'London', 'Paris']));
     return presentCrossroads('Follow love abroad?', `${p.name} has been offered a dream job in ${place} and asks ${state.name} to come along.`, [
       {label:`Move to ${place} with ${p.name}`, pros:[`a stronger bond with ${p.name}`, 'an adventure abroad'], cons:[state.job ? 'leave your job behind' : 'start over', 'friends and family far away'], run:() => {
@@ -8868,7 +9044,7 @@ const CROSSROADS = [
     ]);
   }},
   {key:'tv', min:20, max:50, w:0.4, cond:() => state.fame.level < 40 && !state.crime.prison, run(a){
-    const fee = inflR(rint(100, 250) * 1000, 1000);
+    const fee = Math.round(inflR(rint(100, 250) * 1000, 1000) * newsFor('tv').mult);
     return presentCrossroads('Your life on TV?', `A network wants to film ${state.name}'s life for a reality series, paying ${fmt(fee)}.`, [
       {label:'Sign the contract', pros:[`${fmt(fee)}`, 'instant fame'], cons:['no privacy', 'family under a spotlight', 'scandals are ratings'], run:() => {
         bondDelta(['Partner', 'Spouse', 'Mother', 'Father', 'Sibling', 'Child'], -8);
@@ -8879,7 +9055,7 @@ const CROSSROADS = [
     ]);
   }},
   {key:'heirloom', min:25, max:70, w:0.3, cond:() => !state.business && state.age >= 25, run(a){
-    const t = bizType('restaurant'), name = pick(['Rosa', 'Mae', 'Ida', 'Lou', 'Vera']) + "'s Kitchen", sale = inflR(rint(90, 160) * 1000, 1000);
+    const t = bizType('restaurant'), name = pick(['Rosa', 'Mae', 'Ida', 'Lou', 'Vera']) + "'s Kitchen", sale = Math.round(inflR(rint(90, 160) * 1000, 1000) * newsFor('heirloom').mult);
     return presentCrossroads('The family restaurant', `A great-aunt's will leaves ${state.name} ${name}, the restaurant the family has run for fifty years. It's losing money. A developer offers ${fmt(sale)} for the building.`, [
       {label:'Keep it and save it', pros:['carry on a family legacy', 'a business of your own'], cons:['it is losing money', 'long hours'], run:() => {
         state.business = bizNormalize({type:'restaurant', employees:4, locations:1, price:'normal', marketing:0, reputation:45, value:Math.round(bizCost(t) * 0.8), startAge:a, lastProfit:null, name});
@@ -8931,7 +9107,7 @@ const CROSSROADS = [
       }},
     ]);
   }},
-  {key:'office', min:35, max:65, w:0.6, cond:() => !inOffice() && !POL().campaign && felonyCount() === 0 && !milActive() && !rankGap(CAREERS.Politics[3], 'Politics'), run(a){
+  {key:'office', min:35, max:65, w:0.35, cond:() => !inOffice() && !POL().campaign && felonyCount() === 0 && !milActive() && !rankGap(CAREERS.Politics[3], 'Politics'), run(a){
     const P = POL(), party = P.party && P.party !== 'independent' ? P.party : pick(['progressive', 'conservative']), chance = Math.min(0.85, winChance(3, 'blitz') + 0.12);
     return presentCrossroads('The party comes calling', `Leaders of the ${PARTY_NAMES[party]} Party ask ${state.name} to run for State Senate, with the party's money behind them. They give ${state.name} about a ${Math.round(chance * 100)}% chance.`, [
       {label:'Run for State Senate', pros:['a seat of real power', 'a path to Governor or President'], cons:[state.job ? 'leave your job' : 'give up your privacy', 'public scrutiny forever', 'you could lose'], run:() => {
@@ -8969,8 +9145,8 @@ const CROSSROADS = [
       }},
     ]);
   }},
-  {key:'sail', min:40, max:62, cond:() => !notCareer(state.job) && netWorth() / state.econ.cumInflation >= 300000, run(a){
-    const cost = inflR(70000, 1000), j = state.job;
+  {key:'sail', min:40, max:62, cond:() => !worldHas('pandemic') && !notCareer(state.job) && netWorth() / state.econ.cumInflation >= 300000, run(a){
+    const cost = Math.round(inflR(70000, 1000) * newsFor('sail').mult), j = state.job;
     return presentCrossroads('Sail around the world?', `${state.name} could quit as ${j.title}, buy a sailboat and spend two years sailing around the world. It would cost about ${fmt(cost)}.`, [
       {label:'Quit and set sail', pros:['the adventure of a lifetime', 'see the world'], cons:[`${fmt(cost)}`, `give up a ${fmt(j.salary)} salary`, 'a hard return to work'], run:() => {
         pay(cost); leaveRoleFor('sail'); convertCoworkersToFriends(); state.job = null;
@@ -8981,22 +9157,133 @@ const CROSSROADS = [
       {label:'Keep working', pros:['savings keep growing'], cons:['someday may never come'], run:() => pushEntry(a, `${state.name} pins a map of the oceans above their desk and keeps working.`, {happy:-3})},
     ]);
   }},
+  // ---- crossroads the news brings: they only appear while the world is going through something ----
+  {key:'buyout', news:true, min:30, max:62, cond:() => (state.econ.recession || worldHas('ai')) && !notCareer(state.job), run(a){
+    const j = state.job, pkg = Math.round(j.salary * rint(10, 18) / 12 / 1000) * 1000, why = state.econ.recession ? 'the recession' : 'automation';
+    return presentCrossroads('Take the buyout?', `Because of ${why}, ${state.name}'s employer offers voluntary buyouts: ${fmt(pkg)} to walk away now. Those who stay may face layoffs later, with nothing.`, [
+      {label:`Take the ${fmt(pkg)} package`, pros:[`${fmt(pkg)} in hand`, 'a chance to reinvent yourself'], cons:['no job in a hard market'], run:() => {
+        const t = j.title; convertCoworkersToFriends(); state.job = null;
+        pushEntry(a, `${state.name} takes the buyout and leaves their job as ${t} with ${fmt(pkg)}.`, {money:pkg, happy:2});
+        seedThread('xr', {kind:'buyout'}, `Took a ${fmt(pkg)} buyout`, 2, 'buyout');
+      }},
+      {label:'Stay and hope for the best', pros:['keep the paycheck for now'], cons:['layoffs may still come, without a package'], run:() => {
+        pushEntry(a, `${state.name} turns down the buyout and keeps working.`, {});
+        seedThread('xr', {kind:'stayed', title:j.title}, 'Turned down a buyout to keep their job', rint(1, 3), 'stayed');
+      }},
+    ]);
+  }},
+  {key:'retrain', news:true, min:25, max:55, cond:() => worldHas('ai') && !notCareer(state.job) && state.job.track !== 'Technology' && trackOpen('Technology') && !recordBlocks('Technology'), run(a){
+    const j = state.job, cost = inflR(12000, 500);
+    return presentCrossroads('Retrain for the AI age?', `AI is transforming ${j.track.toLowerCase()}. A bootcamp could retrain ${state.name} for a job in technology for ${fmt(cost)}.`, [
+      {label:'Retrain in tech', pros:['a future-proof career', 'higher pay over time'], cons:[`${fmt(cost)} for the course`, `leave ${j.title} behind`], run:() => {
+        pay(cost); degrees().push({degree:'Certificate', major:'Computer Science', tracks:['Technology'], age:a});
+        const rank = Math.max(0, bestRankFor('Technology', 2)); const old = j.title; threadJob('Technology', rank);
+        pushEntry(a, `${state.name} finishes a coding bootcamp and leaves ${old} for a job as ${state.job.title}.`, {smarts:6, happy:5});
+        seedThread('xr', {kind:'retrained'}, `Retrained from ${old} to ${state.job.title}`, rint(3, 5), 'retrained');
+      }},
+      {label:'Stick with what you know', pros:['no cost, no risk today'], cons:['your job may be automated'], run:() => {
+        pushEntry(a, `${state.name} decides to stay in ${j.track.toLowerCase()} and adapt.`, {});
+        seedThread('xr', {kind:'automate', title:j.title}, `Stayed in ${j.track.toLowerCase()} as AI spread`, rint(2, 4), 'automate');
+      }},
+    ]);
+  }},
+  {key:'enlistwar', news:true, min:18, max:35, cond:() => worldHas('war') && !state.mil && !enlistGap('army', false), run(a){
+    return presentCrossroads('Your country calls', `War has broken out, and the country is calling for volunteers. Friends of ${state.name}'s are already signing up.`, [
+      {label:'Volunteer to serve', pros:['serve your country', 'a veteran\'s benefits for life'], cons:['you will likely see combat', state.job ? 'leave your job' : 'put your life on hold', 'you might not come home'], run:() => { enlist('army', !enlistGap('army', true)); applyDelta({happy:3}); }},
+      {label:'Stay home', pros:['stay safe with the people you love'], cons:['watch others go in your place'], run:() => pushEntry(a, `${state.name} stays home as friends ship out.`, {happy:-3})},
+    ]);
+  }},
+  {key:'buylow', news:true, min:25, max:70, cond:() => worldHas('housingcrash') && state.money + state.savings >= inflR(60000, 1000) && !state.bankrupt && state.creditScore >= 600, run(a){
+    const price = Math.round(inflR(240000, 1000) * state.housing.idx), down = Math.round(price * 0.4);
+    return presentCrossroads('Buy in the crash?', `The housing market has crashed. Foreclosed houses are selling for ${fmt(price)} each. ${state.name} could buy two as rentals, ${fmt(down)} down.`, [
+      {label:'Buy two houses while they\'re cheap', pros:['buy at the bottom', 'rental income for life'], cons:[`${fmt(down)} down and two mortgages`, 'prices could fall further'], run:() => {
+        pay(down); const ids = [];
+        for(let i = 0; i < 2; i++){ state.assetSeq++; const id = 'a' + state.assetSeq; ids.push(id);
+          state.assets.push({id, key:'sfr', name:'Foreclosure House', category:'Real Estate', value:price, boughtPrice:price, boughtAge:a, cond:65, rental:{units:1, occupied:0, rent:'market', cond:65, manager:false, loc:'suburbs', lastRent:0, lastNet:null}});
+          takeLoan('Mortgage', price - Math.round(down / 2), 30, Math.max(0.03, state.econ.rate + 0.015), {assetId:id}); }
+        pushEntry(a, `${state.name} buys two foreclosed houses at the bottom of the market.`, {happy:5});
+        seedThread('xr', {kind:'buylow', ids, paid:price * 2}, `Bought two houses in the housing crash for ${fmt(price * 2)}`, rint(4, 6), 'buylow');
+      }},
+      {label:'Keep the cash safe', pros:['no debt, no risk'], cons:['miss a once-in-a-generation chance'], run:() => pushEntry(a, `${state.name} waits out the housing crash in cash.`, {})},
+    ]);
+  }},
+  {key:'sellhigh', news:true, min:25, max:85, cond:() => worldHas('housingboom') && state.assets.some(x => x.category === 'Homes' && !x.rental), run(a){
+    const h = state.assets.find(x => x.category === 'Homes' && !x.rental), loan = state.loans.find(l => l.assetId === h.id), net = Math.round(h.value * 0.94 - (loan ? loan.balance : 0));
+    return presentCrossroads('Sell at the top?', `Home prices are at record highs. ${state.name}'s ${h.name.toLowerCase()} would sell for ${fmt(h.value)}, leaving ${fmt(net)} after the mortgage and fees.`, [
+      {label:'Sell and rent instead', pros:[`${fmt(net)} in cash`, 'cash in before prices fall'], cons:['give up your home', 'rent goes up too'], run:() => {
+        state.assets = state.assets.filter(x => x.id !== h.id); if(loan) state.loans = state.loans.filter(l => l !== loan); state.money += net;
+        pushEntry(a, `${state.name} sells their ${h.name.toLowerCase()} at the top of the market for ${fmt(h.value)}.`, {happy:3});
+        seedThread('xr', {kind:'sellhigh', idx:state.housing.idx, value:h.value}, `Sold their home at the top for ${fmt(h.value)}`, rint(3, 5), 'sellhigh');
+      }},
+      {label:'Keep the home', pros:['stay where you belong'], cons:['the boom may not last'], run:() => pushEntry(a, `${state.name} decides home isn't for sale at any price.`, {happy:2})},
+    ]);
+  }},
+  {key:'newindustry', news:true, min:22, max:50, cond:() => !notCareer(state.job) && newTrack() !== null, run(a){
+    const t = newTrack(), rank = Math.max(bestRankFor(t, startRankFor(t)), 0), j = state.job, sal = startingSalary(t, rank);
+    return presentCrossroads('Jump to a new industry?', `${t} is booming, a whole new industry hiring as fast as it can. ${state.name} could leave ${j.title} to become a ${CAREERS[t][rank].title} at ${fmt(sal)}.`, [
+      {label:`Join ${t.toLowerCase()}`, pros:['ground floor of something huge', 'fast promotions if it takes off'], cons:['new industries can bust', 'start over in a new field'], run:() => {
+        const old = j.title; threadJob(t, rank);
+        pushEntry(a, `${state.name} leaves ${old} to join the ${t.toLowerCase()} boom as ${state.job.title}.`, {happy:6});
+        seedThread('xr', {kind:'pioneer', track:t}, `Left ${old} for the new ${t.toLowerCase()} industry`, rint(3, 5), 'pioneer');
+      }},
+      {label:'Stay in your field', pros:['the safety of what you know'], cons:['watch others ride the wave'], run:() => pushEntry(a, `${state.name} stays put while ${t.toLowerCase()} booms.`, {})},
+    ]);
+  }},
+  {key:'dispensary', news:true, min:25, max:65, cond:() => (state.world.laws || []).includes('cannabis') && !state.business && canPay(bizCost(bizType('dispensary'))), run(a){
+    const t = bizType('dispensary'), cost = bizCost(t);
+    return presentCrossroads('Get in on the green rush?', `Cannabis is newly legal, and the first stores are making fortunes. Opening a dispensary would cost ${fmt(cost)}.`, [
+      {label:'Open a dispensary', pros:['a booming new market', 'be first in town'], cons:[`${fmt(cost)} on the line`, 'family may disapprove', 'the law could be repealed'], run:() => {
+        pay(cost); const name = suggestBizName('dispensary');
+        state.business = bizNormalize({type:'dispensary', employees:3, locations:1, price:'normal', marketing:0, reputation:62, value:Math.round(cost * 1.3), startAge:a, lastProfit:null, name});
+        bondDelta(['Mother', 'Father'], -5);
+        pushEntry(a, `${state.name} opens ${name}, one of the first dispensaries in town.`, {happy:6});
+        seedThread('xr', {kind:'keepco', name, dream:cost * 6}, `Opened ${name} in the green rush`, rint(3, 5), 'keepco');
+      }},
+      {label:'Pass', pros:['no risk'], cons:['someone else gets rich'], run:() => pushEntry(a, `${state.name} watches the green rush from the sidelines.`, {})},
+    ]);
+  }},
+  {key:'countryside', news:true, min:25, max:70, cond:() => worldHas('pandemic'), run(a){
+    const remote = !state.job || ['Technology', 'Business', 'Finance', 'Science', 'Law'].includes(state.job.track);
+    return presentCrossroads('Leave the city?', `The pandemic has emptied the city. ${state.name} could move to a quiet farmhouse in the countryside${remote ? ' and work remotely' : ''}.`, [
+      {label:'Move to the countryside', pros:['fresh air and space', 'a slower, healthier life'], cons:['friends far away', remote ? 'isolation' : 'leave your job'], run:() => {
+        if(!remote && state.job){ leaveRoleFor('country'); convertCoworkersToFriends(); state.job = null; }
+        drift(['Friend', 'Coworker', 'Contact'], 45);
+        pushEntry(a, `${state.name} trades city life for a farmhouse in the countryside.`, {happy:8, health:5});
+      }},
+      {label:'Ride it out in the city', pros:['keep your life intact'], cons:['months cooped up in a small apartment'], run:() => pushEntry(a, `${state.name} rides out the pandemic in the city.`, {happy:-3})},
+    ]);
+  }},
+  {key:'crashbuy', news:true, min:22, max:75, cond:() => worldHas('bear') && state.money + state.savings >= inflR(30000, 1000) && state.market.IDXF, run(a){
+    const amt = Math.round((state.money + state.savings) * 0.6 / 100) * 100;
+    return presentCrossroads('Buy the crash?', `Stocks have crashed and everyone is panic-selling. ${state.name} could put ${fmt(amt)}, most of their savings, into the stock market.`, [
+      {label:`Invest ${fmt(amt)}`, pros:['buy when others are fearful', 'historically, crashes recover'], cons:['it could fall further first', 'most of your safety net at risk'], run:() => {
+        ensureCash(amt); const units = (execBuy('IDXF', amt) || {}).units || 0;
+        pushEntry(a, `${state.name} invests ${fmt(amt)} in the stock market at the bottom of the crash.`, {happy:-2});
+        seedThread('xr', {kind:'crashbuy', units, paid:amt}, `Invested ${fmt(amt)} during a crash`, rint(3, 5), 'crashbuy');
+      }},
+      {label:'Keep it safe in the bank', pros:['sleep well at night'], cons:['miss the rebound'], run:() => pushEntry(a, `${state.name} keeps their savings out of the market.`, {})},
+    ]);
+  }},
 ];
 function crossroadsYear(a){
   if(a < 22 || state.crime.prison) return false;
-  const last = xrList().length ? xrList()[xrList().length - 1].age : 15;
-  if(a - last < 7 || Math.random() > 0.3) return false;
-  const ok = CROSSROADS.filter(c => a >= c.min && a <= c.max && !(state.xrUsed || []).includes(c.key) && c.cond());
+  const last = xrList().length ? xrList()[xrList().length - 1].age : 15, gap = a - last;
+  if(gap < 4) return false;
+  const ok = CROSSROADS.filter(c => a >= c.min && a <= c.max && !(state.xrUsed || []).includes(c.key) && (c.news || gap >= 7) && c.cond());
   if(!ok.length) return false;
-  let x = Math.random() * ok.reduce((t, o) => t + (o.w || 1), 0), c = ok[0];
-  for(const o of ok){ x -= o.w || 1; if(x <= 0){ c = o; break; } }
-  if(Math.random() > (c.w || 1)) return false;          // the rarer crossroads don't always come
+  const newsy = ok.some(c => c.news);
+  if(Math.random() > (newsy ? 0.5 : 0.3)) return false;
+  const wt = c => (c.news ? 2.5 : 1) * (c.w || 1) * (newsFor(c.key).line ? 1.5 : 1);
+  let x = Math.random() * ok.reduce((t, o) => t + wt(o), 0), c = ok[0];
+  for(const o of ok){ x -= wt(o); if(x <= 0){ c = o; break; } }
+  if(!c.news && Math.random() > (c.w || 1)) return false;          // the rarer crossroads don't always come
   (state.xrUsed || (state.xrUsed = [])).push(c.key);
-  return c.run(a) !== false;
+  xrCurrent = c.key;
+  try{ return c.run(a) !== false; } finally{ xrCurrent = null; }
 }
 // what the big decisions led to, years later
 CHAINS.xr = {
-  title: th => ({soldco:'Selling ' + th.data.name, keepco:'Keeping ' + th.data.name, allin:'Going all in', idea:'The idea not chased', topjob:'The top job', abroad:'A life in ' + th.data.place, orphans:'Raising two more', tv:'Life on TV', heirloom:'The family restaurant', calling:'Following a calling', firstlove:'A first love', nobaby:'No children', witness:'Witness protection', silent:'The silence', kidney:'A kidney', sail:'Around the world'})[th.data.kind] || 'A crossroads',
+  title: th => ({soldco:'Selling ' + th.data.name, keepco:'Keeping ' + th.data.name, allin:'Going all in', idea:'The idea not chased', topjob:'The top job', abroad:'A life in ' + th.data.place, orphans:'Raising two more', tv:'Life on TV', heirloom:'The family restaurant', calling:'Following a calling', firstlove:'A first love', nobaby:'No children', witness:'Witness protection', silent:'The silence', kidney:'A kidney', sail:'Around the world', buyout:'The buyout', stayed:'Staying through layoffs', retrained:'Retraining for AI', automate:'Racing the robots', buylow:'Buying in the crash', sellhigh:'Selling at the top', pioneer:'A new industry', crashbuy:'Buying the crash'})[th.data.kind] || 'A crossroads',
   heirloom(th, a){
     const b = state.business;
     if(!b || bizName(b) !== th.data.name) return endThread(th, `${th.data.name} changed hands`, 'mixed');
@@ -9043,6 +9330,53 @@ CHAINS.xr = {
     if(state.age < 64 && !state.job && Math.random() < 0.6 && CAREERS[th.data.track]){ const rank = Math.max(0, Math.min(th.data.rank, bestRankFor(th.data.track, th.data.rank))); if(!rankGap(CAREERS[th.data.track][rank], th.data.track)){ threadJob(th.data.track, rank); return endThread(th, 'Came home changed, and back to work', 'good'); } }
     endThread(th, 'Came home changed', 'good');
   },
+  buyout(th, a){
+    if(state.job){ pushEntry(a, `The buyout money gave ${state.name} time to land on their feet as ${state.job.title}.`, {happy:4}); return endThread(th, 'Landed a new job with money in the bank', 'good'); }
+    pushEntry(a, `Two years after the buyout, ${state.name} is still looking for work.`, {happy:-6}); endThread(th, 'The package ran out before a new job came', 'bad');
+  },
+  stayed(th, a){
+    const j = state.job;
+    if(j && j.title === th.data.title && Math.random() < (state.econ.recession || worldHas('ai') ? 0.45 : 0.25)){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is laid off after all, this time with no package.`, {happy:-10}); return endThread(th, 'Laid off later, with nothing', 'bad'); }
+    endThread(th, 'Kept their job through the storm', 'good');
+  },
+  retrained(th, a){
+    const j = state.job;
+    if(j && j.track === 'Technology'){ j.salary = Math.round(j.salary * 1.15 / 100) * 100; pushEntry(a, `${state.name}'s retraining pays off: they're thriving in tech and earning more than ever.`, {happy:8}); return endThread(th, 'Thrived in the new career', 'good'); }
+    endThread(th, 'Moved on from tech', 'mixed');
+  },
+  automate(th, a){
+    const j = state.job;
+    if(j && j.title === th.data.title && Math.random() < 0.45){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name}'s job as ${th.data.title} is automated away.`, {happy:-10}); return endThread(th, 'Their job was automated away', 'bad'); }
+    endThread(th, 'Adapted and kept their place', 'good');
+  },
+  buylow(th, a){
+    const own = state.assets.filter(x => th.data.ids.includes(x.id)), now = own.reduce((t, x) => t + x.value, 0);
+    if(!own.length) return endThread(th, 'Sold the houses along the way', 'mixed');
+    const gain = now - th.data.paid * own.length / 2;
+    pushEntry(a, gain > 0 ? `The houses ${state.name} bought in the crash are now worth ${fmt(now)}, up ${fmt(gain)}.` : `The houses ${state.name} bought in the crash are still worth less than they paid.`, {happy: gain > 0 ? 6 : -4});
+    endThread(th, gain > 0 ? `Bought at the bottom and gained ${fmt(gain)}` : 'Prices never recovered', gain > 0 ? 'good' : 'bad');
+  },
+  sellhigh(th, a){
+    const ch = state.housing.idx / th.data.idx - 1;
+    if(ch < -0.05){ pushEntry(a, `Home prices have fallen ${Math.round(-ch * 100)}% since ${state.name} sold. Perfect timing.`, {happy:6}); return endThread(th, `Sold at the top, before a ${Math.round(-ch * 100)}% drop`, 'good'); }
+    if(ch > 0.05){ pushEntry(a, `Home prices kept climbing, up ${Math.round(ch * 100)}% since ${state.name} sold.`, {happy:-5}); return endThread(th, `Prices rose another ${Math.round(ch * 100)}% after they sold`, 'mixed'); }
+    endThread(th, 'Prices barely moved after they sold', 'mixed');
+  },
+  pioneer(th, a){
+    const j = state.job;
+    if(!j || j.track !== th.data.track) return endThread(th, 'Moved on from the new industry', 'mixed');
+    if(Math.random() < 0.55){ if(CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); }
+      pushEntry(a, `${th.data.track} takes off, and ${state.name} rises with it as ${j.title}.`, {happy:8}); return endThread(th, 'Rode the boom to the top', 'good'); }
+    if(Math.random() < 0.4){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `The ${th.data.track.toLowerCase()} bubble bursts and ${state.name} is laid off.`, {happy:-8}); return endThread(th, 'The new industry went bust', 'bad'); }
+    endThread(th, 'Settled into the new industry', 'mixed');
+  },
+  crashbuy(th, a){
+    const m = state.market.IDXF, held = Math.min(th.data.units, state.portfolio.IDXF || 0), now = m ? held * m.price : 0;
+    if(!held) return endThread(th, 'Sold before the rebound', 'mixed');
+    const paid = th.data.paid * held / Math.max(1e-9, th.data.units), gain = now - paid;
+    pushEntry(a, gain >= 0 ? `The money ${state.name} invested in the crash is now worth ${fmt(now)}, up ${fmt(gain)}.` : `The market never recovered. ${state.name}'s crash investment is down ${fmt(-gain)}.`, {happy: gain >= 0 ? 7 : -5});
+    endThread(th, gain >= 0 ? `The crash investment grew by ${fmt(gain)}` : `The crash investment lost ${fmt(-gain)}`, gain >= 0 ? 'good' : 'bad');
+  },
   soldco(th, a){
     const r = Math.random(), big = Math.round(th.data.offer * rint(6, 12) / 1000) * 1000;
     if(r < 0.4){ pushEntry(a, `${th.data.name}, the company ${state.name} sold, is now worth ${fmt(big)}.`, {happy:-6}); return endThread(th, `It became worth ${fmt(big)} without them`, 'mixed'); }
@@ -9052,7 +9386,7 @@ CHAINS.xr = {
   keepco(th, a){
     const b = state.business;
     if(!b || bizName(b) !== th.data.name) return endThread(th, 'The business changed hands before the bet played out', 'mixed');
-    const r = Math.random();
+    const r = Math.random() - (worldHas('boom') ? 0.1 : 0) + (state.econ.recession ? 0.1 : 0);
     if(r < 0.35){ b.value = Math.round(b.value * rint(4, 7)); b.reputation = clampRep(b.reputation + 15); pushEntry(a, `${bizName(b)} explodes in value. Keeping it was the call of a lifetime: ${state.name}'s stake is worth ${fmt(b.value * bizShare(b))}.`, {happy:15, fame:4}); return endThread(th, `The bet paid off: now worth ${fmt(b.value)}`, 'good'); }
     if(r < 0.65){ pushEntry(a, `${bizName(b)} collapses. ${state.name} ends up with nothing for the company they wouldn't sell.`, {happy:-15});
       state.relationships.forEach(x => { if(x.familyBiz) x.familyBiz = false; }); state.business = null; return endThread(th, 'It collapsed, and the offer was gone', 'bad'); }
@@ -9061,7 +9395,7 @@ CHAINS.xr = {
   allin(th, a){
     const b = state.business;
     if(!b || bizName(b) !== th.data.name) return endThread(th, `${th.data.name} didn't make it`, 'bad');
-    const r = Math.random();
+    const r = Math.random() - (th.data.odds || 0) - (worldHas('boom') ? 0.08 : 0) + (state.econ.recession ? 0.08 : 0);
     if(r < 0.3){ b.value = Math.round(Math.max(b.value, th.data.seed) * rint(8, 15)); b.employees += rint(5, 15); pushEntry(a, `${th.data.name} takes off beyond anyone's dreams. It's now worth ${fmt(b.value)}.`, {happy:18, fame:6}); return endThread(th, `${th.data.name} became worth ${fmt(b.value)}`, 'good'); }
     if(r < 0.7){ const owed = Math.round(th.data.seed * 0.6 / 500) * 500; debtLoan(owed, 0.12); pushEntry(a, `${th.data.name} runs out of money and closes, leaving ${state.name} ${fmt(owed)} in debt.`, {happy:-14});
       state.business = null; return endThread(th, `${th.data.name} failed, leaving ${fmt(owed)} of debt`, 'bad'); }
@@ -9102,7 +9436,7 @@ CHAINS.xr = {
 };
 function crossroadsHtml(){
   const x = xrList(); if(!x.length) return '';
-  return '<div class="plabel">⚡ Crossroads</div><div class="timeline">' + x.map(c => `<div class="tl-row"><span class="tl-age">${c.age}</span><span class="tl-tx"><b>${c.title}</b><br>Chose: ${c.chose}${c.other.length ? ' <span style="color:var(--muted)">· not: ' + c.other.join(', ') + '</span>' : ''}</span></div>`).join('') + '</div>';
+  return '<div class="plabel">⚡ Crossroads</div><div class="timeline">' + x.map(c => `<div class="tl-row"><span class="tl-age">${c.age}</span><span class="tl-tx"><b>${c.title}</b>${c.news ? '<br><span style="color:var(--muted);font-size:12px">📰 ' + c.news + '</span>' : ''}<br>Chose: ${c.chose}${c.other.length ? ' <span style="color:var(--muted)">· not: ' + c.other.join(', ') + '</span>' : ''}</span></div>`).join('') + '</div>';
 }
 
 // ---------- Achievements and milestones ----------
