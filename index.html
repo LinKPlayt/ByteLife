@@ -423,6 +423,60 @@
   .linkbtn{ background:none; border:none; color:var(--muted); font-size:11.5px; font-weight:600; padding:4px 2px; text-decoration:underline; flex:none; }
   .pickgrid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
   .pickgrid .sortbtn{ border-radius:11px; text-align:left; color:var(--ink); padding:8px 10px; }
+  /* settings, cheats and the new-life screen */
+  .sheet, .modal-card, .toast{ zoom:var(--zoom, 1); }
+  #modal{ z-index:70; }
+  .wide-card{ max-width:460px !important; max-height:86vh; overflow-y:auto; text-align:left; }
+  .wide-card h3{ margin:0 0 4px; font-family:'Fraunces',serif; font-size:20px; color:var(--ink); }
+  .set-group{ border-top:1px solid var(--line); padding:10px 0 6px; display:grid; gap:8px; }
+  .set-group:first-of-type{ border-top:none; }
+  .set-title{ font-size:11.5px; font-weight:800; letter-spacing:.04em; color:var(--muted); text-transform:uppercase; }
+  .set-row{ display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:14px; font-weight:600; color:var(--ink); }
+  .set-row small{ display:block; font-size:11.5px; font-weight:500; color:var(--muted); margin-top:1px; }
+  .set-row input[type=range]{ width:100%; accent-color:var(--accent); }
+  .switch{ appearance:none; -webkit-appearance:none; flex:none; width:42px; height:24px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); position:relative; cursor:pointer; transition:background .15s ease; }
+  .switch::after{ content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:left .15s ease; }
+  .switch:checked{ background:var(--accent); border-color:var(--accent); }
+  .switch:checked::after{ left:20px; }
+  .switch:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .set-note{ font-size:12px; color:var(--muted); line-height:1.45; }
+  .set-danger{ background:transparent; border:1px solid rgba(189,82,79,0.45); color:var(--red); padding:9px 12px; border-radius:10px; font-size:12.5px; }
+  .id-btns{ display:flex; flex-direction:column; gap:6px; flex:none; align-self:flex-start; }
+  .pinned-top .id-btns .audio-btn{ position:static; }
+  .audio-btn[hidden]{ display:none; }
+  .cheat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .cheat-grid button{ background:var(--surface-2); border:1px solid var(--line); color:var(--ink); padding:9px 8px; border-radius:10px; font-size:12.5px; text-align:left; }
+  .cheat-grid button:disabled{ opacity:.4; cursor:not-allowed; }
+  .cheat-grid button.on{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .cheat-flag{ font-size:12px; font-weight:700; color:var(--gold); background:rgba(185,132,44,0.12); border-radius:8px; padding:6px 9px; }
+  .setup-card{ background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px; display:grid; gap:9px; box-shadow:0 1px 4px rgba(35,42,36,0.05); }
+  .looks{ display:flex; gap:12px; align-items:center; }
+  .looks .photo-frame{ width:84px; height:84px; }
+  .looks-ctl{ flex:1; min-width:0; display:grid; gap:6px; }
+  .swatches{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .swatch{ width:24px; height:24px; border-radius:50%; border:2px solid var(--surface); box-shadow:0 0 0 1px var(--line); padding:0; }
+  .swatch.on{ box-shadow:0 0 0 2px var(--accent); }
+  .swatch.rnd{ background:var(--surface-2); font-size:12px; color:var(--muted); }
+  .mini-label{ font-size:11px; font-weight:700; color:var(--muted); }
+  .fam-row{ display:grid; grid-template-columns:auto 1fr 58px auto; gap:6px; align-items:center; font-size:12.5px; }
+  .fam-row .tag{ font-size:11px; font-weight:800; color:var(--accent); background:var(--accent-soft); border-radius:6px; padding:2px 6px; white-space:nowrap; }
+  .fam-row input{ width:100%; min-width:0; padding:7px 8px; font-family:'Manrope',sans-serif; font-size:13px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); color:var(--ink); }
+  .fam-row.off{ opacity:.5; }
+  .fam-x{ background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px; padding:5px 8px; font-size:12px; }
+  .rnd-banner{ background:var(--accent-soft); border:1px dashed var(--accent); border-radius:14px; padding:11px 13px; font-size:13.5px; line-height:1.45; color:var(--ink); text-align:left; }
+  .btn-secondary{ background:var(--surface); color:var(--ink); border:1.5px solid var(--line); padding:13px 20px; width:100%; font-weight:700; font-size:14.5px; border-radius:14px; margin-top:8px; }
+  .setup-links{ display:flex; justify-content:center; gap:4px; flex-wrap:wrap; margin-top:6px; }
+  html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after{ transition:none !important; animation:none !important; scroll-behavior:auto !important; }
+  /* dark theme */
+  :root[data-theme="dark"]{ --bg:#141916; --surface:#1D2420; --surface-2:#262E29; --ink:#E4E9E2; --muted:#9AA79D; --line:rgba(228,233,226,0.12);
+    --accent:#4A8573; --accent-soft:rgba(111,170,150,0.15); --gold:#D4A24E; --red:#E07A76; --green:#62B585; --blue:#6E9FD6; --pink:#CF8DB4; color-scheme:dark; }
+  :root[data-theme="dark"] .paper{ background:var(--surface); }
+  :root[data-theme="dark"] .log-year:not(.current) .entry{ color:#B8C2BA; }
+  :root[data-theme="dark"] #ageBtn:disabled{ background:#38413B; color:#8B968E; }
+  :root[data-theme="dark"] .toast{ background:#2E3832; }
+  :root[data-theme="dark"] .modal{ background:rgba(0,0,0,0.6); }
+  :root[data-theme="dark"] #nameInput::placeholder{ color:#6F7B72; }
+  :root[data-theme="dark"] .btn-primary:hover{ background:#3D7362; }
 </style>
 </head>
 <body>
@@ -439,6 +493,20 @@
     <div class="modal-btns" style="margin-top:14px;"><button id="achClose" onclick="closeAchievements()" style="background:var(--accent);color:#fff;">Close</button></div>
   </div>
 </div>
+<div class="modal" id="setModal" hidden onclick="if(event.target === this) closeSettings()">
+  <div class="modal-card wide-card" role="dialog" aria-modal="true" aria-label="Settings">
+    <h3>⚙️ Settings</h3>
+    <div id="setBody"></div>
+    <div class="modal-btns" style="margin-top:12px;"><button onclick="closeSettings()" style="background:var(--accent);color:#fff;">Done</button></div>
+  </div>
+</div>
+<div class="modal" id="cheatModal" hidden onclick="if(event.target === this) closeCheats()">
+  <div class="modal-card wide-card" role="dialog" aria-modal="true" aria-label="Cheats">
+    <h3>🛠️ Cheats</h3>
+    <div id="cheatBody"></div>
+    <div class="modal-btns" style="margin-top:12px;"><button onclick="closeCheats()" style="background:var(--accent);color:#fff;">Done</button></div>
+  </div>
+</div>
 <div class="sheet">
   <header>
     <div class="masthead">EST. TODAY — VOL. I</div>
@@ -448,13 +516,19 @@
 
   <section id="setup">
     <p class="lead">Every entry starts blank. Name the subject of this record.</p>
-    <input id="nameInput" type="text" placeholder="Their name" maxlength="24" onkeydown="if(event.key==='Enter')startLife()">
-    <div class="setup-group"><div class="setup-label">Gender</div><div class="sortrow setup-row" id="genderRow"></div></div>
-    <div class="setup-group"><div class="setup-label">Personality <span>pick up to two, or leave blank for a surprise</span></div><div class="trait-grid" id="traitGrid"></div></div>
-    <button class="btn-primary" onclick="startLife()">Begin the record</button>
+    <div id="randomBanner"></div>
+    <div style="display:flex;gap:8px;"><input id="nameInput" type="text" placeholder="Their name, or leave blank" maxlength="24" onkeydown="if(event.key==='Enter')startLife()" style="flex:1;min-width:0;"><button class="sortbtn" style="height:50px;border-radius:14px;padding:0 14px;font-size:18px;" onclick="randomNameInput()" aria-label="Random name" title="Random name">🎲</button></div>
+    <div id="setupChoices">
+      <div class="setup-group"><div class="setup-label">Gender</div><div class="sortrow setup-row" id="genderRow"></div></div>
+      <div class="setup-group"><div class="setup-label">Looks <span>how they might look grown up</span></div><div class="setup-card" id="looksBox"></div></div>
+      <div class="setup-group"><div class="setup-label">Born with <span>a head start in one area</span></div><div class="sortrow setup-row" id="talentRow"></div></div>
+      <div class="setup-group"><div class="setup-label">Personality <span>pick up to two, or leave blank for a surprise</span></div><div class="trait-grid" id="traitGrid"></div></div>
+      <div class="setup-group"><div class="setup-label">Family <span>who they're born to</span></div><div class="setup-card" id="familyBox"></div></div>
+    </div>
+    <button class="btn-primary" id="beginBtn" onclick="startLife()">Begin the record</button>
+    <button class="btn-secondary" onclick="startLife(null, true)">🎲 Random life <span style="font-weight:500;color:var(--muted)">· everything left to chance</span></button>
     <p class="audio-hint">Sound and music start when you begin.</p>
-    <button class="audio-link" id="audioSetupBtn" onclick="toggleAllAudio()">Sound: on</button>
-    <button class="audio-link" id="achSetupBtn" onclick="openAchievements()">🏆 Achievements</button>
+    <div class="setup-links"><button class="audio-link" onclick="openSettings()">⚙️ Settings</button><button class="audio-link" id="audioSetupBtn" onclick="toggleAllAudio()">Sound: on</button><button class="audio-link" id="achSetupBtn" onclick="openAchievements()">🏆 Achievements</button></div>
   </section>
 
   <section id="game">
@@ -466,14 +540,10 @@
           <div class="id-age"><span class="age-num" id="ageNum">0</span><span class="age-label" id="stageLabel">INFANT</span></div>
           <div class="tags" id="tags"></div>
         </div>
-        <button class="audio-btn" id="audioBtn" onclick="toggleAudioPanel()" aria-label="Settings" title="Settings"></button>
-      </div>
-      <div class="audio-panel" id="audioPanel" hidden>
-        <label class="aud-row"><span>Music</span><input type="checkbox" id="musicOn" onchange="setMusic(this.checked)"></label>
-        <input type="range" id="musicVol" min="0" max="100" value="55" oninput="setVol('music', this.value)" aria-label="Music volume">
-        <label class="aud-row"><span>Sound effects</span><input type="checkbox" id="sfxOn" onchange="setSfx(this.checked)"></label>
-        <input type="range" id="sfxVol" min="0" max="100" value="70" oninput="setVol('sfx', this.value)" aria-label="Sound effects volume">
-        <button class="audio-link" onclick="restartLife()">Start a new life</button>
+        <div class="id-btns">
+          <button class="audio-btn" id="audioBtn" onclick="openSettings()" aria-label="Settings" title="Settings"></button>
+          <button class="audio-btn" id="cheatBtn" onclick="openCheats()" aria-label="Cheats" title="Cheats" hidden>🛠️</button>
+        </div>
       </div>
 
       <div class="stats">
@@ -586,30 +656,290 @@ function freshState(name){
 // ---- the setup screen: gender and personality ----
 const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
   Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
-const setup = {gender:'random', traits:[]};
-function renderSetup(){
-  const g = document.getElementById('genderRow'), t = document.getElementById('traitGrid'); if(!g || !t) return;
-  g.innerHTML = [['female','Female'],['male','Male'],['nonbinary','Non-binary'],['random','Random']].map(([k, l]) => `<button class="sortbtn${setup.gender === k ? ' active' : ''}" onclick="setup.gender='${k}';renderSetup()">${l}</button>`).join('');
-  t.innerHTML = TRAITS.map(x => { const on = setup.traits.includes(x); return `<button class="trait-btn${on ? ' on' : ''}" ${!on && setup.traits.length >= 2 ? 'disabled' : ''} onclick="toggleSetupTrait('${x}')">${x}<small>${PLAYER_TRAIT_BLURB[x]}</small></button>`; }).join('');
-}
+const setup = {gender:'random', traits:[], skin:null, hair:null, hairStyle:null, talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
 function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
 const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
 const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
 function hairFor(gender){ return gender === 'female' ? pick([1, 2]) : gender === 'male' ? 0 : rint(0, 2); }
-function startLife(heir){
-  const name = heir ? heir.kid.name : (document.getElementById('nameInput').value.trim() || 'Unnamed');
+// ---------- Settings: kept on this device, apart from any one life ----------
+const SET_KEY = "ledger-settings";
+const SET_DEFAULTS = {theme:'light', textSize:'normal', motion:true, toasts:true, news:true, dots:true, deltas:true, logLen:40, difficulty:'normal', events:'normal', confirm:true, randomLife:false, cheats:false};
+function loadSettings(){
+  let s = null; try{ s = JSON.parse(localStorage.getItem(SET_KEY) || "null"); } catch(e){}
+  const out = Object.assign({}, SET_DEFAULTS);
+  if(s && typeof s === "object") for(const k in SET_DEFAULTS) if(k in s && typeof s[k] === typeof SET_DEFAULTS[k]) out[k] = s[k];
+  return out;
+}
+let SETTINGS = loadSettings();
+function saveSettings(){ try{ localStorage.setItem(SET_KEY, JSON.stringify(SETTINGS)); } catch(e){} }
+const DIFFICULTY = {easy:{label:'Easy', cost:0.85, death:0.7, caught:0.8}, normal:{label:'Normal', cost:1, death:1, caught:1}, hard:{label:'Hard', cost:1.15, death:1.3, caught:1.2}};
+const diff = k => (DIFFICULTY[SETTINGS.difficulty] || DIFFICULTY.normal)[k];
+const EVENT_PACE = {calm:0.6, normal:1, eventful:1.4};
+const evMult = () => EVENT_PACE[SETTINGS.events] || 1;
+const smooth = () => SETTINGS.motion ? "smooth" : "auto";
+const playing = () => !!state && document.body.classList.contains("playing");
+function applySettings(){
+  const root = document.documentElement;
+  const dark = SETTINGS.theme === 'dark' || (SETTINGS.theme === 'auto' && !!window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  root.dataset.theme = dark ? 'dark' : 'light';
+  const meta = document.querySelector('meta[name="theme-color"]'); if(meta) meta.content = dark ? '#141916' : '#EEF0E8';
+  root.style.setProperty('--zoom', {small:0.92, normal:1, large:1.1, huge:1.2}[SETTINGS.textSize] || 1);
+  root.classList.toggle('reduce-motion', !SETTINGS.motion);
+  const cb = document.getElementById('cheatBtn'); if(cb) cb.hidden = !SETTINGS.cheats;
+  if(!SETTINGS.dots) document.querySelectorAll('.tab-btn .dot').forEach(d => d.remove());
+}
+function setSetting(k, v){
+  if(!(k in SET_DEFAULTS) || typeof v !== typeof SET_DEFAULTS[k]) return;
+  SETTINGS[k] = v; saveSettings(); applySettings(); renderSettings();
+  if(playing()) render(); else renderSetup();
+}
+function openSettings(){ renderSettings(); document.getElementById('setModal').hidden = false; try{ audioUnlock(); } catch(e){} }
+function closeSettings(){ document.getElementById('setModal').hidden = true; }
+function resetSettings(ok){
+  if(ok !== true) return askConfirm("Put every setting back to its default?", "Reset", () => resetSettings(true));
+  SETTINGS = Object.assign({}, SET_DEFAULTS); saveSettings(); applySettings(); renderSettings();
+  if(playing()) render(); else renderSetup();
+}
+function resetAchievements(ok){
+  if(ok !== true) return askConfirm("Erase every achievement you have unlocked, across all lives? This can't be undone.", "Erase", () => resetAchievements(true));
+  ACH.unlocked = {}; ACH.stats = {lives:0, years:0}; saveAch(); achSetupLabel(); renderSettings();
+}
+function renderSettings(){
+  const body = document.getElementById('setBody'); if(!body) return;
+  const q = v => typeof v === 'string' ? "'" + v + "'" : v;
+  const seg = (k, opts) => '<div class="sortrow">' + opts.map(([v, l]) => `<button class="sortbtn${SETTINGS[k] === v ? ' active' : ''}" onclick="setSetting('${k}', ${q(v)})">${l}</button>`).join('') + '</div>';
+  const sw = (k, label, sub) => `<label class="set-row"><span>${label}${sub ? '<small>' + sub + '</small>' : ''}</span><input type="checkbox" class="switch" ${SETTINGS[k] ? 'checked' : ''} onchange="setSetting('${k}', this.checked)"></label>`;
+  const P = AUDIO.prefs;
+  let h = '<div class="set-group"><div class="set-title">Sound</div>' +
+    `<label class="set-row"><span>Music</span><input type="checkbox" class="switch" id="musicOn" ${P.music ? 'checked' : ''} onchange="setMusic(this.checked)"></label>` +
+    `<div class="set-row"><input type="range" id="musicVol" min="0" max="100" value="${Math.round(P.musicVol * 100)}" oninput="setVol('music', this.value)" aria-label="Music volume"></div>` +
+    `<label class="set-row"><span>Sound effects</span><input type="checkbox" class="switch" id="sfxOn" ${P.sfx ? 'checked' : ''} onchange="setSfx(this.checked)"></label>` +
+    `<div class="set-row"><input type="range" id="sfxVol" min="0" max="100" value="${Math.round(P.sfxVol * 100)}" oninput="setVol('sfx', this.value)" aria-label="Sound effects volume"></div></div>`;
+  h += '<div class="set-group"><div class="set-title">Display</div>' +
+    '<div class="set-row"><span>Theme</span></div>' + seg('theme', [['light', '☀️ Light'], ['dark', '🌙 Dark'], ['auto', 'Match device']]) +
+    '<div class="set-row"><span>Text size</span></div>' + seg('textSize', [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large'], ['huge', 'Huge']]) +
+    '<div class="set-row"><span>Log length<small>how many entries the log keeps on screen</small></span></div>' + seg('logLen', [[20, '20'], [40, '40'], [100, '100']]) +
+    sw('deltas', 'Show stat changes in the log', 'the small +happy, −money notes') +
+    sw('toasts', 'Pop-up notices', 'a short note after each action') +
+    sw('news', 'Newspaper', 'world headlines under the panels') +
+    sw('dots', 'Tab alert dots', 'a dot on tabs that need you') +
+    sw('motion', 'Animations', 'turn off to reduce motion') + '</div>';
+  h += '<div class="set-group"><div class="set-title">Gameplay</div>' +
+    '<div class="set-row"><span>Difficulty<small>' + {easy:'lower living costs, a longer life, police a little slower', normal:'the game as designed', hard:'higher living costs, a shorter life, police a little sharper'}[SETTINGS.difficulty] + '</small></span></div>' +
+    seg('difficulty', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']]) +
+    '<div class="set-row"><span>Life events<small>how often decisions and surprises come up</small></span></div>' + seg('events', [['calm', 'Calm'], ['normal', 'Normal'], ['eventful', 'Eventful']]) +
+    sw('confirm', 'Ask before big actions', 'quitting, dropping out, selling everything') + '</div>';
+  h += '<div class="set-group"><div class="set-title">New lives</div>' +
+    sw('randomLife', '🎲 Random life', 'everything about each new person is random at birth: name, looks, gifts, personality, family and fortune') + '</div>';
+  h += '<div class="set-group"><div class="set-title">Cheats</div>' +
+    sw('cheats', '🛠️ Cheat menu', 'adds a cheat button next to settings during a life') +
+    '<div class="set-note">Using any cheat turns off achievements for that life and for the heirs who inherit from it.' + (state && state.cheated ? ' <b>This life has used cheats.</b>' : '') + '</div></div>';
+  h += '<div class="set-group"><div class="set-title">Data</div><div class="swatches">' +
+    (playing() && state.alive ? '<button class="set-danger" onclick="closeSettings();restartLife()">Start a new life</button>' : '') +
+    '<button class="set-danger" onclick="resetSettings()">Reset settings</button><button class="set-danger" onclick="resetAchievements()">Erase achievements</button></div></div>';
+  body.innerHTML = h;
+}
+
+// ---------- Cheats: only when switched on in settings, and they cost the life its achievements ----------
+const CH = () => state.cheats || (state.cheats = {immortal:false, uncatchable:false});
+function cheat(key, arg){
+  if(!SETTINGS.cheats || !state || !state.alive) return;
+  const n = state.name, j = state.job, note = t => pushEntry(state.age, '🛠️ ' + t, {});
+  let done = true;
+  switch(key){
+    case 'money': state.money += inflR(arg, 100); note(`Cheat: ${fmt(inflR(arg, 100))} added.`); break;
+    case 'debt': state.loans = []; if(state.creditCard) state.creditCard.balance = 0; if(state.money < 0) state.money = 0; note('Cheat: every debt is wiped away.'); break;
+    case 'credit': state.creditScore = 850; state.bankrupt = false; state.bankruptUntilAge = 0; note('Cheat: perfect credit.'); break;
+    case 'stats': for(const k in state.stats) state.stats[k] = 100; note('Cheat: every stat maxed out.'); break;
+    case 'stat': if(arg && arg.k in state.stats) state.stats[arg.k] = clamp(Math.round(Number(arg.v) || 0)); break;
+    case 'heal': H().conditions = []; state.stats.health = Math.max(state.stats.health, 80); note(`Cheat: ${n} is cured of every illness.`); break;
+    case 'immortal': CH().immortal = !CH().immortal; break;
+    case 'uncatchable': CH().uncatchable = !CH().uncatchable; break;
+    case 'love': state.relationships.forEach(r => r.closeness = 100); note('Cheat: everyone adores them.'); break;
+    case 'partner':
+      if(state.age < 14 || hasRel('Partner', 'Spouse') || state.relationships.length >= 60){ done = false; break; }
+      { const r = newRel('Partner', {age:Math.max(14, state.age + rint(-3, 3)), closeness:80, origin:'by a stroke of fate'}); note(`Cheat: ${n} meets ${r.name}, and it clicks.`); } break;
+    case 'marry': { const p = state.relationships.find(r => r.type === 'Partner'); if(!p || state.age < 18){ done = false; break; } marry(p, `🛠️ Cheat: ${n} marries ${p.name}.`); } break;
+    case 'baby': {
+      if(state.age < 18 || state.relationships.length >= 60){ done = false; break; }
+      const p = state.relationships.find(r => LOVE.includes(r.type)), c = newRel('Child', {age:0, closeness:80, origin:'your child'}); if(p) c.coParent = p.id;
+      note(`Cheat: ${n} welcomes a baby, ${c.name}.`); } break;
+    case 'promote': case 'top': {
+      if(!j || j.track === 'Military' || j.track === 'Politics' || !CAREERS[j.track]){ done = false; break; }
+      const L = CAREERS[j.track], to = key === 'top' ? L.length - 1 : Math.min(L.length - 1, j.rank + 1);
+      if(to === j.rank){ done = false; break; }
+      j.rank = to; j.title = L[to].title; j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, to)); state.peakSalary = Math.max(state.peakSalary, j.salary);
+      note(`Cheat: ${n} is now ${j.title}, at ${fmt(j.salary)} a year.`); } break;
+    case 'degree': {
+      if(state.age < 18){ done = false; break; }
+      if(ED().program){ graduate(state.age); note(`Cheat: ${n} graduates on the spot.`); break; }
+      if(EDU_RANK[ED().level] < EDU_RANK.Bachelor){ degrees().push({degree:"Bachelor's", major:'Business', tier:'state', schoolName:'State University', tracks:[], age:state.age, gpa:90}); setLevel('Bachelor'); note(`Cheat: ${n} holds a bachelor's degree.`); }
+      else if(!['MD', 'JD', 'PhD'].some(hasDegree)){ degrees().push({degree:'PhD', major:(degrees().slice(-1)[0] || {}).major || 'Undecided', tracks:['Science', 'Education'], age:state.age, gpa:95}); setLevel('Doctorate'); note(`Cheat: ${n} holds a PhD.`); }
+      else done = false; } break;
+    case 'gpa': ED().gpa = 100; note('Cheat: a perfect GPA.'); break;
+    case 'smartskills': Object.keys(state.hobbies).concat(HOBBY_LIST.filter(h => state.age >= h.minAge).map(h => h.key)).forEach(k => bumpHobby(k, 100)); note('Cheat: a master of every hobby.'); break;
+    case 'langs': LANGUAGES.forEach(l => langs()[l] = 100); note('Cheat: fluent in every language.'); break;
+    case 'fame': { const f = FM(); f.level = Math.max(f.level, 80); f.peak = Math.max(f.peak, f.level); note(`Cheat: ${n} is famous.`); } break;
+    case 'biz': { const b = state.business; if(!b){ done = false; break; } b.value = Math.round(b.value * 2); b.reputation = 100; b.morale = 100; note(`Cheat: ${bizName(b)} is thriving.`); } break;
+    case 'record': { const k = CR(); k.record = []; k.probation = 0; k.heat = 0; k.open = []; k.appeal = null; k.pendingArrest = null; k.wanted = false; k.wantedYears = 0; k.lastConviction = null; note('Cheat: a spotless record.'); } break;
+    case 'free': { if(!CR().prison){ done = false; break; } release('served'); CR().case = null; note(`Cheat: ${n} walks out free.`); } break;
+    case 'refresh': state.done = {}; note("Cheat: this year's actions are available again."); break;
+    default: done = false;
+  }
+  if(!done) return renderCheats();
+  state.cheated = true;
+  render(); renderCheats();
+}
+function cheatStat(k, v){ cheat('stat', {k, v}); }
+function openCheats(){ if(!SETTINGS.cheats || !state) return; renderCheats(); document.getElementById('cheatModal').hidden = false; }
+function closeCheats(){ document.getElementById('cheatModal').hidden = true; }
+function renderCheats(){
+  const body = document.getElementById('cheatBody'); if(!body || !state) return;
+  const j = state.job, C = CH(), b = (k, label, dis, arg, on) => `<button class="${on ? 'on' : ''}" onclick="cheat('${k}'${arg !== undefined ? ', ' + arg : ''})" ${dis ? 'disabled' : ''}>${label}</button>`;
+  const noJob = !j || j.track === 'Military' || j.track === 'Politics', top = j && CAREERS[j.track] && j.rank >= CAREERS[j.track].length - 1;
+  let h = `<div class="set-note">${state.cheated ? '<span class="cheat-flag">Cheats used: achievements are off for this life.</span>' : 'Using any cheat turns off achievements for this life.'}</div>`;
+  if(!state.alive) return body.innerHTML = h + '<div class="set-note">This life is over.</div>';
+  h += '<div class="set-group"><div class="set-title">Money</div><div class="cheat-grid">' + b('money', '+ $10,000', false, 10000) + b('money', '+ $100,000', false, 100000) + b('money', '+ $1 million', false, 1e6) + b('money', '+ $1 billion', false, 1e9) +
+    b('debt', 'Wipe out all debt', !totalDebt() && state.money >= 0) + b('credit', 'Perfect credit score', state.creditScore >= 850 && !state.bankrupt) + '</div></div>';
+  h += '<div class="set-group"><div class="set-title">Stats</div>' + ['health', 'happy', 'smarts', 'looks'].map(k =>
+    `<label class="set-row"><span style="width:62px">${k[0].toUpperCase() + k.slice(1)}</span><input type="range" min="0" max="100" value="${state.stats[k]}" onchange="cheatStat('${k}', this.value)" aria-label="${k}"><b style="width:30px;text-align:right">${state.stats[k]}</b></label>`).join('') +
+    '<div class="cheat-grid">' + b('stats', 'Max every stat') + b('heal', 'Cure every illness', !H().conditions.length) + '</div></div>';
+  h += '<div class="set-group"><div class="set-title">Life</div><div class="cheat-grid">' + b('immortal', C.immortal ? '♾️ Immortal: on' : '♾️ Immortal: off', false, undefined, C.immortal) +
+    b('love', 'Everyone loves you', !state.relationships.length) + b('partner', 'Find a partner', state.age < 14 || hasRel('Partner', 'Spouse')) + b('marry', 'Marry your partner', state.age < 18 || !hasRel('Partner')) +
+    b('baby', 'Have a baby', state.age < 18) + b('refresh', "Redo this year's actions") + '</div></div>';
+  h += '<div class="set-group"><div class="set-title">Career and school</div><div class="cheat-grid">' + b('promote', 'Get promoted', noJob || top) + b('top', 'Jump to the top', noJob || top) +
+    b('degree', ED().program ? 'Graduate right now' : EDU_RANK[ED().level] < EDU_RANK.Bachelor ? "Instant bachelor's" : 'Instant PhD', state.age < 18 || (!ED().program && ['MD', 'JD', 'PhD'].some(hasDegree))) + b('gpa', 'Perfect GPA', ED().gpa >= 100) +
+    b('smartskills', 'Master every hobby') + b('langs', 'Fluent in every language', state.age < 6) + '</div></div>';
+  h += '<div class="set-group"><div class="set-title">Fame, business and the law</div><div class="cheat-grid">' + b('fame', 'Become famous', state.fame.level >= 80) + b('biz', 'Boost your business', !state.business) +
+    b('record', 'Clean criminal record', !CR().record.length && !CR().heat && !(CR().open || []).length) + b('free', 'Get out of prison', !CR().prison) +
+    b('uncatchable', C.uncatchable ? '🕶️ Never caught: on' : '🕶️ Never caught: off', false, undefined, C.uncatchable) + '</div></div>';
+  body.innerHTML = h;
+}
+
+// ---------- The new-life screen: looks, gifts, personality and family ----------
+const SKIN_TONES = ['#f1c8a0', '#e0ab7d', '#c68a5c', '#9c6a41', '#6e4a2c'];
+const HAIR_COLORS = ['#1b1410', '#3d2a1a', '#6b4423', '#9c7a3c', '#c9a227', '#7a7a7a', '#2b2b2b'];
+const TALENTS = {none:['Balanced', null], brains:['Brains', {smarts:15}], beauty:['Looks', {looks:15}], body:['Strong body', {health:15}], sunny:['Sunny nature', {happy:15}]};
+const WEALTH = {poor:['Poor', 5000, 30000], working:['Working class', 30000, 110000], middle:['Middle class', 110000, 420000], wealthy:['Wealthy', 550000, 2200000], rich:['Rich', 3000000, 12000000]};
+const estateFor = w => WEALTH[w] ? rint(WEALTH[w][1], WEALTH[w][2]) : rollFamilyEstate();
+const wealthLabel = v => v < 30000 ? 'poor' : v < 110000 ? 'working-class' : v < 420000 ? 'middle-class' : v < 2200000 ? 'wealthy' : 'rich';
+const cleanPersonName = s => String(s || '').replace(/[<>"&`\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+function setupName(gender, taken){
+  const pool = gender === 'female' || gender === 'male' ? NAMES[gender] : NAMES.unisex, free = pool.filter(x => !taken.includes(x));
+  return pick(free.length ? free : pool);
+}
+function randomNameInput(){ const g = setup.gender === 'random' ? rollGender() : setup.gender; document.getElementById('nameInput').value = setupName(g, []); }
+// a family for the setup screen; `wild` allows single parents, no parents and big families
+function genSetupFamily(wild){
+  const taken = [], take = g => { const x = setupName(g, taken); taken.push(x); return x; };
+  const fam = {mother:{on:true, name:take('female'), age:rint(24, 36)}, father:{on:true, name:take('male'), age:rint(26, 38)}, siblings:[]};
+  const count = wild ? pick([0, 0, 0, 1, 1, 1, 2, 2, 3, 4]) : Math.random() < 0.6 ? 1 : 0;
+  for(let i = 0; i < count; i++){ const g = rollGender(); fam.siblings.push({name:take(g), gender:g, age:rint(0, Math.min(10, Math.min(fam.mother.age, fam.father.age) - 17))}); }
+  if(wild){ const r = Math.random(); if(r < 0.1) fam.father.on = false; else if(r < 0.15) fam.mother.on = false; else if(r < 0.17){ fam.mother.on = false; fam.father.on = false; } }
+  return fam;
+}
+function setupFam(){ return setup.family || (setup.family = genSetupFamily(false)); }
+function setupSet(k, v){ setup[k] = v; if(k === 'gender') setup.hairStyle = null; renderSetup(); }
+function famField(who, field, v){
+  const f = setupFam(), p = who === 'mother' || who === 'father' ? f[who] : f.siblings[+who];
+  if(!p) return;
+  if(field === 'name'){ p.name = cleanPersonName(v); return; }                 // typing doesn't redraw, so the field keeps focus
+  if(field === 'age'){
+    const parentMin = Math.min(...[f.mother, f.father].filter(x => x.on).map(x => x.age), 60);
+    p.age = who === 'mother' || who === 'father' ? Math.max(16, Math.min(60, Math.round(Number(v) || 0))) : Math.max(0, Math.min(18, parentMin - 16, Math.round(Number(v) || 0)));
+    const lim = Math.max(0, Math.min(18, Math.min(...[f.mother, f.father].filter(x => x.on).map(x => x.age), 60) - 16));
+    f.siblings.forEach(s => s.age = Math.min(s.age, lim));
+  }
+  if(field === 'on') p.on = !p.on;
+  if(field === 'gender'){ p.gender = v; if(nameGender(p.name) && nameGender(p.name) !== v) p.name = setupName(v, []); }
+  renderSetup();
+}
+function addSibling(){ const f = setupFam(); if(f.siblings.length >= 5) return; const g = rollGender(); f.siblings.push({name:setupName(g, [f.mother.name, f.father.name].concat(f.siblings.map(s => s.name))), gender:g, age:rint(0, 4)}); setup.famOpen = true; renderSetup(); }
+function removeSibling(i){ setupFam().siblings.splice(i, 1); renderSetup(); }
+function rerollFamily(){ setup.family = genSetupFamily(false); renderSetup(); }
+function setupPreview(){
+  const g = setup.gender === 'random' ? 'nonbinary' : setup.gender;
+  if(setup.hairStyle == null) setup.hairStyle = hairFor(g);
+  return {age:24, appearance:{skin:setup.skin || SKIN_TONES[1], hair:setup.hair || HAIR_COLORS[2], hairStyle:setup.hairStyle}, stats:{happy:80, health:80, looks:60, smarts:50}};
+}
+function renderSetup(){
+  const g = document.getElementById('genderRow'), t = document.getElementById('traitGrid'); if(!g || !t) return;
+  const rnd = SETTINGS.randomLife, box = document.getElementById('setupChoices'), ban = document.getElementById('randomBanner'), begin = document.getElementById('beginBtn');
+  if(ban) ban.innerHTML = rnd ? '<div class="rnd-banner">🎲 <b>Random life is on.</b> Name, gender, looks, gifts, personality, family and fortune will all be left to chance. Type a name above to keep it, or turn this off in Settings.</div>' : '';
+  if(box) box.hidden = rnd;
+  if(begin) begin.textContent = rnd ? 'Begin a random life' : 'Begin the record';
+  const pill = (active, js, label) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  g.innerHTML = [['female','Female'],['male','Male'],['nonbinary','Non-binary'],['random','Random']].map(([k, l]) => pill(setup.gender === k, `setupSet('gender','${k}')`, l)).join('');
+  t.innerHTML = TRAITS.map(x => { const on = setup.traits.includes(x); return `<button class="trait-btn${on ? ' on' : ''}" ${!on && setup.traits.length >= 2 ? 'disabled' : ''} onclick="toggleSetupTrait('${x}')">${x}<small>${PLAYER_TRAIT_BLURB[x]}</small></button>`; }).join('');
+  const tr = document.getElementById('talentRow');
+  if(tr) tr.innerHTML = Object.keys(TALENTS).map(k => pill(setup.talent === k, `setupSet('talent','${k}')`, TALENTS[k][0])).join('');
+  const lb = document.getElementById('looksBox');
+  if(lb){
+    const sw = (list, key) => `<button class="swatch rnd${setup[key] ? '' : ' on'}" onclick="setupSet('${key}',null)" aria-label="Random" title="Random">?</button>` + list.map(c => `<button class="swatch${setup[key] === c ? ' on' : ''}" style="background:${c}" onclick="setupSet('${key}','${c}')" aria-label="Color ${c}"></button>`).join('');
+    lb.innerHTML = `<div class="looks"><div class="photo-frame">${drawAvatar(setupPreview())}</div><div class="looks-ctl"><span class="mini-label">Skin</span><div class="swatches">${sw(SKIN_TONES, 'skin')}</div><span class="mini-label">Hair</span><div class="swatches">${sw(HAIR_COLORS, 'hair')}</div></div></div>` +
+      '<div class="sortrow" style="margin:0">' + HAIR_STYLES.slice(0, 3).map((s, i) => pill(setup.hairStyle === i, `setupSet('hairStyle',${i})`, s)).join('') + '</div>';
+  }
+  const fb = document.getElementById('familyBox');
+  if(fb){
+    const f = setupFam(), parentMin = Math.min(...[f.mother, f.father].filter(x => x.on).map(x => x.age), 60);
+    let h = '<span class="mini-label">Family fortune</span><div class="sortrow" style="margin:0">' + pill(setup.wealth === 'random', "setupSet('wealth','random')", 'Random') + Object.keys(WEALTH).map(k => pill(setup.wealth === k, `setupSet('wealth','${k}')`, WEALTH[k][0])).join('') + '</div>';
+    const who = [f.mother.on ? 'mother ' + f.mother.name : '', f.father.on ? 'father ' + f.father.name : ''].filter(Boolean);
+    const older = f.siblings.filter(s => s.age > 0).length, twins = f.siblings.length - older;
+    const sibTxt = [older ? older + ' older sibling' + (older > 1 ? 's' : '') : '', twins === 1 ? 'a twin' : twins === 2 ? 'two siblings as triplets' : twins ? twins + ' siblings born the same day' : ''].filter(Boolean).join(' and ');
+    h += `<div class="set-note">${who.length ? 'Born to ' + who.join(' and ') : 'Raised without parents, in foster care'}${sibTxt ? ', with ' + sibTxt : ', an only child'}.</div>`;
+    if(setup.famOpen){
+      const row = (key, tag, p, removable) => `<div class="fam-row${p.on === false ? ' off' : ''}"><span class="tag">${tag}</span><input value="${p.name}" maxlength="20" aria-label="${tag} name" oninput="famField('${key}','name',this.value)" ${p.on === false ? 'disabled' : ''}><input type="number" min="${key === 'mother' || key === 'father' ? 16 : 0}" max="${key === 'mother' || key === 'father' ? 60 : Math.max(0, Math.min(18, parentMin - 16))}" value="${p.age}" aria-label="${tag} age" onchange="famField('${key}','age',this.value)" ${p.on === false ? 'disabled' : ''}>` +
+        (removable ? `<button class="fam-x" onclick="removeSibling(${key})" aria-label="Remove">✕</button>` : `<button class="fam-x" onclick="famField('${key}','on')">${p.on ? 'Remove' : 'Add'}</button>`) + '</div>';
+      h += '<span class="mini-label">Parents · name and age at your birth</span>' + row('mother', 'Mom', f.mother) + row('father', 'Dad', f.father);
+      h += '<span class="mini-label">Older siblings · name and age at your birth (0 for a twin)</span>';
+      f.siblings.forEach((s, i) => { h += row(String(i), s.gender === 'female' ? 'Sister' : s.gender === 'male' ? 'Brother' : 'Sibling', s, true) +
+        '<div class="sortrow" style="margin:-3px 0 2px">' + [['female','Sister'],['male','Brother'],['nonbinary','Sibling']].map(([k, l]) => `<button class="sortbtn${s.gender === k ? ' active' : ''}" style="padding:4px 9px;font-size:11px" onclick="famField('${i}','gender','${k}')">${l}</button>`).join('') + '</div>'; });
+      h += '<div class="swatches">' + (f.siblings.length < 5 ? '<button class="sortbtn" onclick="addSibling()">＋ Add a sibling</button>' : '') + '<button class="sortbtn" onclick="rerollFamily()">🎲 New family</button></div>';
+      h += '<span class="mini-label">Family pet</span><div class="sortrow" style="margin:0">' + [['none','None'],['dog','🐕 Dog'],['cat','🐈 Cat'],['random','Random']].map(([k, l]) => pill(setup.pet === k, `setupSet('pet','${k}')`, l)).join('') + '</div>';
+      h += '<button class="linkbtn" onclick="setupSet(\'famOpen\',false)">Done editing</button>';
+    } else h += '<div class="swatches"><button class="sortbtn" onclick="setupSet(\'famOpen\',true)">✏️ Edit family</button><button class="sortbtn" onclick="rerollFamily()">🎲 New family</button></div>';
+    fb.innerHTML = h;
+  }
+}
+// what the player picked, with anything left open settled now
+function setupChoice(){
+  const gender = setup.gender === 'random' ? rollGender() : setup.gender;
+  return {gender, traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairStyle != null && setup.gender !== 'random' ? setup.hairStyle : hairFor(gender),
+    talent:setup.talent, stats:null, wealth:setup.wealth, family:JSON.parse(JSON.stringify(setupFam())), pet:setup.pet === 'random' ? (Math.random() < 0.35 ? pick(['dog', 'cat']) : 'none') : setup.pet};
+}
+// a random life: every part of the person is rolled, including the extremes
+function randomSetup(){
+  const gender = rollGender(), stats = {};
+  ['health', 'happy', 'smarts', 'looks'].forEach(k => stats[k] = rint(15, 95));
+  return {gender, traits:rollTraits(), skin:pick(SKIN_TONES), hair:pick(HAIR_COLORS), hairStyle:hairFor(gender), talent:pick(Object.keys(TALENTS)), stats,
+    wealth:pick(Object.keys(WEALTH)), family:genSetupFamily(true), pet:Math.random() < 0.3 ? pick(['dog', 'cat', 'rabbit', 'parrot', 'fish']) : 'none'};
+}
+function startLife(heir, randomNow){
+  const rnd = !heir && (SETTINGS.randomLife || randomNow === true);
+  const c = heir ? null : rnd ? randomSetup() : setupChoice();
+  const gender = heir ? (heir.kid.gender || rollGender()) : c.gender;
+  const typed = heir ? '' : cleanPersonName(document.getElementById('nameInput').value);
+  const name = heir ? heir.kid.name : typed || setupName(gender, []);
   state = freshState(name);
   ACH.stats.lives++; saveAch();
-  state.gender = heir ? (heir.kid.gender || rollGender()) : (setup.gender === 'random' ? rollGender() : setup.gender);
-  state.appearance.hairStyle = hairFor(state.gender);
+  state.gender = gender;
+  state.appearance.hairStyle = heir ? hairFor(gender) : c.hairStyle;
   if(!heir){
-    state.traits = setup.traits.length ? setup.traits.slice() : rollTraits();
+    if(c.skin) state.appearance.skin = c.skin;
+    if(c.hair) state.appearance.hair = c.hair;
+    if(c.stats) Object.assign(state.stats, c.stats);
+    state.traits = c.traits.slice();
     state.traits.forEach(t => { const d = TRAIT_START[t]; if(d) for(const k in d) state.stats[k] = clamp(state.stats[k] + d[k]); });
-  }
+    const tal = (TALENTS[c.talent] || TALENTS.none)[1]; if(tal) for(const k in tal) state.stats[k] = clamp(state.stats[k] + tal[k]);
+    state.talent = c.talent; state.randomLife = rnd;
+  } else state.cheated = !!heir.old.cheated;          // a fortune made with cheats stays marked
   if(heir) state.ipos = (heir.old.ipos || []).slice();
   syncIpos();
   if(heir){ applyHeir(heir); state.namesFixed = false; fixNames(); state.appearance.skin = heir.old.appearance.skin; try{ checkAchievements(true); } catch(e){} }
-  else state.relationships = initFamily();
+  else {
+    state.relationships = initFamily(c.family, c.wealth);
+    if(c.pet && c.pet !== 'none' && speciesOf(c.pet)) newPet(c.pet, {age:rint(1, 4), bond:55});
+  }
   showScreen('game');
   const hb = document.getElementById('heirBox'); if(hb) hb.innerHTML = '';
   document.getElementById('choices').innerHTML = ''; document.getElementById('ageBtn').disabled = false;
@@ -619,7 +949,11 @@ function startLife(heir){
     pushEntry(state.age, `${name} steps into a new chapter at ${state.age}, carrying the family line forward as generation ${state.generation}.`, {});
     pushEntry(state.age, inheritText(name, p), {});
   } else { state.world.year--; worldStart(0); worldEnd(0); }
-  if(!heir) pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}. The record begins.`, {});
+  if(!heir){
+    const R = state.relationships, mom = R.find(r => r.type === 'Mother'), dad = R.find(r => r.type === 'Father'), sibs = R.filter(r => r.type === 'Sibling'), pet = myPets()[0];
+    const fam = mom && dad ? `${mom.name} and ${dad.name}` : mom ? `${mom.name}, a single mother` : dad ? `${dad.name}, a single father` : '';
+    pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}, ${fam ? 'to ' + fam + ', ' : 'and is placed in foster care, '}in a ${wealthLabel(state.famEstate)} family${sibs.length ? (sibs.length === 1 ? (sibs[0].age === 0 ? ', with a twin ' + relLabel(sibs[0]) + ', ' : ', joining an older ' + relLabel(sibs[0]) + ', ') + sibs[0].name : ', joining ' + sibs.length + ' siblings') : ''}${pet ? ', and ' + (/^[aeiou]/i.test(petLabel(pet)) ? 'an ' : 'a ') + petLabel(pet) + ' named ' + pet.name : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}.${rnd ? ' Everything about this life was left to chance.' : ''} The record begins.`, {});
+  }
   yearStart = serialize();          // a decision opened before the first age-up must not save an older life
   render();
   audioStartLife();
@@ -677,13 +1011,14 @@ function resumeGame(){
 }
 function newRecord(){ clearSave(); state = null; location.reload(); }
 function restartLife(ok){
-  document.getElementById("audioPanel").hidden = true;
+  closeSettings();
   if(state && state.alive && ok !== true) return askConfirm("Start a new life? " + state.name + "'s life will be lost.", "Start over", () => restartLife(true));
   newRecord();
 }
 // ---------- small UI helpers: confirmations and toasts ----------
 let confirmAction = null;
 function askConfirm(text, yes, fn){
+  if(!SETTINGS.confirm){ fn(); return; }
   confirmAction = fn;
   document.getElementById("modalText").textContent = text;
   document.getElementById("modalYes").textContent = yes;
@@ -696,7 +1031,8 @@ function closeConfirm(go){
   if(go && fn) fn();
 }
 let inYear = false, toastItems = [], toastTimer = null, toastQueued = false;
-function queueToast(text, dtext){
+function queueToast(text, dtext, force){
+  if(!force && !SETTINGS.toasts) return;
   toastItems.push({text, dtext});
   if(!toastQueued){ toastQueued = true; setTimeout(showToast, 0); }
 }
@@ -783,16 +1119,17 @@ function pushEntry(age, text, delta){
   try{ achText(text); } catch(e){}
 }
 
-function drawAvatar(){
-  const { skin, hair, hairStyle } = state.appearance;
-  const stage = stageFor(state.age);
-  const { happy, health, looks, smarts } = state.stats;
+function drawAvatar(st){
+  st = st || state;
+  const { skin, hair, hairStyle } = st.appearance;
+  const stage = stageFor(st.age);
+  const { happy, health, looks, smarts } = st.stats;
   const young = ['INFANT','TODDLER'].includes(stage);
   const kid = ['CHILD','TEENAGER'].includes(stage);
   const old = ['MIDDLE AGE','ELDER'].includes(stage);
   const headR = young ? 46 : kid ? 40 : 38;
   const cy = young ? 108 : 100;
-  const hairColor = state.appearance.dye || ((old && health < 40) || stage === 'ELDER' ? '#c9c3b4' : hair);
+  const hairColor = st.appearance.dye || ((old && health < 40) || stage === 'ELDER' ? '#c9c3b4' : hair);
 
   // mouth by happiness
   let mouth;
@@ -802,7 +1139,7 @@ function drawAvatar(){
 
   const blush = health > 55 ? 0.35 : 0.08;
   const pale = health < 25 ? 'saturate(0.55) brightness(0.92)' : 'none';
-  const glasses = smarts > 74 || (!young && !!(state.health && state.health.glasses));
+  const glasses = smarts > 74 || (!young && !!(st.health && st.health.glasses));
   const sparkle = looks > 74;
   const wrinkles = old ? `
     <path d="M66,${cy-2} q10,4 18,0" stroke="rgba(0,0,0,.25)" stroke-width="1.2" fill="none"/>
@@ -2350,13 +2687,13 @@ function ageUp(){
   if(!state || !state.alive) return;
   state.panel = null; inYear = true;
   try{ ageUpYear(); if(state.alive) recordYearHistory(); if(state.alive && newsDraft){ worldEnd(state.age); render(); } } finally{ inYear = false; newsDraft = null; }
-  window.scrollTo({top:0, behavior:"smooth"});
+  window.scrollTo({top:0, behavior:smooth()});
 }
 function ageUpYear(){
   yearStart = serialize();
   state.age += 1;
   const a = state.age;
-  ACH.stats.years++; saveAch();
+  if(!state.cheated){ ACH.stats.years++; saveAch(); }
 
   // death chance: negligible through childhood, then a realistic curve that rises with age and falls with good health
   const fatal = deathRoll(a);
@@ -2408,9 +2745,9 @@ function ageUpYear(){
   if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted){ render(); return; }
 
   // some years carry a second, smaller moment alongside the main one
-  if(Math.random() < 0.35){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
+  if(Math.random() < Math.min(0.85, 0.35 * evMult())){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
 
-  const useChoice = Math.random() < (a < 18 ? 0.55 : 0.35);
+  const useChoice = Math.random() < Math.min(0.9, (a < 18 ? 0.55 : 0.35) * evMult());
   if(useChoice){
     const ev = weightedEvent(CHOICE_EVENTS, a);
     if(ev){
@@ -2429,11 +2766,11 @@ let choiceSeq = 0;
 let inChoice = false;
 function presentCustom(promptText, opts){
   const box = document.getElementById('choices');
-  if(!inYear && !inChoice && box.querySelector('.choice-btn')){ queueToast('Answer the decision above first.', ''); return false; }
+  if(!inYear && !inChoice && box.querySelector('.choice-btn')){ queueToast('Answer the decision above first.', '', true); return false; }
   const seq = ++choiceSeq;
   box.innerHTML = `<div class="decision"><div class="decision-label">Decision · age ${state.age}</div>${promptText}</div>` +
     opts.map((o,i)=>`<button class="choice-btn" data-idx="${i}"><span class="num">${i + 1}</span>${o.label}</button>`).join('');
-  window.scrollTo({top:0, behavior:"smooth"});
+  window.scrollTo({top:0, behavior:smooth()});
   document.getElementById('ageBtn').disabled = true;
   audioPrompt();
   box.querySelectorAll('.choice-btn').forEach(btn=>{
@@ -3536,8 +3873,15 @@ function bondLabel(r){
   return c >= 85 ? "Best friend" : c >= 70 ? "Close friend" : c >= 45 ? "Friend" : c >= 20 ? "Acquaintance" : "Fading";
 }
 
-function initFamily(){
-  state.famEstate = rollFamilyEstate();
+function initFamily(plan, wealth){
+  state.famEstate = estateFor(wealth || 'random');
+  if(plan){
+    const rels = [], par = [plan.mother, plan.father].filter(p => p.on), lim = Math.max(0, Math.min(18, Math.min(...par.map(p => p.age), 60) - 16));
+    if(plan.mother.on) rels.push(makeRel("Mother", {name:cleanPersonName(plan.mother.name) || undefined, age:Math.max(16, Math.min(60, plan.mother.age)), closeness:70 + rint(-10,15), livingTogether:true, origin:"family"}));
+    if(plan.father.on) rels.push(makeRel("Father", {name:cleanPersonName(plan.father.name) || undefined, age:Math.max(16, Math.min(60, plan.father.age)), closeness:65 + rint(-10,15), livingTogether:true, origin:"family"}));
+    plan.siblings.slice(0, 5).forEach(sb => rels.push(makeRel("Sibling", {name:cleanPersonName(sb.name) || undefined, gender:sb.gender, age:Math.max(0, Math.min(lim, sb.age)), closeness:55 + rint(-15,20), origin:"family"})));
+    return rels;
+  }
   const rels = [
     makeRel("Mother", {age: state.age + 27 + rint(0,6), closeness: 70 + rint(-10,15), livingTogether:true, origin:"family"}),
     makeRel("Father", {age: state.age + 29 + rint(0,6), closeness: 65 + rint(-10,15), livingTogether:true, origin:"family"}),
@@ -5318,8 +5662,9 @@ function condMort(c){
 }
 // what kills you this year, if anything: an illness, or age and general health
 function deathRoll(a){
-  for(const c of H().conditions){ const m = condMort(c); if(m && Math.random() < m) return c; }
-  return Math.random() < mortalityChance(a, state.stats.health) * 0.8 ? 'age' : null;   // illnesses now carry part of the risk
+  if(state.cheats && state.cheats.immortal) return null;
+  for(const c of H().conditions){ const m = condMort(c) * diff('death'); if(m && Math.random() < m) return c; }
+  return Math.random() < mortalityChance(a, state.stats.health) * 0.8 * diff('death') ? 'age' : null;   // illnesses now carry part of the risk
 }
 function diagnose(c, how){
   c.known = true;
@@ -5702,7 +6047,8 @@ function heatLabel(h){ return h >= 70 ? "Wanted by police" : h >= 40 ? "High" : 
 function skillTier(s){ return s >= 70 ? "Mastermind" : s >= 40 ? "Professional" : s >= 15 ? "Amateur" : "Beginner"; }
 function crimeRisk(c){
   const k = CR();
-  const p = c.risk * (state.world.fx.crackdown ? 1.4 : 1) * (1 + k.heat / 80) * (1 - k.skill / 200) * (1 - state.stats.smarts / 400) * (k.probation > 0 ? 1.2 : 1);
+  if(state.cheats && state.cheats.uncatchable) return 0;
+  const p = diff('caught') * c.risk * (state.world.fx.crackdown ? 1.4 : 1) * (1 + k.heat / 80) * (1 - k.skill / 200) * (1 - state.stats.smarts / 400) * (k.probation > 0 ? 1.2 : 1);
   return Math.max(0.03, Math.min(0.92, p));
 }
 function crimePay(c){
@@ -6048,6 +6394,7 @@ function appealPrompt(){
 }
 // detectives keep working the cases you thought you got away with
 function openInvestigation(c, amt){
+  if(state.cheats && state.cheats.uncatchable) return;
   CR().open = CR().open || [];
   CR().open.push({key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years, amt: amt || 0, age: state.age, ev: rint(5, 30)});
 }
@@ -6914,7 +7261,7 @@ function spouseIncome(sp){
 function livingEstimate(){
   const cum = state.econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, sp = hasRel('Spouse');
   const own = state.assets.some(x => x.category === 'Homes' && !x.rental), kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
-  return Math.round((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1) * (felon() ? 1.1 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult));
+  return Math.round(((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1) * (felon() ? 1.1 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult)) * (state.world.costMult || 1) * diff('cost'));
 }
 // sell investments to cover a negative balance before debts get out of hand
 function coverWithInvestments(a){
@@ -6986,7 +7333,7 @@ function yearlyFinances(a){
     if(L.happy) applyDelta({happy: L.happy});
   }
   if(a >= 65) expenses = Math.round(expenses * 0.85);                     // downsized, simpler living
-  expenses = Math.round(expenses * (state.world.costMult || 1));
+  expenses = Math.round(expenses * (state.world.costMult || 1) * diff('cost'));
   const raw = flow.housing + flow.living + flow.kids + flow.insurance;
   if(raw > 0) ['housing', 'living', 'kids', 'insurance'].forEach(k => flow[k] = Math.round(flow[k] * expenses / raw));
   flow.incomeTotal = income;
@@ -8114,7 +8461,7 @@ function workYear(a){
 
 function togglePanel(name){
   state.panel = state.panel === name ? null : name; renderPanel();
-  if(state.panel) window.scrollTo({top:0, behavior:"smooth"});
+  if(state.panel) window.scrollTo({top:0, behavior:smooth()});
 }
 const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities, travel & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Fame & social media", hob:"Hobbies", crime:"Crime & the law"};
 function mePanelHtml(){
@@ -8124,6 +8471,7 @@ function mePanelHtml(){
     (traits ? "<br>Personality: " + traits : "") +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
+  if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
   h += goalsHtml() + selfHtml() + styleHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
@@ -8946,7 +9294,7 @@ function tabAlerts(){
   return al;
 }
 function updateTabDots(){
-  const al = tabAlerts();
+  const al = SETTINGS.dots ? tabAlerts() : {};
   document.querySelectorAll('.tab-btn').forEach(b => {
     const name = b.dataset.label || (b.dataset.label = [...b.childNodes].filter(x => x.nodeType === 3).map(x => x.textContent).join('').trim());
     let d = b.querySelector('.dot'); const why = al[b.dataset.panel];
@@ -9370,13 +9718,14 @@ function audioDeath(){ try{ AUDIO.dead = true; AUDIO.queue = []; stopMusic(3); s
 
 // ---- settings ----
 const ICON_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>';
+const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const ICON_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6"/><path d="m21 9-5 6"/></svg>';
 function audioSyncUI(){
   try{
     const P = AUDIO.prefs, el = id => document.getElementById(id);
     const m = el("musicOn"), s = el("sfxOn"), mv = el("musicVol"), sv = el("sfxVol"), b = el("audioBtn"), sb = el("audioSetupBtn");
     if(m) m.checked = P.music; if(s) s.checked = P.sfx; if(mv) mv.value = Math.round(P.musicVol * 100); if(sv) sv.value = Math.round(P.sfxVol * 100);
-    if(b) b.innerHTML = (P.music || P.sfx) ? ICON_ON : ICON_OFF;
+    if(b) b.innerHTML = ICON_GEAR;
     if(sb) sb.textContent = (P.music || P.sfx) ? "Sound: on" : "Sound: off";
   } catch(e){}
 }
@@ -9399,7 +9748,7 @@ function setVol(kind, v){
   audioSavePrefs();
 }
 function toggleAllAudio(){ const on = !(AUDIO.prefs.music || AUDIO.prefs.sfx); setSfx(on); setMusic(on); }
-function toggleAudioPanel(){ const p = document.getElementById("audioPanel"); if(p) p.hidden = !p.hidden; audioUnlock(); audioSyncUI(); }
+function toggleAudioPanel(){ openSettings(); }
 function audioWire(){
   audioLoadPrefs(); audioSyncUI();
   if(typeof document === "undefined" || typeof document.addEventListener !== "function") return;
@@ -9416,6 +9765,7 @@ function audioWire(){
 }
 
 function die(cause){
+  if(state.cheats && state.cheats.immortal){ pushEntry(state.age, `🛠️ ${state.name} should have died, but cheats death instead.`, {health:30}); return; }
   state.alive = false;
   const illness = cause && cause !== 'age' ? CONDITIONS[cause.key] : null;
   audioDeath();
@@ -11506,7 +11856,7 @@ const achCount = () => ACHIEVEMENTS.filter(x => ACH.unlocked[x.k]).length;
 const achPoints = () => ACHIEVEMENTS.reduce((t, x) => t + (ACH.unlocked[x.k] ? ACH_TIERS[x.tier].pts : 0), 0);
 function lifeAch(){ const a = state.ach || (state.ach = {}); a.events = a.events || []; a.got = a.got || []; a.peakDebt = a.peakDebt || 0; a.ms = a.ms || {}; return a; }
 function unlockAch(x){
-  if(!state || ACH.unlocked[x.k]) return;
+  if(!state || ACH.unlocked[x.k] || state.cheated) return;
   ACH.unlocked[x.k] = {age: state.age, who: state.name, gen: state.generation || 1, at: Date.now()};
   lifeAch().got.push(x.k);
   saveAch();
@@ -11588,6 +11938,7 @@ function achGameOverHtml(){
   let h = '';
   const ms = milestonesHtml(0);
   if(ms) h += '<div class="plabel">Highlights of a life</div>' + ms;
+  if(state.cheated) h += '<div class="status">🛠️ Cheats were used in this life, so it earned no achievements.</div>';
   const goals = goalsList().filter(g => goalDef(g.k));
   if(goals.length) h += '<div class="plabel">Life goals</div><div class="invrow">' + goals.map(g => { const d = goalDef(g.k); return `<div class="goal${g.done != null ? ' done' : ''}"><span class="oi" aria-hidden="true">${g.done != null ? '✓' : d.icon}</span><div class="goal-tx">${d.label}<small>${g.done != null ? 'Reached at age ' + g.done : 'Set at age ' + g.set + ', never reached'}</small></div></div>`; }).join('') + '</div>';
   h += crossroadsHtml();
@@ -11619,18 +11970,20 @@ function render(){
     document.getElementById(`val-${k}`).textContent = state.stats[k];
   }
   queueSave();
-  const np = document.getElementById('news'); if(np) np.innerHTML = state.world ? newsHtml() : '';
+  const np = document.getElementById('news'); if(np) np.innerHTML = state.world && SETTINGS.news ? newsHtml() : '';
   const log = document.getElementById('log');
   const groups = [];
-  state.log.slice(-40).reverse().forEach(e => {
+  state.log.slice(-SETTINGS.logLen).reverse().forEach(e => {
     const g = groups[groups.length - 1];
     if(g && g.age === e.age) g.items.push(e); else groups.push({age:e.age, items:[e]});
   });
   log.innerHTML = groups.map(g => `<div class="log-year${g.age === state.age ? ' current' : ''}"><div class="log-age">${g.age === state.age ? 'This year · ' : ''}Age ${g.age}</div>` +
-    g.items.map(e => `<div class="entry">${e.text} ${e.dtext}</div>`).join('') + '</div>').join('');
+    g.items.map(e => `<div class="entry">${e.text} ${SETTINGS.deltas ? e.dtext : ''}</div>`).join('') + '</div>').join('');
   audioAfterRender();
 }
 
+applySettings();
+try{ if(window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if(SETTINGS.theme === 'auto') applySettings(); }); } catch(e){}
 audioWire();
 renderSetup();
 achSetupLabel();
@@ -11641,6 +11994,8 @@ window.addEventListener("pagehide", saveGame);
 document.addEventListener("keydown", e => {
   if(!document.getElementById("modal").hidden){ if(e.key === "Escape") closeConfirm(false); return; }
   if(!document.getElementById("achModal").hidden){ if(e.key === "Escape") closeAchievements(); return; }
+  if(!document.getElementById("setModal").hidden){ if(e.key === "Escape") closeSettings(); return; }
+  if(!document.getElementById("cheatModal").hidden){ if(e.key === "Escape") closeCheats(); return; }
   if(!state || !state.alive || e.target.closest("input, textarea, select") || e.ctrlKey || e.metaKey || e.altKey) return;
   const opts = document.querySelectorAll('#choices .choice-btn');
   if(opts.length && /^[1-9]$/.test(e.key) && opts[+e.key - 1]){ e.preventDefault(); opts[+e.key - 1].click(); return; }
