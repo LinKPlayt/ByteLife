@@ -34,6 +34,10 @@
     padding-bottom:env(safe-area-inset-bottom,0px);
   }
   *{box-sizing:border-box;}
+  /* phones: quick repeated taps should press buttons, not zoom the page (pinch zoom still works) */
+  html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+  html, body, *{ touch-action:manipulation; }
+  button, .tab-btn, .sortbtn, .opt{ -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
   html,body{height:100%;}
   html{scroll-padding-top:env(safe-area-inset-top,0px);}
   body{
@@ -204,7 +208,7 @@
   .audio-link{ display:block; margin:2px auto 0; background:none; border:none; color:var(--accent); font-size:12.5px; padding:6px 10px; text-decoration:underline; cursor:pointer; }
   .ticket{ display:flex; flex-direction:column; gap:8px; margin-top:4px; padding-top:11px; border-top:1px solid var(--line); }
   .amt-input{
-    width:100%; padding:12px 14px; font-family:'Manrope',sans-serif; font-size:15px;
+    width:100%; padding:12px 14px; font-family:'Manrope',sans-serif; font-size:16px;
     background:var(--surface-2); border:1.5px solid var(--line); color:var(--ink); border-radius:12px;
   }
   .amt-input:focus{ outline:none; border-color:var(--accent); background:var(--surface); }
@@ -460,7 +464,7 @@
   .mini-label{ font-size:11px; font-weight:700; color:var(--muted); }
   .fam-row{ display:grid; grid-template-columns:auto 1fr 58px auto; gap:6px; align-items:center; font-size:12.5px; }
   .fam-row .tag{ font-size:11px; font-weight:800; color:var(--accent); background:var(--accent-soft); border-radius:6px; padding:2px 6px; white-space:nowrap; }
-  .fam-row input{ width:100%; min-width:0; padding:7px 8px; font-family:'Manrope',sans-serif; font-size:13px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); color:var(--ink); }
+  .fam-row input{ width:100%; min-width:0; padding:6px 8px; font-family:'Manrope',sans-serif; font-size:16px; border:1px solid var(--line); border-radius:9px; background:var(--surface-2); color:var(--ink); }
   .fam-row.off{ opacity:.5; }
   .fam-x{ background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:8px; padding:5px 8px; font-size:12px; }
   .rnd-banner{ background:var(--accent-soft); border:1px dashed var(--accent); border-radius:14px; padding:11px 13px; font-size:13.5px; line-height:1.45; color:var(--ink); text-align:left; }
