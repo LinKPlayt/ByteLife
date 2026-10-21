@@ -1184,7 +1184,7 @@ const CHOICE_EVENTS = [
   // ---- ages 0-5: early development & parents' decisions ----
   [0,2,n=>`${n}'s parents are deciding how to handle nighttime fussiness.`,
     {label:'Rock them to sleep every night', delta:{happy:5}},
-    {label:'Let them learn to self-soothe', delta:{health:2,happy:-1}}],
+    {label:'Let them learn to self-soothe', delta:{health:2,happy:-1}},'parents'],
   [1,3,n=>`${n} is learning to walk and keeps tumbling into the furniture.`,
     {label:'Baby-proof the whole house', delta:{health:4}},
     {label:'Let them figure it out their own way', delta:{happy:3,health:-2}}],
@@ -1193,10 +1193,10 @@ const CHOICE_EVENTS = [
     {label:'Hold the line and ride it out', delta:{smarts:3,happy:-3}}],
   [2,5,n=>`${n} is starting to talk, and their parents debate which activities to encourage.`,
     {label:'Books and quiet play', delta:{smarts:5}},
-    {label:'Running around outside', delta:{health:5,happy:2}}],
+    {label:'Running around outside', delta:{health:5,happy:2}},'parents'],
   [3,5,n=>`${n}'s parents are picking a preschool.`,
     {label:'A structured academic preschool', delta:{smarts:5,happy:-2}},
-    {label:'A playful, hands-on preschool', delta:{happy:5,smarts:-1}}],
+    {label:'A playful, hands-on preschool', delta:{happy:5,smarts:-1}},'parents'],
   // ---- ages 6-12: school, friends, sports, bullying, grades, family ----
   [6,10,n=>`${n} is nervous about making friends on the first day of school.`,
     {label:'Walk up and introduce yourself', delta:{happy:5,looks:1}},
@@ -1324,7 +1324,7 @@ const CHOICE_EVENTS = [
     {label:'Stay home', delta:{smarts:1,friends:-2}}],
   [15,17,n=>`${n} is learning to drive.`,
     {label:'Practice with a parent', delta:{family:5,smarts:1}},
-    {label:'Pay for lessons ($300)', delta:{money:-300,smarts:2}}],
+    {label:'Pay for lessons ($300)', delta:{money:-300,smarts:2}},'parents'],
   [16,17,n=>`${n} is asked to prom.`,
     {label:'Say yes', delta:{happy:6,money:-200}},
     {label:'Go with a group of friends', delta:{happy:4,friends:4}},null,1,
@@ -1423,7 +1423,7 @@ const CHOICE_EVENTS = [
   // ---- pets ----
   [6,12,n=>`${n} begs their parents for a pet.`,
     {label:'Get a hamster', delta:{happy:5}, effect:()=>{ newPet('hamster', {bond:50}); }},
-    {label:'Get a goldfish', delta:{happy:3}, effect:()=>{ newPet('fish', {bond:40}); }},'nopet',1.5,
+    {label:'Get a goldfish', delta:{happy:3}, effect:()=>{ newPet('fish', {bond:40}); }},'nopet&parents',1.5,
     {label:'Not until they are older', delta:{happy:-3}}],
   [20,60,n=>`${n} walks past a pet adoption fair.`,
     {label:'Adopt a dog ($250)', delta:{money:-250,happy:8}, effect:()=>{ newPet('dog', {age:rint(1,6), bond:40}); }},
@@ -1468,7 +1468,7 @@ const CHOICE_EVENTS = [
   // ---- more choices ----
   [6,10,n=>`${n} finds a stray kitten in the rain.`,
     {label:'Beg to keep it', risk:0.5, win:{happy:8}, lose:{happy:-4}, winText:'Their parents give in.', loseText:'It goes to a shelter instead.', onWin:()=>{ if(myPets().length < 6) newPet('cat', {age:0}); }},
-    {label:'Take it to a shelter', delta:{happy:2,smarts:1}}],
+    {label:'Take it to a shelter', delta:{happy:2,smarts:1}},'parents'],
   [8,12,n=>`${n} is offered a part in a local commercial.`,
     {label:'Do it', delta:{happy:5,money:300,fame:2}},
     {label:'Too embarrassing', delta:{}}],
@@ -1761,7 +1761,7 @@ const CHOICE_EVENTS = [
     {label:'Meet them this weekend', risk:0.6, win:{happy:7}, lose:{happy:-5,money:-200}, winText:'The date is wonderful.', loseText:'They are nothing like their profile.'},
     {label:'Take it slow', delta:{happy:1,smarts:1}},'single',1.2],
   [20,45,n=>`${n}'s ex wants to get back together.`,
-    {label:'Give it another try', risk:0.4, win:{happy:8}, lose:{happy:-8}, winText:'It works better the second time.', loseText:'The same problems come right back.'},
+    {label:'Give it another try', risk:0.4, win:{happy:8}, lose:{happy:-8}, winText:'It works better the second time.', loseText:'The same problems come right back.', onWin:()=>{ if(!hasRel('Partner', 'Spouse') && state.relationships.length < 60) newRel('Partner', {age:clampAge(state.age + rint(-3, 3)), closeness:60, origin:'an old flame'}); }},
     {label:'Close that door for good', delta:{happy:2,smarts:1}},'single',1],
   [22,50,n=>`${n}'s partner gets an amazing job offer that would mean long hours apart.`,
     {label:'Encourage them to take it', delta:{partner:8,happy:-2}},
@@ -1857,7 +1857,7 @@ const COND = {
   poor:()=>state.money < 0, rich:()=>state.money > infl(20000), saver:()=>state.savings >= infl(5000),
   afford:()=>state.money + state.savings >= infl(15000), indebted:()=>totalDebt() > infl(5000),
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
-  kids:()=>hasRel('Child'), youngKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 5 && r.age <= 17), teenKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 15 && r.age <= 19), adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
+  kids:()=>hasRel('Child'), minorKid:()=>state.relationships.some(r => r.type === 'Child' && r.age < 18), golden:()=>state.relationships.some(r => r.type === 'Spouse' && r.marriedAge != null && state.age - r.marriedAge >= 50), youngKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 5 && r.age <= 17), teenKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 15 && r.age <= 19), adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
   friends:()=>hasRel('Friend'),
   home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>roadVehicles().length > 0, nocar:()=>!roadVehicles().length, traveler:()=>!!state.travel && state.travel.trips >= 3,
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
@@ -1912,7 +1912,7 @@ const BANK = [
   E(13,17,'{n} is asked to the school dance by {f}',[['and has a night to remember',{happy:8,looks:2}],['and it ends awkwardly',{happy:-4}]]),
   E(13,17,'{n} stays up all night texting {f}',[['and feels fantastic anyway',{happy:4,health:-2}],['and sleeps through first period',{smarts:-2,health:-3}]]),
   E(13,17,'{n} crams for a big exam',[['and aces it',{smarts:5,happy:3}],['and blanks halfway through',{smarts:-1,happy:-5}]]),
-  E(14,17,'{n} argues with a parent about curfew',[['and wins a later time',{happy:4}],['and loses phone privileges',{happy:-5}]]),
+  E(14,17,'{n} argues with a parent about curfew',[['and wins a later time',{happy:4}],['and loses phone privileges',{happy:-5}]],'parents'),
   E(14,17,'{n} goes to a first concert with {f}',[['and loses their voice screaming along',{happy:9,health:-1}],['and gets separated from the group',{happy:-3}]]),
   E(15,17,'{n} tries a risky shortcut to look cooler',[['and it backfires badly',{looks:-3,health:-4,happy:-3}],['and gets away with it',{looks:3,happy:2}]]),
   E(13,17,'{n} joins the {h} club',[['and finds their people',{happy:7,smarts:2}],['and never quite fits in',{happy:-2}]]),
@@ -2111,7 +2111,7 @@ const BANK = [
   E(65,120,"{n} has cataract surgery",[["and the world snaps back into focus",{health:3,happy:6,money:-600}]]),
   E(65,120,"{n} slips on an icy step",[["and gets away with only bruises",{health:-3}],["and spends weeks in recovery",{health:-9,happy:-5,money:-900}]]),
   E(65,120,"{n} joins a community choir",[["and finds a whole new circle of friends",{happy:8,friends:4}],["and sings only in the shower",{happy:2}]]),
-  E(65,120,"{n} learns to video call the grandkids",[["and does it with great pride",{happy:7,family:5,smarts:2}]],"kids"),
+  E(65,120,"{n} learns to video call the grandkids",[["and does it with great pride",{happy:7,family:5,smarts:2}]],"grandkids"),
   E(65,120,"{n} writes down their life story",[["and the family treasures it",{smarts:3,happy:7,family:4}]]),
   E(65,120,"{n} plants a vegetable garden",[["and shares the harvest with the neighbors",{happy:6,health:2}],["and feeds most of it to the rabbits",{happy:2}]]),
   E(65,120,"{n} gets a new knee",[["and walks without pain for the first time in years",{health:6,happy:5,money:-900}],["and finds recovery slow and frustrating",{health:-3,happy:-3,money:-900}]]),
@@ -2120,7 +2120,7 @@ const BANK = [
   E(90,90,"{n} turns ninety and makes the local news",[["and credits good food and bad jokes",{happy:12}]]),
   E(100,120,"{n} celebrates a hundredth birthday",[["and receives a letter from the head of state",{happy:14,family:6}]]),
   E(65,120,"{n} starts a daily crossword habit",[["and keeps the mind sharp",{smarts:3,happy:3}]]),
-  E(65,120,"{n} teaches a grandchild a family recipe",[["and the kitchen fills with laughter",{happy:7,family:5}]],"kids"),
+  E(65,120,"{n} teaches a grandchild a family recipe",[["and the kitchen fills with laughter",{happy:7,family:5}]],"grandkids"),
   E(65,120,"{n} volunteers at the local library",[["and becomes a beloved fixture",{happy:6,smarts:2}]]),
   E(65,120,"{n} has a scare at the doctor",[["and the tests come back clear",{happy:4,health:1}],["and begins a long course of treatment",{health:-8,happy:-6,money:-1200}]]),
   E(65,120,"{n} reunites with a long-lost friend",[["and picks up as though no time had passed",{happy:9,friends:5}]]),
@@ -2131,7 +2131,7 @@ const BANK = [
   E(65,120,"{n} learns to use a smartphone",[["and promptly sends forty photos of their lunch",{happy:4,smarts:2}],["and gives up after the third update",{happy:-2}]]),
   E(65,120,"{n} finally takes a trip to {c}",[["and it lives up to every dream",{happy:10,smarts:2,money:-3000}],["and the long flights take a toll",{happy:3,health:-4,money:-3000}]],"afford"),
   E(70,120,"{n} attends the funeral of an old friend",[["and shares warm memories with the family",{happy:-6,family:2}]]),
-  E(65,120,"{n} dances at a grandchild's wedding",[["and outlasts the entire younger crowd",{happy:11,family:6}]],"kids"),
+  E(65,120,"{n} dances at a grandchild's wedding",[["and outlasts the entire younger crowd",{happy:11,family:6}]],"grandkids"),
   E(70,120,"{n} develops a deep appreciation for the afternoon nap",[["and wakes up refreshed every time",{health:2,happy:3}]]),
   E(65,120,"{n} goes fishing with an old friend",[["and tells the same tall tales as always",{happy:6,friends:3}]]),
   E(65,120,"{n} bakes pies for the whole neighborhood",[["and becomes a local legend",{happy:7,friends:3,money:-60}]]),
@@ -2201,8 +2201,8 @@ const BANK = [
   // ===== kids, parents, siblings, friends =====
   E(25,110,"{n}'s family has a movie night",[["and everyone argues about the film",{family:5,happy:5}]],"kids"),
   E(25,110,"{n} takes the family on a road trip",[["and makes memories that last",{family:6,happy:7,money:-800}],["and spends half of it on bathroom stops",{family:3,happy:2,money:-800}]],"kids"),
-  E(28,60,"{n} has a sleepless night with a sick child",[["and everyone is fine by morning",{health:-3,family:3}]],"kids"),
-  E(28,70,"{n} gets called to a parent-teacher conference",[["and hears glowing reports",{happy:6,family:3}],["and gets a few things to work on at home",{happy:-2,family:1}]],"kids"),
+  E(28,60,"{n} has a sleepless night with a sick child",[["and everyone is fine by morning",{health:-3,family:3}]],"minorKid"),
+  E(28,70,"{n} gets called to a parent-teacher conference",[["and hears glowing reports",{happy:6,family:3}],["and gets a few things to work on at home",{happy:-2,family:1}]],"youngKid"),
   E(18,110,"{n} visits the family for the holidays",[["and the house is full of warmth",{family:5,happy:6,money:-300}],["and survives a very long dinner debate",{family:2,happy:-1,money:-300}]],"parents"),
   E(25,110,"{n}'s parent gives some unexpected advice",[["and it turns out to be right",{smarts:2,family:3}]],"parents"),
   E(30,110,"{n} worries over a parent's health scare",[["and it turns out to be minor",{happy:-3,family:3}],["and it brings the whole family closer",{happy:-5,family:6}]],"parents"),
@@ -2234,7 +2234,7 @@ const BANK = [
   E(60,110,"{n} picks up a small part-time gig",[["and earns pocket money doing something enjoyable",{money:1200,happy:4}]],"retired"),
   E(60,110,"{n} takes a long, slow vacation on the pension",[["and returns relaxed",{happy:8,health:2,money:-1800}]],"retired&afford"),
   E(60,110,"{n} budgets carefully on a fixed income",[["and keeps everything comfortably in order",{smarts:2,happy:2}],["and has to skip a few small luxuries",{happy:-3}]],"retired"),
-  E(55,110,"{n} and their spouse celebrate a golden anniversary",[["and renew their vows in the garden",{partner:9,happy:11,family:4}]],"spouse",0.5),
+  E(55,110,"{n} and their spouse celebrate a golden anniversary",[["and renew their vows in the garden",{partner:9,happy:11,family:4}]],"golden",0.5),
   // more everyday moments
   E(4,8,'{n} loses a first tooth',[['and finds a coin under the pillow',{happy:3}],['and swallows it by accident',{happy:-1}]]),
   E(6,11,'{n} enters the school science fair',[['and wins a blue ribbon',{smarts:4,happy:4}],['and the volcano never erupts',{smarts:1,happy:-2}]]),
@@ -3448,7 +3448,7 @@ const ASSET_CATALOG = {
     {key:'penthouse', name:'City Penthouse', price:1400000, appreciation:0.045, vol:0.08, upkeepPct:0.013},
   ],
   Cars: [
-    {key:'ebike', name:'Electric Bike', kind:'bike', price:1800, appreciation:-0.15, vol:0.05, upkeepFlat:100, minAge:14},
+    {key:'ebike', name:'Electric Bike', kind:'bicycle', price:1800, appreciation:-0.15, vol:0.05, upkeepFlat:100, minAge:14},
     {key:'scooter', name:'Moped', kind:'bike', price:2500, appreciation:-0.12, vol:0.06, upkeepFlat:300, minAge:16},
     {key:'used', name:'Used Sedan', kind:'car', price:8000, appreciation:-0.15, vol:0.08, upkeepFlat:900},
     {key:'motorcycle', name:'Motorcycle', kind:'bike', price:12000, appreciation:-0.12, vol:0.08, upkeepFlat:700, speed:true},
@@ -4294,7 +4294,7 @@ function vehicleAct(id, key){
     pushEntry(state.age, `${n} has the ${x.name.toLowerCase()} serviced.`, {});
   } else if(key === 'drive'){
     const big = k === 'boat' || k === 'plane';
-    pushEntry(state.age, k === 'plane' ? `${n} flies the jet to ${pick(CITIES)} for lunch.` : k === 'boat' ? `${n} spends a perfect day out on the water in the ${x.name.toLowerCase()}.` : k === 'bike' ? `${n} takes the ${x.name.toLowerCase()} out for a long ride.` : `${n} takes the ${x.name.toLowerCase()} for a drive with the windows down.`, {happy: big ? 6 : 3});
+    pushEntry(state.age, k === 'plane' ? `${n} flies the jet to ${pick(CITIES)} for lunch.` : k === 'boat' ? `${n} spends a perfect day out on the water in the ${x.name.toLowerCase()}.` : k === 'bike' || k === 'bicycle' ? `${n} takes the ${x.name.toLowerCase()} out for a long ride.` : `${n} takes the ${x.name.toLowerCase()} for a drive with the windows down.`, {happy: big ? 6 : 3});
   } else if(key === 'track'){
     if(Math.random() < 0.85) pushEntry(state.age, `${n} takes the ${x.name.toLowerCase()} to the track and sets a personal best.`, {happy:7});
     else { x.cond = Math.max(5, x.cond - 35); x.value = Math.round(x.value * 0.85); addCondition('bone', state.age); pushEntry(state.age, `${n} spins out at the track and walks away with a broken bone.`, {happy:-5, health:-8}); }
@@ -4357,7 +4357,7 @@ function vehicleRowHtml(x){
   const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    <div class="owned">${{car:'Car', bike:'Motorbike', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
+    <div class="owned">${{car:'Car', bike:'Motorbike', bicycle:'Bicycle', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
     <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
     <div class="btnrow-social">${btn('drive', k === 'plane' ? 'Fly somewhere' : k === 'boat' ? 'Take it out' : 'Go for a drive')}${btn('service', 'Service (' + fmt(serviceCost(x)) + ')', !canPay(serviceCost(x)) || cond >= 95)}${t.speed ? btn('track', 'Track day') : ''}${btn('custom', 'Customize (' + fmt(customCost(x)) + ')', !canPay(customCost(x)))}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(x.value * 0.95)}</button></div>
@@ -4435,7 +4435,7 @@ function takeTrip(key){
     if(m === 'cancel'){ const extra = Math.round(cost * 0.2); text += ` A cancelled flight costs an extra ${fmt(extra)}.`; delta.money -= extra; delta.happy -= 2; }
   } else if(r < mishap + 0.2){
     const g = pick(['friend', 'romance', 'upgrade', 'inspired']);
-    if(g === 'romance' && !hasRel('Partner', 'Spouse') && state.age >= 18 && party.label === 'solo' && state.relationships.length < 60){ const p = newRel('Partner', {closeness:rint(40, 55), origin:'while traveling in ' + place}); text += ` A holiday romance with ${p.name} turns into something more.`; delta.happy += 5; }
+    if(g === 'romance' && !hasRel('Partner', 'Spouse') && state.age >= 18 && party.label === 'solo' && state.relationships.length < 60){ const p = newRel('Partner', {age:partnerAge(state.age + rint(-4, 4)), closeness:rint(40, 55), origin:'while traveling in ' + place}); text += ` A holiday romance with ${p.name} turns into something more.`; delta.happy += 5; }
     else if(g === 'friend' && state.relationships.length < 60){ const f = newRel('Friend', {closeness:rint(35, 50), origin:'while traveling'}); text += ` They make a new friend, ${f.name}, along the way.`; delta.happy += 2; }
     else if(g === 'upgrade') text += ' A surprise upgrade makes it even better.', delta.happy += 3;
     else text += ' They come home full of new ideas.', delta.smarts = (delta.smarts || 0) + 2;
@@ -4947,13 +4947,14 @@ function meetPeople(key){
   const v = VENUES.find(x => x.key === key); if(!v || !venueState(v).ok) return;
   state.done["meet_" + key] = true; state.done.meets = (state.done.meets || 0) + 1;
   if(vCost(v)){ ensureCash(vCost(v)); state.money -= vCost(v); }
-  const r = newRel(v.type, {age: Math.max(v.pro || v.type === 'Contact' ? 22 : 0, state.age + rint(-v.spread, v.spread)), closeness: rint(25,42), origin: v.origin, proBoost: v.boost});
+  const r = newRel(v.type, {age: Math.max(v.pro || v.type === 'Contact' ? 22 : v.type === 'Coworker' ? 16 : 0, state.age + rint(-v.spread, v.spread)), closeness: rint(25,42), origin: v.origin, proBoost: v.boost});
   if(v.pro && !r.pro && Math.random() < v.pro) r.pro = rollPro(v.boost);
   pushEntry(state.age, `${state.name} meets ${r.name}${r.pro ? ', ' + (proTitle(r).match(/^[AEIOU]/) ? 'an ' : 'a ') + proTitle(r).toLowerCase() + ',' : ''} ${v.origin}. They seem ${r.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:4});
   render();
 }
 function meetFriend(){ const v = VENUES.find(x => venueState(x).ok); if(v) meetPeople(v.key); }
 
+const partnerAge = base => state.age < 18 ? Math.min(17, Math.max(14, base)) : Math.max(18, base);
 const DATE_KINDS = [
   {key:"coffee", label:"Coffee date", cost:0, base:0.30, minAge:14, text:"over coffee"},
   {key:"dinner", label:"Dinner date", cost:80, base:0.38, minAge:16, text:"over dinner"},
@@ -4977,7 +4978,7 @@ function dateOut(key){
   if(dCost(d)){ ensureCash(dCost(d)); state.money -= dCost(d); }
   const chance = Math.min(0.9, d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0)) * (felon() ? 0.75 : 1);
   if(Math.random() < chance){
-    const p = newRel("Partner", {age: Math.max(0, state.age + rint(-4,4)), closeness: rint(42,58), origin: d.origin || "on a date"});
+    const p = newRel("Partner", {age: partnerAge(state.age + rint(-4,4)), closeness: rint(42,58), origin: d.origin || "on a date"});
     pushEntry(state.age, `${state.name} goes on a date ${d.text} with ${p.name}, and it turns into something real. ${p.name} seems ${p.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:8});
   } else pushEntry(state.age, `${state.name} goes on a date ${d.text}, but there is no spark.`, {happy:-2});
   render();
@@ -5025,9 +5026,11 @@ function propose(id){
   }
   render();
 }
+const babyWhy = r => state.done.baby ? 'a baby this year already' : state.age < 18 ? 'too young' : state.age > 55 || r.age > 55 ? 'too old for a baby' : '';
 function haveChild(id){
   const r = findRel(id);
-  if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60 || state.crime.prison) return;
+  if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60 || state.crime.prison || babyWhy(r)) return;
+  state.done.baby = true;
   birthChild(r);
   render();
 }
@@ -5480,11 +5483,12 @@ function applyHeir(h){
     state.famEstate = rint(20000, 150000);
   }
   // their own spouse and children, exactly as they were
+  let sp = null;
   if(kid.spouse){
-    const sp = copy("Spouse", kid.spouse, {closeness: rint(55, 80), origin:"your spouse", livingTogether:true});
+    sp = copy("Spouse", kid.spouse, {closeness: rint(55, 80), origin:"your spouse", livingTogether:true});
     rels.push(sp);
-    old.relationships.filter(g => g.type === "Grandchild" && g.parentId === kid.id).forEach(g => { const c = copy("Child", g, {closeness: Math.min(100, Math.max(50, g.closeness + 20)), origin:"your child"}); c.coParent = sp.id; rels.push(c); });
   } else if(age >= 22 && Math.random() < 0.2) rels.push(makeRel("Partner", {age: Math.max(18, age + rint(-5, 5)), closeness: rint(45, 70), origin:"on a date"}));
+  old.relationships.filter(g => g.type === "Grandchild" && g.parentId === kid.id).forEach(g => { const c = copy("Child", g, {closeness: Math.min(100, Math.max(50, g.closeness + 20)), origin:"your child"}); if(sp) c.coParent = sp.id; rels.push(c); });   // their children, married or not
   if(age >= 3) for(let i = 0, n = age < 12 ? rint(1, 3) : rint(2, 4); i < n; i++)
     rels.push(makeRel("Friend", {age: Math.max(0, age + rint(-4, 4)), closeness: rint(35, 60), origin: age < 18 ? "at school" : pick(["in the neighborhood", "through work", "online"])}));
   state.relationships = rels;
@@ -5530,10 +5534,10 @@ function relRow(r){
   if(state.crime.prison){ /* no moving in, proposing or having children from a cell */ }
   else if(r.type === "Partner"){
     if(!r.livingTogether) more += '<button onclick="moveIn(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Move in</button>';
-    else more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) ? "disabled" : "") + '>Have a child</button>';
+    else more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) || babyWhy(r) ? "disabled" : "") + '>' + (babyWhy(r) ? 'Have a child · ' + babyWhy(r) : 'Have a child') + '</button>';
     more += '<button onclick="propose(\'' + r.id + '\')" ' + (state.age < 18 ? "disabled" : "") + '>Propose</button><button onclick="breakUp(\'' + r.id + '\')">Break up</button>';
   } else if(r.type === "Spouse"){
-    more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) ? "disabled" : "") + '>Have a child</button><button onclick="breakUp(\'' + r.id + '\')">Divorce</button>';
+    more += '<button onclick="haveChild(\'' + r.id + '\')" ' + (state.money + state.savings < inflR(2000,100) || babyWhy(r) ? "disabled" : "") + '>' + (babyWhy(r) ? 'Have a child · ' + babyWhy(r) : 'Have a child') + '</button><button onclick="breakUp(\'' + r.id + '\')">Divorce</button>';
   } else if(!FAMILY_TYPES.includes(r.type)){
     more += '<button onclick="cutTies(\'' + r.id + '\')">Cut ties</button>';
   }
@@ -5950,7 +5954,7 @@ function wellnessAct(key){
   if(key === 'dentist'){
     const neglected = a >= 12 && (hh.lastDentist == null ? a >= 18 : a - hh.lastDentist >= 3);
     hh.lastDentist = a;
-    if(neglected && Math.random() < 0.5){ delta.money = (delta.money || 0) - inflR(400, 10); delta.happy = -1; text = `${n} goes in for a long-overdue cleaning, and a couple of cavities need filling.`; }
+    if(neglected && Math.random() < 0.5){ delta.money = (delta.money || 0) - (wellCost(x) ? inflR(400, 10) : 0); delta.happy = -1; text = `${n} goes in for a long-overdue cleaning, and a couple of cavities need filling.`; }
     else { Object.assign(delta, {looks:1, health:1}); text = `${n} gets their teeth cleaned and leaves with a brighter smile.`; }
   } else if(key === 'eyes'){
     if(!hh.glasses && Math.random() < (a < 18 ? 0.25 : a >= 40 ? 0.6 : 0.2)){
@@ -6129,6 +6133,7 @@ function release(how){
   const k = CR(), pr = k.prison, n = state.name;
   if(!pr) return;
   k.prison = null; k.heat = 0;
+  if(how === 'appeal'){ pushEntry(state.age, `${n} walks out of prison a free person.`, {happy:15}); return; }
   if(how === 'parole'){ k.probation = Math.max(1, pr.left); pushEntry(state.age, `${n} is granted parole and walks out early, with ${k.probation} year${k.probation > 1 ? "s" : ""} of supervision.`, {happy:15}); }
   else pushEntry(state.age, `${n} is released after ${pr.total} year${pr.total > 1 ? "s" : ""} ${pr.juvenile ? "in juvenile detention" : "behind bars"}.`, {happy:15});
 }
@@ -6161,13 +6166,24 @@ function prisonYear(a){
   else if(!pr.juvenile && pr.behavior >= 1 && pr.total - pr.left >= Math.ceil(pr.total / 3) && (pr.nextHearing || 0) <= a) paroleHearing(a);
   else pushEntry(a, `${n} has ${pr.left} year${pr.left > 1 ? "s" : ""} left to serve.`, {});
 }
+// a fugitive caught: the old warrant (and any new charge) becomes one sentence and goes on the record
+function captureFugitive(a, newCrime){
+  const k = CR(), why = k.wantedFor || {ing:'escaping prison', charge:'escaping prison'};
+  k.wanted = false;
+  pushEntry(a, newCrime ? `Police arrest ${state.name} for ${newCrime.ing} and find they're still wanted for ${why.ing}.` : `Police finally catch up with ${state.name}, still wanted for ${why.ing}.`, {happy:-10});
+  if(why.record) addRecord({charge:why.record, felony:true}, false, 'prison');
+  if(newCrime) addRecord(newCrime, false, 'prison');
+  const years = (k.wantedYears || 1) + 3 + (newCrime ? (newCrime.felony ? rint((newCrime.years || [1, 3])[0], (newCrime.years || [1, 3])[1]) : 1) : 0);
+  k.wantedYears = 0; k.wantedFor = null; k.case = null;
+  imprison(years, why.charge, false);
+}
 function crimeYear(a){
   const k = CR();
   k.heat = Math.max(0, k.heat - 15);
   if(k.probation > 0){ k.probation--; if(!k.probation) pushEntry(a, `${state.name} completes their probation.`, {happy:3}); }
   if(a === 18 && k.record.some(x => x.juvenile)) pushEntry(a, `${state.name}'s juvenile record is sealed.`, {happy:2});
   if(k.wanted){
-    if(Math.random() < 0.3){ k.wanted = false; pushEntry(a, `Police finally catch up with ${state.name}, still wanted for escaping prison.`, {happy:-10}); imprison(k.wantedYears + 3, "escaping prison", false); return; }
+    if(Math.random() < 0.3){ captureFugitive(a); return; }
     applyDelta({happy:-2});
   }
   investigationsYear(a);
@@ -6201,7 +6217,7 @@ function prisonAct(key, ok){
     return appealPrompt();
   } else if(key === 'escape'){
     if(Math.random() < 0.06 + k.skill / 600){
-      k.wanted = true; k.wantedYears = pr.left; k.prison = null; k.heat = 100;
+      k.wanted = true; k.wantedYears = pr.left; k.wantedFor = {ing:'escaping prison', charge:'escaping prison'}; k.prison = null; k.heat = 100;
       pushEntry(state.age, `${n} escapes from prison and disappears. Every year on the run risks getting caught.`, {happy:10});
     } else {
       pr.left += 2; pr.behavior = 0;
@@ -6249,6 +6265,7 @@ function convictChance(cs){
 }
 function arrest(c, amt, how){
   const n = state.name, k = CR();
+  if(k.wanted) return captureFugitive(state.age, c);
   if(state.fame.level >= 30) pushEntry(state.age, `${n}'s arrest is front-page news.`, {image:-20, fame:4});
   if(state.age < 18){                              // juvenile court: no lawyer choice, record sealed at 18
     if(c.felony && Math.random() < 0.45){ addRecord(c, true, "juvenile detention"); imprison(rint(1, 2), c.charge, true); }
@@ -6307,7 +6324,7 @@ function pleaStage(){
   opts.push({label: down ? 'Take the deal: plead to a misdemeanor (no felony record)' : 'Take the deal: plead guilty for a reduced sentence', run:() => { pushEntry(state.age, `${n} takes the plea deal.`, {happy:-2}); sentencing(true, down); }});
   opts.push({label:`Go to trial (${cs.lawyer.name.replace(/^The /, 'the ')} puts the odds of conviction near ${Math.round(p * 100)}%)`, run:() => trialStage()});
   if(cs.felony && !cs.jailed) opts.push({label:'Skip bail and run', run:() => {
-    const k = CR(); k.wanted = true; k.wantedYears = Math.max(1, Math.round((cs.years[0] + cs.years[1]) / 2)); k.heat = 100; k.case = null;
+    const k = CR(); k.wanted = true; k.wantedYears = Math.max(1, Math.round((cs.years[0] + cs.years[1]) / 2)); k.wantedFor = {ing:'skipping bail on a ' + cs.charge + ' charge', charge:cs.charge, record:cs.charge}; k.heat = 100; k.case = null;
     pushEntry(state.age, `${n} skips bail and disappears${cs.bailPaid ? ', forfeiting ' + fmt(cs.bailPaid) : ''}. Every year on the run risks getting caught.`, {happy:-4});
   }});
   presentCustom(`The prosecutor offers ${n} a deal: ${down ? 'plead guilty to a misdemeanor and avoid a felony record' : 'plead guilty and serve about half the usual sentence'}.`, opts);
@@ -6398,7 +6415,7 @@ function appealPrompt(){
     const p = 0.08 + l.skill / 350 + (ap.pd ? 0.07 : 0) + (ap.harsh ? 0.06 : 0);
     if(Math.random() < p){
       const rec = k.record.slice().reverse().find(x => x.crime === ap.charge && !x.expunged);
-      if(Math.random() < 0.45 || !k.prison){ if(rec) rec.expunged = true; k.probation = 0; pushEntry(state.age, `${l.name} wins ${n}'s appeal. The conviction is overturned.`, {happy:14}); if(k.prison) release('served'); }
+      if(Math.random() < 0.45 || !k.prison){ if(rec) rec.expunged = true; k.probation = 0; pushEntry(state.age, `${l.name} wins ${n}'s appeal. The conviction is overturned.`, {happy:14}); if(k.prison) release('appeal'); }
       else { k.prison.left = Math.max(1, Math.round(k.prison.left / 2)); pushEntry(state.age, `${l.name} wins ${n}'s appeal, cutting the sentence to ${k.prison.left} more year${k.prison.left > 1 ? 's' : ''}.`, {happy:8}); }
     } else pushEntry(state.age, `The appeals court upholds ${n}'s conviction.`, {happy:-5});
     render();
@@ -6411,12 +6428,13 @@ function appealPrompt(){
 function openInvestigation(c, amt){
   if(cheatActive('uncatchable')) return;
   CR().open = CR().open || [];
-  CR().open.push({key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years, amt: amt || 0, age: state.age, ev: rint(5, 30)});
+  CR().open.push({key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years, amt: amt || 0, age: state.age, ev: rint(5, 30), juvenile: state.age < 18});
 }
 function investigationsYear(a){
   const k = CR(); k.open = k.open || [];
   k.open = k.open.filter(o => {
     if(a - o.age > 10) return false;                          // the statute of limitations runs out
+    if(o.juvenile && a >= 18) return false;                  // a juvenile case is sealed at 18
     if(Math.random() < 0.5) o.ev += rint(2, 12) + Math.round(k.heat / 10);     // many years the trail stays cold
     if(o.ev >= 75 && !k.pendingArrest){ k.pendingArrest = o; return false; }
     return true;
@@ -6424,13 +6442,15 @@ function investigationsYear(a){
 }
 function justiceYear(a){
   const k = CR(), n = state.name;
-  if(k.prison || k.wanted || state.age < 18) return false;
+  if(k.prison || k.wanted) return false;
+  if(k.pendingArrest && (a - k.pendingArrest.age > 10 || (k.pendingArrest.juvenile && a >= 18))) k.pendingArrest = null;   // too late to charge
   if(k.pendingArrest){
     const o = k.pendingArrest; k.pendingArrest = null; k.arrests++;
     pushEntry(a, `Detectives arrest ${n} for ${o.ing} back at age ${o.age}. The case was never closed.`, {happy:-10});
     arrest({key:o.key, charge:o.charge, ing:o.ing, felony:o.felony, years:o.years}, o.amt, 'investigation');
     return true;
   }
+  if(state.age < 18) return false;
   const hot = (k.open || []).find(o => o.ev >= 45 && !o.warned);
   if(hot){
     hot.warned = true;
@@ -6449,7 +6469,7 @@ function justiceYear(a){
     const revoke = () => { k.probation = 0; pushEntry(a, `The judge revokes ${n}'s probation.`, {happy:-8}); imprison(rint(1, 2), 'a probation violation', false); };
     const opts = [
       {label:'Beg the judge for another chance', run:() => { if(Math.random() < 0.55) pushEntry(a, `The judge gives ${n} a stern warning.`, {happy:-2}); else revoke(); }},
-      {label:'Skip the hearing', run:() => { k.wanted = true; k.wantedYears = 2; k.heat = 100; k.probation = 0; pushEntry(a, `${n} skips the hearing, and a warrant goes out.`, {happy:-5}); }},
+      {label:'Skip the hearing', run:() => { k.wanted = true; k.wantedYears = 2; k.wantedFor = {ing:'skipping a probation hearing', charge:'violating probation'}; k.heat = 100; k.probation = 0; pushEntry(a, `${n} skips the hearing, and a warrant goes out.`, {happy:-5}); }},
     ];
     if(canPay(cost)) opts.splice(1, 0, {label:`Bring a lawyer (${fmt(cost)})`, run:() => { pay(cost); if(Math.random() < 0.82) pushEntry(a, `${n}'s lawyer talks the judge into a warning.`, {}); else revoke(); }});
     presentCustom(`${n} ${what}, violating probation.`, opts);
@@ -6691,7 +6711,7 @@ function creditTier(s){ return s>=800?'Excellent': s>=740?'Very Good': s>=670?'G
 function adjustCredit(d){ state.creditScore = Math.max(300, Math.min(850, Math.round(state.creditScore + d))); }
 function incomeTax(gross){ return incomeTaxBase(gross) * (state.world ? state.world.taxMult : 1); }
 function incomeTaxBase(gross){
-  const brackets = [[40000,0.12],[100000,0.22],[Infinity,0.32]];
+  const cum = state.econ.cumInflation, brackets = [[40000 * cum,0.12],[100000 * cum,0.22],[Infinity,0.32]];      // brackets rise with prices
   let tax = 0, lower = 0;
   for(const [cap,rate] of brackets){
     const amt = Math.max(0, Math.min(gross,cap) - lower);
@@ -6977,6 +6997,7 @@ function ipoBusiness(){
   state.portfolio[ticker] = (state.portfolio[ticker] || 0) + sharesRetained;
   state.money += cashRaised;
   pushEntry(state.age, `${state.name} takes ${nm} public! ${ticker} starts trading at ${fmt(ipoPrice)}/share, raising ${fmt(cashRaised)}.`, {happy:15});
+  state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
   state.business = null;
   render();
 }
@@ -7220,11 +7241,11 @@ function fileBankruptcy(ok){
 }
 function emergencyYear(a){
   if(a < 18 || Math.random() >= 0.08) return;
-  const sev = pick(['medical','car','home','family']);
+  const sev = pick(['medical', 'family'].concat(roadVehicles().length ? ['car'] : [], state.assets.some(x => x.category === 'Homes' && !x.rental) ? ['home'] : []));
   const cost = inflR(rint(500,4000) * (sev === 'medical' ? 3 : 1), 10);
   let covered = 0;
   if(sev === 'medical' && state.insurance.health) covered = 0.8;
-  if(sev === 'car' && state.insurance.auto && state.assets.some(x => x.category === 'Cars')) covered = 0.8;
+  if(sev === 'car' && state.insurance.auto && roadVehicles().length) covered = 0.8;
   if(sev === 'home' && state.insurance.home && state.assets.some(x => x.category === 'Homes')) covered = 0.8;
   const out = Math.round(cost * (1 - covered));
   const msgs = {medical:'a medical emergency', car:'a car breakdown', home:'a home repair emergency', family:'a family emergency'};
@@ -7283,8 +7304,9 @@ function coverWithInvestments(a){
   let sold = 0;
   for(const k in state.portfolio){
     if(state.money >= 0) break;
-    const units = state.portfolio[k]; if(!(units > 0)) continue;
-    const before = state.money; execSell(k, units); sold += state.money - before;
+    const units = state.portfolio[k], m = state.market[k]; if(!(units > 0) || !m) continue;
+    const per = m.price * (1 - FEE[instrType(k)]), need = Math.min(units, -state.money / per * 1.001);     // only as much as covers the gap
+    const before = state.money; execSell(k, need); sold += state.money - before;
   }
   if(sold > 0) pushEntry(a, `${state.name} sells ${fmt(sold)} of investments to cover bills.`, {happy:-2});
 }
@@ -8086,7 +8108,7 @@ function campusAct(key){
   state.done['campus_' + key] = true;
   if(key === 'party'){
     e.gpa = clamp(e.gpa - 4);
-    if(Math.random() < 0.25 && !hasRel('Partner','Spouse') && state.relationships.length < 60){ const r = newRel('Partner', {closeness:rint(40, 55), origin:'at a campus party'}); pushEntry(state.age, `${n} goes to a wild party and hits it off with ${r.name}.`, {happy:7}); }
+    if(Math.random() < 0.25 && !hasRel('Partner','Spouse') && state.relationships.length < 60){ const r = newRel('Partner', {age:partnerAge(state.age + rint(-2, 3)), closeness:rint(40, 55), origin:'at a campus party'}); pushEntry(state.age, `${n} goes to a wild party and hits it off with ${r.name}.`, {happy:7}); }
     else pushEntry(state.age, `${n} parties a little too hard this semester.`, {happy:5, health:-1});
   } else if(key === 'intern'){
     if(Math.random() < 0.35 + e.gpa / 250 + state.stats.smarts / 400){ e.internships = (e.internships || 0) + 1; pushEntry(state.age, `${n} lands a summer internship. It will look great to employers.`, {money:inflR(5000, 100), smarts:2, happy:4}); }
@@ -8427,7 +8449,7 @@ function workYear(a){
   j.salary = Math.round(j.salary * (1 + Math.max(0, yrInfl()) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
   if((state.world.laws || []).includes('fourDay')) applyDelta({happy:1});
   state.peakSalary = Math.max(state.peakSalary, j.salary);
-  if(a >= 70 && j.track !== 'Politics'){ retire(true); return; }           // elected officials serve out their terms
+  if(a >= 70 && !inOffice()){ retire(true); return; }           // elected officials serve out their terms
   const track = CAREERS[j.track], rank = track[j.rank];
   const stressHealth = Math.min(0, (rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0) + (j.remote ? 1 : 0));   // working from home takes the edge off
   const stressHappy = Math.min(0, (rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0) + (j.remote ? 1 : 0));
@@ -8449,7 +8471,7 @@ function workYear(a){
   if(info.elect && j.rank >= 1 && Math.random() < 0.06){
     pushEntry(a, `${state.name} is caught up in a political scandal.`, {happy:-6, rep:-10, image:-10});
     POL().scandal = a; POL().approval = Math.max(0, POL().approval - 15);
-    if(Math.random() < 0.35){ convertCoworkersToFriends(); state.job = null; pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
+    if(Math.random() < 0.35){ leaveOffice(j.rank, true); pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
   if(!info.elect && j.track !== 'Military' && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + wfx().layoffs + trackFx(j.track).layoff){
@@ -8825,7 +8847,7 @@ function applyJob(trackName){
     }
     const start = trackName === 'Politics' ? 0 : startRankFor(trackName);
     state.job = {track:trackName, rank:start, title:track[start].title, salary:startingSalary(trackName, start), years:0};
-    if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(0, state.age+rint(-8,8)), closeness:35+rint(0,20), origin:'through work'});
+    if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(16, state.age+rint(-8,8)), closeness:35+rint(0,20), origin:'through work'});
     pushEntry(state.age, `${state.name} lands a role as ${state.job.title} in ${trackName}, starting at ${fmt(state.job.salary)}.`, {happy:6});
   } else {
     pushEntry(state.age, `${state.name} applies for a job in ${trackName.toLowerCase()} but doesn't get it.`, {happy:-3});
@@ -8967,7 +8989,7 @@ function workAct(key){
     const pay = inflR(rint(4, 12) * 1000, 100); Object.assign(delta, {money:pay, happy:-1});
     text = `${n} takes temp jobs through an agency and earns ${fmt(pay)}.`;
     const open = ['Retail', 'Business'].filter(t => trackOpen(t) && !recordBlocks(t) && !rankGap(CAREERS[t][0], t));
-    if(open.length && Math.random() < 0.25) offer = pick(open);
+    if(open.length && a <= 66 && Math.random() < 0.25) offer = pick(open);
   } else if(key === 'benefits'){
     const amt = Math.max(inflR(4000, 100), Math.min(Math.round(state.peakSalary * 0.3 / 100) * 100, inflR(15000, 100)));
     (state.benefitAges || (state.benefitAges = [])).push(a);
@@ -9119,9 +9141,10 @@ function startupPitch(){
   return state.pitch;
 }
 const angelAmts = () => [5000, 25000, 100000].map(x => inflR(x, 500));
+const backing = () => threads().find(t => t.key === 'startup' && t.step !== 'passed' && t.data.amt > 0);
 function backStartup(i){
   const amt = angelAmts()[i], p = startupPitch();
-  if(!amt || state.age < 21 || state.crime.prison || hasThread('startup') || state.done.angel || !canPay(amt) || !ensureCash(amt)) return;
+  if(!amt || state.age < 21 || state.crime.prison || backing() || state.done.angel || !canPay(amt) || !ensureCash(amt)) return;
   state.done.angel = true;
   pushEntry(state.age, `${state.name} puts ${fmt(amt)} into ${p.co}, ${p.kind}, as an early backer.`, {money:-amt});
   seedThread('startup', {co:p.co, amt}, `Invested ${fmt(amt)} in ${p.co}`, rint(2, 3), 'round');
@@ -9129,7 +9152,7 @@ function backStartup(i){
 }
 function angelHtml(){
   if(state.age < 21) return '';
-  const th = threads().find(t => t.key === 'startup');
+  const th = backing();
   let h = '<div class="plabel">Angel investing</div><div class="invrow">';
   if(th) h += `<div class="owned">You're backing ${th.data.co}${th.data.amt ? ' with ' + fmt(th.data.amt) : ''}. Most startups fail and a few pay off many times over. You'll hear how it goes.</div>`;
   else {
@@ -9152,22 +9175,23 @@ function sellEverything(ok){
 const solarCost = () => inflR(18000, 100);
 function installSolar(id){
   const x = state.assets.find(y => y.id === id), c = solarCost();
-  if(!x || x.category !== 'Homes' || x.rental || x.solar || !ensureCash(c)) return;
+  if(!x || x.category !== 'Homes' || x.rental || x.solar || state.crime.prison || !ensureCash(c)) return;
   x.solar = true; x.value += Math.round(c * 0.7);
   pushEntry(state.age, `${state.name} puts solar panels on the ${x.name}. Upkeep and power bills drop.`, {money:-c, happy:2});
   render();
 }
 function toggleRoommate(id){
   const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Homes' || x.rental) return;
-  if(!x.roommate && state.assets.some(y => y.roommate)) return;
+  if((!x.roommate && state.assets.some(y => y.roommate)) || state.done['mate_' + id] || state.crime.prison) return;
+  state.done['mate_' + id] = true;
   x.roommate = !x.roommate;
-  pushEntry(state.age, x.roommate ? `${state.name} rents the spare room in the ${x.name} to a roommate.` : `${state.name}'s roommate moves out of the ${x.name}.`, x.roommate ? {} : {happy:1});
+  pushEntry(state.age, x.roommate ? `${state.name} rents the spare room in the ${x.name} to a roommate.` : `${state.name}'s roommate moves out of the ${x.name}.`, {});
   render();
 }
 const warmCost = () => inflR(300, 10);
 function housewarming(id){
   const x = state.assets.find(y => y.id === id), c = warmCost();
-  if(!x || x.category !== 'Homes' || x.warmed || state.age - x.boughtAge > 1 || !ensureCash(c)) return;
+  if(!x || x.category !== 'Homes' || x.warmed || state.age - x.boughtAge > 1 || state.crime.prison || !ensureCash(c)) return;
   x.warmed = true;
   const guests = state.relationships.filter(r => ['Friend', 'Mother', 'Father', 'Sibling', 'Coworker'].includes(r.type)).sort((p, q) => q.closeness - p.closeness).slice(0, 10);
   guests.forEach(r => bump(r, 4));
@@ -9178,9 +9202,9 @@ function housewarming(id){
 function homeExtrasHtml(x){
   if(x.category !== 'Homes' || x.rental) return '';
   let b = '';
-  if(!x.warmed && state.age - x.boughtAge <= 1) b += `<button onclick="housewarming('${x.id}')" ${canPay(warmCost()) ? '' : 'disabled'}>Housewarming party (${fmt(warmCost())})</button>`;
-  if(!x.solar) b += `<button onclick="installSolar('${x.id}')" ${canPay(solarCost()) ? '' : 'disabled'}>Solar panels (${fmt(solarCost())})</button>`;
-  if(x.roommate || !state.assets.some(y => y.roommate)) b += `<button onclick="toggleRoommate('${x.id}')">${x.roommate ? 'Roommate moves out' : 'Take in a roommate'}</button>`;
+  if(!x.warmed && state.age - x.boughtAge <= 1 && !state.crime.prison) b += `<button onclick="housewarming('${x.id}')" ${canPay(warmCost()) ? '' : 'disabled'}>Housewarming party (${fmt(warmCost())})</button>`;
+  if(!x.solar) b += `<button onclick="installSolar('${x.id}')" ${canPay(solarCost()) && !state.crime.prison ? '' : 'disabled'}>Solar panels (${fmt(solarCost())})</button>`;
+  if(x.roommate || !state.assets.some(y => y.roommate)) b += `<button onclick="toggleRoommate('${x.id}')" ${state.done['mate_' + x.id] || state.crime.prison ? 'disabled' : ''}>${state.done['mate_' + x.id] ? 'Roommate changed this year' : x.roommate ? 'Roommate moves out' : 'Take in a roommate'}</button>`;
   return (x.solar || x.roommate ? `<div class="owned">${[x.solar ? 'Solar panels: upkeep 30% lower' : '', x.roommate ? 'A roommate pays ' + fmt(inflR(8400, 100)) + ' a year' : ''].filter(Boolean).join(' · ')}</div>` : '') + (b ? '<div class="assetbuy">' + b + '</div>' : '');
 }
 
@@ -9226,7 +9250,7 @@ function restyle(i){
   const ap = state.appearance;
   if(!HAIR_STYLES[i] || state.age < 10 || state.done.me_hair || state.crime.prison || ap.hairStyle === i || !ensureCash(cutCost())) return;
   state.done.me_hair = true; ap.hairStyle = i;
-  pushEntry(state.age, i === 4 ? `${state.name} shaves their head.` : `${state.name} gets a new ${HAIR_STYLES[i].toLowerCase()} haircut.`, {money:-cutCost(), happy:2, looks:1});
+  pushEntry(state.age, i === 4 ? `${state.name} shaves their head.` : i === 3 ? `${state.name} gets a buzz cut.` : `${state.name} gets a new ${HAIR_STYLES[i].toLowerCase()} haircut.`, {money:-cutCost(), happy:2, looks:1});
   render();
 }
 function dyeHair(name){
@@ -9782,6 +9806,7 @@ function audioWire(){
 }
 
 function die(cause){
+  if(!cheatActive('immortal') && state.estates && state.estates.length) state.estates.slice().forEach(e => settleEstate(e.id, 'cash'));   // money still owed to them counts toward their own estate
   if(cheatActive('immortal')){ pushEntry(state.age, `🛠️ ${state.name} should have died, but cheats death instead.`, {health:30}); return; }
   state.alive = false;
   const illness = cause && cause !== 'age' ? CONDITIONS[cause.key] : null;
@@ -9826,11 +9851,12 @@ function endThread(th, note, mood){
 const thRel = th => th.data.rel ? findRel(th.data.rel) : null;
 // switching careers ends military service or public office the proper way
 function leaveRoleFor(track){
-  if(milActive() && track !== 'Military'){ const m = MIL(); milDischarge(state.age >= m.termEnd ? 'honorable' : 'general', `${state.name} leaves the ${MIL_BRANCHES[m.branch].name}${state.age >= m.termEnd ? ' with an honorable discharge' : ' early with a general discharge'}.`); }
+  if(milActive() && track !== 'Military'){ const m = MIL(), honor = state.age >= m.termEnd || track === 'retirement'; milDischarge(honor ? 'honorable' : 'general', `${state.name} ${track === 'retirement' ? 'retires from' : 'leaves'} the ${MIL_BRANCHES[m.branch].name}${honor ? ' with an honorable discharge' : ' early with a general discharge'}.`); }
   if(inOffice() && track !== 'Politics') leaveOffice(officeIdx());
 }
 function threadJob(track, rank){
   leaveRoleFor(track);
+  state.retired = false;                       // back at work: the pension pauses until they retire again
   const t = CAREERS[track][rank];
   if(state.job) convertCoworkersToFriends();
   state.job = {track, rank, title: t.title, salary: startingSalary(track, rank), years: 0};
@@ -10192,7 +10218,7 @@ const CHAINS = {
       if(Math.random() < 0.2){ const win = inflR(rint(30, 90) * 1000, 500); pushEntry(a, `Against all odds, ${state.name} wins it all back: ${fmt(win)}.`, {money: win, happy:15}); return endThread(th, 'Won it all back, somehow', 'good'); }
       pushEntry(a, `The loan shark's people pay ${state.name} a visit.`, {health:-15, happy:-10});
       const opts = [{label: 'File for bankruptcy', run: () => { declareBankruptcy(); endThread(th, 'Lost everything and filed for bankruptcy', 'bad'); }},
-        {label: 'Sell whatever they can', run: () => { const v = state.assets.filter(x => x.category !== 'Homes').reduce((t, x) => t + x.value, 0); state.assets = state.assets.filter(x => x.category === 'Homes'); state.money += v; pushEntry(a, `${state.name} sells off their belongings for ${fmt(v)}.`, {happy:-8}); endThread(th, 'Sold everything to pay the loan shark', 'bad'); }}];
+        {label: 'Sell whatever they can', run: () => { let v = 0; state.assets.filter(x => x.category !== 'Homes').forEach(x => { v += x.value * (['Cars', 'Real Estate'].includes(x.category) ? 0.95 : 1); const li = state.loans.findIndex(l => l.assetId === x.id); if(li >= 0){ v -= state.loans[li].balance; state.loans.splice(li, 1); } }); v = Math.round(v); state.assets = state.assets.filter(x => x.category === 'Homes'); state.money += v; pushEntry(a, `${state.name} sells off their belongings for ${fmt(v)}.`, {happy:-8}); endThread(th, 'Sold everything to pay the loan shark', 'bad'); }}];
       presentCustom(`${state.name} owes far more than they can pay, and the people they owe are dangerous.`, opts);
       return true;
     },
@@ -10204,7 +10230,7 @@ const CHAINS = {
       const r = Math.random(), p = hasRel('Partner', 'Spouse');
       if(r < 0.35 && !p){ const x = newRel('Partner', {age: clampAge(a + rint(-3, 3)), closeness: 60, origin: 'in the new city'}); pushEntry(a, `In the new city, ${state.name} meets ${x.name}, and sparks fly.`, {happy:10}); return endThread(th, `Met ${x.name} in the new city`, 'good'); }
       const j = state.job;
-      if(r < 0.7 && j && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); pushEntry(a, `The move pays off: ${state.name} earns a promotion to ${j.title}.`, {happy:8}); return endThread(th, 'The career took off after the move', 'good'); }
+      if(r < 0.7 && j && !notCareer(j) && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); pushEntry(a, `The move pays off: ${state.name} earns a promotion to ${j.title}.`, {happy:8}); return endThread(th, 'The career took off after the move', 'good'); }
       bondDelta(['Mother', 'Father', 'Sibling'], -6);
       pushEntry(a, `Far from family and old friends, ${state.name} feels lonely in the new city.`, {happy:-8});
       endThread(th, 'Got the job, but felt lonely far from home', 'mixed');
@@ -10492,8 +10518,8 @@ const NET_OPS = {
       presentCustom(`${r.name} has an off-market rental house going for ${fmt(deal)}, well under its ${fmt(Math.round(price))} value. They need an answer today.`, [
         {label: `Buy it (${fmt(down)} down, mortgage for the rest)`, run: () => {
           if(state.bankrupt || state.creditScore < 580){ pushEntry(a, `${state.name} can't get a mortgage, and the deal goes to someone else.`, {happy:-3}); return; }
-          pay(down); takeLoan('Mortgage', deal - down, 30, Math.max(0.03, state.econ.rate + 0.02));
           state.assetSeq++;
+          pay(down); takeLoan('Mortgage', deal - down, 30, Math.max(0.03, state.econ.rate + 0.02), {assetId:'a' + state.assetSeq});
           state.assets.push({id:'a' + state.assetSeq, key:'sfr', name:'Off-Market House', category:'Real Estate', value: Math.round(price), boughtPrice: deal, boughtAge: a, cond: 75,
             rental:{units:1, occupied:0, rent:'market', cond:75, manager:false, loc:'suburbs', lastRent:0, lastNet:null}});
           bump(r, 6); pushEntry(a, `${state.name} buys the off-market house through ${r.name} for ${fmt(deal)}.`, {happy:6});
@@ -10920,7 +10946,7 @@ function politicsYear(a, canAsk){
   if(canAsk && P.bribes && Math.random() < 0.12 * P.bribes){
     P.bribes = 0; P.scandal = a;
     pushEntry(a, `Investigators uncover the bribes ${state.name} took in office.`, {happy:-10, image:-25, fame:6});
-    convertCoworkersToFriends(); state.job = null;
+    leaveOffice(i, true);
     CR().arrests++; arrest({key:'bribery', charge:'bribery', ing:'taking bribes', felony:true, years:[2, 8]}, 0);
     return true;
   }
@@ -11403,7 +11429,7 @@ CHAINS.xr = {
     endThread(th, `${th.data.name} limps along`, 'mixed');
   },
   calling(th, a){
-    if(Math.random() < 0.6){ const j = state.job; if(j && j.track === th.data.track && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); }
+    if(Math.random() < 0.6){ const j = state.job; if(j && !notCareer(j) && j.track === th.data.track && CAREERS[j.track][j.rank + 1] && !rankGap(CAREERS[j.track][j.rank + 1], j.track)){ j.rank++; j.title = CAREERS[j.track][j.rank].title; j.salary = Math.max(j.salary, startingSalary(j.track, j.rank)); }
       pushEntry(a, `${state.name} has never been happier at work.`, {happy:10}); return endThread(th, 'Found real fulfillment', 'good'); }
     pushEntry(a, `${state.name} loves the work but misses the old paycheck more than they expected.`, {happy:-6}); endThread(th, 'Loved the work, missed the money', 'mixed');
   },
@@ -11574,7 +11600,7 @@ function marketAfterYear(a){
     if(x.type === 'stock' && m.price > 1500){
       m.price /= 10; m.prev /= 10; m.hist = m.hist.map(v => v / 10);
       if(state.portfolio[x.key]) state.portfolio[x.key] *= 10;
-      state.orders.forEach(o => { if(o.key === x.key) o.trigger = o.trigger / 10; });
+      state.orders.forEach(o => { if(o.key === x.key){ o.trigger = o.trigger / 10; if(o.units) o.units *= 10; } });
       news.push({text: x.name + ' announces a 10-for-1 stock split', up: true, key: x.key});
       if(state.portfolio[x.key]) pushEntry(a, `${x.name} splits its stock 10-for-1. ${state.name} now holds ten times as many shares at a tenth of the price.`, {});
     }
