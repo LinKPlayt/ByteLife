@@ -539,7 +539,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    namesFixed:true, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -568,7 +568,7 @@ function startLife(heir){
   }
   if(heir) state.ipos = (heir.old.ipos || []).slice();
   syncIpos();
-  if(heir){ applyHeir(heir); state.appearance.skin = heir.old.appearance.skin; try{ checkAchievements(true); } catch(e){} }
+  if(heir){ applyHeir(heir); state.namesFixed = false; fixNames(); state.appearance.skin = heir.old.appearance.skin; try{ checkAchievements(true); } catch(e){} }
   else state.relationships = initFamily();
   showScreen('game');
   const hb = document.getElementById('heirBox'); if(hb) hb.innerHTML = '';
@@ -620,6 +620,8 @@ function resumeGame(){
   try{
     state = upgradeSave(saved);
     migrateEdu();
+    if(!saved.namesFixed) state.namesFixed = false;
+    fixNames();
     if(!saved.ach) try{ checkAchievements(true); } catch(e){}
     if(state.panel === 'hob') state.panel = 'act';
     syncIpos();
@@ -1367,10 +1369,84 @@ const CHOICE_EVENTS = [
   [70,110,n=>`${n}'s doctor suggests moving to a place with more support.`,
     {label:'Move to assisted living', delta:{health:5,happy:-3,money:-5000}},
     {label:'Stay home with help', delta:{health:1,money:-3000}},'retired',1],
+  // ---- dating and love ----
+  [18,45,n=>`${n} matches with someone online who seems perfect, but they want to move fast.`,
+    {label:'Meet them this weekend', risk:0.6, win:{happy:7}, lose:{happy:-5,money:-200}, winText:'The date is wonderful.', loseText:'They are nothing like their profile.'},
+    {label:'Take it slow', delta:{happy:1,smarts:1}},'single',1.2],
+  [20,45,n=>`${n}'s ex wants to get back together.`,
+    {label:'Give it another try', risk:0.4, win:{happy:8}, lose:{happy:-8}, winText:'It works better the second time.', loseText:'The same problems come right back.'},
+    {label:'Close that door for good', delta:{happy:2,smarts:1}},'single',1],
+  [22,50,n=>`${n}'s partner gets an amazing job offer that would mean long hours apart.`,
+    {label:'Encourage them to take it', delta:{partner:8,happy:-2}},
+    {label:'Ask them to turn it down', delta:{partner:-8,happy:1}},'partner',1],
+  [25,60,n=>`${n} and their partner keep arguing about money.`,
+    {label:'See a financial planner together', delta:{money:-300,partner:6,smarts:1}},
+    {label:'Split finances completely', delta:{partner:-3,happy:1}},'partner',1],
+  // ---- siblings, parents and grandparents ----
+  [10,40,n=>`${n}'s sibling borrows their favorite things without asking.`,
+    {label:'Have it out', risk:0.5, win:{family:3}, lose:{family:-6}, winText:'They actually apologize.', loseText:'It turns into a week-long feud.'},
+    {label:'Let it go', delta:{family:2,happy:-1}},'sibling',1],
+  [25,65,n=>`${n}'s parents want to sell the family home they grew up in.`,
+    {label:'Help them sell and downsize', delta:{family:6,happy:-3}},
+    {label:'Beg them to keep it', delta:{family:-2,happy:1}},'parents',1],
+  [55,90,n=>`${n}'s grandchild wants to spend the whole summer with them.`,
+    {label:'Absolutely', delta:{happy:9,family:8,money:-800,health:-1}},
+    {label:'Maybe just a week', delta:{happy:3,family:2}},'grandkids',1.2],
+  // ---- neighbors, community and conscience ----
+  [18,80,n=>`${n}'s new neighbor plays loud music every night.`,
+    {label:'Knock and ask nicely', risk:0.6, win:{happy:4,friends:2}, lose:{happy:-3}, winText:'They turn it down and invite {n} to the next party.', loseText:'Nothing changes.'},
+    {label:'Call the landlord or the police', delta:{happy:1}}],
+  [18,80,n=>`${n} sees a coworker steal from the register.`,
+    {label:'Report it', delta:{happy:1,friends:-3}},
+    {label:'Talk to them privately', risk:0.6, win:{happy:4,friends:3}, lose:{happy:-4}, winText:'They put it back and thank {n}.', loseText:'They deny it and avoid {n} for months.'},'job',1,
+    {label:'Mind your own business', delta:{happy:-2}}],
+  [20,80,n=>`A local charity asks ${n} to run a marathon for a good cause.`,
+    {label:'Train and run it', risk:0.75, win:{health:6,happy:8}, lose:{health:-4,happy:2}, winText:'They finish and raise thousands.', loseText:'They finish, but limp for a week.'},
+    {label:'Donate instead ($200)', delta:{money:-200,happy:3}},'healthy',1],
+  [25,80,n=>`${n} is called for jury duty on a long trial.`,
+    {label:'Serve on the jury', delta:{happy:-2,smarts:2}, effect:()=>{ if(state.job) state.money -= Math.round(state.job.salary * 0.04); }},
+    {label:'Try to get out of it', risk:0.6, win:{happy:2}, lose:{happy:-4}, winText:'They are excused.', loseText:'The judge is not amused.'}],
+  [18,85,n=>`${n} finds a briefcase full of cash on a train.`,
+    {label:'Turn it in to the police', risk:0.3, win:{money:5000,happy:6}, lose:{happy:4}, winText:'The owner insists on a reward.', loseText:'It goes back to its owner with thanks.'},
+    {label:'Keep it', risk:0.7, win:{money:20000,happy:3}, lose:{happy:-10}, winText:'Nobody ever comes looking.', loseText:'The people it belonged to come looking.', onLose:()=>{ state.money -= Math.round(infl(5000)); }},null,0.6],
+  // ---- home and car ----
+  [22,70,n=>`${n} needs a new car.`,
+    {label:'Buy something sensible', delta:{money:-12000,happy:3}},
+    {label:'Splurge on something fun', delta:{money:-30000,happy:8,looks:1}},'afford&nocar',1],
+  [25,70,n=>`${n}'s home could use a big renovation.`,
+    {label:'Remodel the kitchen ($25,000)', delta:{money:-25000,happy:7}, effect:()=>{ const h = state.assets.find(x => x.category === 'Homes'); if(h) h.value = Math.round(h.value + infl(20000)); }},
+    {label:'Live with it', delta:{}},'home&wealthy',1],
+  [25,80,n=>`A contractor offers ${n} solar panels with no money down.`,
+    {label:'Sign up', delta:{happy:3,money:1500}},
+    {label:'Read the fine print first', risk:0.5, win:{money:3000,smarts:1}, lose:{smarts:1}, winText:'It turns out to be a good deal.', loseText:'It was a bad deal after all.'},'home',1],
+  // ---- body, mind and luck ----
+  [16,60,n=>`${n} is offered a chance to try a meditation retreat.`,
+    {label:'Go for a week of silence', delta:{happy:6,health:3,money:-800}},
+    {label:'Not their thing', delta:{}}],
+  [18,70,n=>`${n} feels burned out.`,
+    {label:'Take a real vacation', delta:{happy:8,health:3,money:-2000}},
+    {label:'Push through', risk:0.5, win:{happy:1}, lose:{health:-6,happy:-6}, winText:'It passes.', loseText:'They crash hard.'},
+    'job',1],
+  [25,75,n=>`${n} wins a radio contest for a dream vacation.`,
+    {label:'Go to the tropics', delta:{happy:10}},
+    {label:'Take the cash value', delta:{money:4000,happy:3}}],
+  [40,80,n=>`A genetic test shows ${n} has a higher risk of heart disease.`,
+    {label:'Change everything: diet, exercise, sleep', delta:{health:6,happy:-2}},
+    {label:'Try not to think about it', delta:{happy:1,health:-2}}],
+  [16,40,n=>`${n} is invited to try out for a reality dating show.`,
+    {label:'Audition', risk:0.3, win:{fame:8,happy:6,looks:1}, lose:{happy:-2}, winText:'They make the cast.', loseText:'They do not get a callback.'},
+    {label:'No way', delta:{}},'single&goodlooking',1],
 ];
 
 // ---------- Event bank: authored scenarios, each with its own coherent outcomes ----------
-const FRIENDS = ['Maya','Jordan','Sam','Riley','Theo','Priya','Luca','Nia','Ezra','Amara','Kai','Zoe','Mateo','Imani','Owen','Leila','Hugo','Sana','Dev','Noor'];
+// first names by gender; unisex names can go to anyone
+const NAMES = {
+  female:['Maya','Priya','Nia','Amara','Zoe','Imani','Leila','Sana','Noor','Ava','Isla','Rosa','Elena','Hana','Chloe','Grace','Lucia','Aisha','Mei','Freya','Ines','Sofia','Clara','Yara','Ruby','Esme','Lena','Mira','Talia','Nora'],
+  male:['Theo','Luca','Ezra','Mateo','Owen','Hugo','Dev','Leo','Omar','Felix','Jonah','Marcus','Diego','Kenji','Elias','Samir','Arlo','Rafael','Tomas','Ben','Ravi','Kofi','Niko','Caleb','Jude','Idris','Milo','Oscar','Silas','Victor'],
+  unisex:['Jordan','Sam','Riley','Kai','Alex','Rowan','Quinn','Avery','Sage','Robin','Jamie','Morgan','Ari','Remy','Casey','Emerson']
+};
+const FRIENDS = NAMES.female.concat(NAMES.male, NAMES.unisex);
+const nameGender = nm => NAMES.female.includes(nm) ? 'female' : NAMES.male.includes(nm) ? 'male' : null;
 const PETS = ['Biscuit','Mochi','Pepper','Otis','Juniper','Waffles','Comet','Pickles','Maple','Ziggy'];
 const FOODS = ['tacos','dumplings','lasagna','pancakes','curry','ramen','apple pie','paella','sushi','chili'];
 const HOBBIES = ['pottery','chess','skateboarding','guitar','baking','photography','painting','birdwatching','woodworking','dance','knitting','kayaking','gardening','calligraphy','trivia','pickleball','origami','stargazing','rock climbing','sourdough baking'];
@@ -1991,6 +2067,49 @@ const BANK = [
   E(70,110,'{n} tells the same story at dinner for the fourth time',[['and the family lets them finish',{family:2,happy:2}]],'kids'),
   E(75,115,'{n} gets a handwritten letter from a great-grandchild',[['and puts it on the fridge',{happy:8,family:4}]],'grandkids'),
   E(80,120,'{n} celebrates another birthday',[['and refuses to say how old they are',{happy:5}]]),
+  // ---- seasons, holidays and small wonders ----
+  E(3,12,'{n} builds a snowman taller than they are',[['and names it after a teacher',{happy:5}]]),
+  E(4,12,'{n} finds a four-leaf clover',[['and keeps it pressed in a book for years',{happy:4}]]),
+  E(5,14,'{n} goes to summer camp',[['and comes home with a best friend',{happy:7,friends:5}],['and is homesick the whole time',{happy:-3}]]),
+  E(6,90,'{n} sees a shooting star',[['and makes a wish',{happy:3}]]),
+  E(8,90,'{n} gets caught in a summer thunderstorm',[['and dances in it',{happy:4}],['and ruins a new pair of shoes',{happy:-2}]]),
+  E(10,90,'a stray dog follows {n} home',[['and finds its owner the next day',{happy:4}]],'nopet'),
+  E(16,90,'{n} hosts a holiday dinner',[['and burns the main course',{happy:-1,friends:3}],['and it is the best one in years',{happy:6,family:5}]]),
+  E(18,90,'{n} spends a holiday alone',[['and calls everyone they love',{happy:-2,family:3}]],'lonely'),
+  E(20,90,'{n} watches a total solar eclipse',[['and gets goosebumps',{happy:6}]],null,0.5),
+  // ---- friends and family ----
+  E(8,18,'{n} and {rel} build a treehouse together',[['and it barely survives the first storm',{happy:6,bond:6}]],null,1,['Sibling','Friend']),
+  E(12,30,'{n} gets into a huge fight with {rel}',[['and they make up a week later',{bond:-3,happy:-2}],['and they stop speaking for a month',{bond:-10,happy:-5}]],null,1,['Sibling','Friend']),
+  E(18,90,'{rel} throws {n} a surprise party',[['and they are genuinely shocked',{happy:8,bond:6}]],null,0.8,['Friend','Partner','Spouse','Sibling']),
+  E(20,70,'{n} is the best person at {rel}\'s wedding',[['and the speech kills',{happy:6,bond:8}]],null,0.8,['Friend','Sibling']),
+  E(25,80,'{n} helps {rel} through a breakup',[['with ice cream and bad movies',{happy:2,bond:8}]],null,1,['Friend','Sibling']),
+  E(25,90,'{rel} gets sick and {n} visits every day',[['until they recover',{happy:-1,bond:10}]],null,0.8,['Mother','Father','Sibling','Friend']),
+  E(30,90,'{n} discovers {rel} has been secretly saving to give them a gift',[['and it is exactly what they wanted',{happy:7,bond:6}]],null,0.6,['Partner','Spouse','Child']),
+  E(40,95,'{n} finds old home videos',[['and the whole family watches them together',{happy:7,family:5}]]),
+  // ---- work, money and luck ----
+  E(18,65,'{n}\'s commute doubles because of construction',[['for an entire year',{happy:-3}]],'job'),
+  E(18,70,'{n} gets food delivered to the wrong address',[['and the neighbor brings it over',{happy:3}]]),
+  E(18,80,'{n} wins $500 on a scratch-off ticket',[['and buys dinner for friends',{money:400,happy:5,friends:2}]],null,0.6),
+  E(20,70,'{n} accidentally replies-all to the whole company',[['and the email becomes legend',{happy:-3,friends:2}]],'job'),
+  E(22,70,'{n} gets headhunted on a networking site',[['and the attention is flattering',{happy:3}]],'job'),
+  E(25,80,'{n}\'s car gets towed',[['on the one day they parked badly',{money:-350,happy:-3}]],'car'),
+  E(25,80,'{n} finally pays off a credit card',[['and cuts it up ceremonially',{happy:5,credit:10}]],'indebted'),
+  E(30,85,'{n}\'s identity is used to open a fake account',[['and it takes weeks of phone calls to fix',{happy:-5,credit:-15}]]),
+  // ---- mind and body ----
+  E(16,60,'{n} goes on a social media detox',[['and sleeps better than they have in years',{happy:5,health:2}]],'social'),
+  E(18,80,'{n} learns a new language',[['well enough to order dinner abroad',{smarts:4,happy:4}]]),
+  E(20,80,'{n} has a vivid dream',[['that they still think about years later',{happy:2,smarts:1}]]),
+  E(20,80,'{n} gets a terrible sunburn',[['and swears to wear sunscreen forever',{health:-2,looks:-1}]]),
+  E(25,80,'{n} starts therapy',[['and it helps more than they expected',{happy:6}]],'lonely'),
+  E(30,90,'{n} has trouble sleeping for months',[['until a doctor finds the cause',{health:-3,happy:-4}]]),
+  E(35,90,'{n} runs into an old bully',[['who apologizes sincerely',{happy:5}],['who has not changed one bit',{happy:-2}]]),
+  E(50,95,'{n} finally learns to swim',[['at the community pool',{health:3,happy:6}]]),
+  // ---- community ----
+  E(14,80,'{n} plants a tree in the park',[['and visits it every year',{happy:4}]]),
+  E(18,90,'{n} donates blood',[['and gets a cookie and a sticker',{happy:4,health:-1}]],'healthy'),
+  E(18,90,'{n} helps a lost tourist find their way',[['and gets an invitation to visit them abroad',{happy:4}]]),
+  E(25,90,'{n} joins a neighborhood watch',[['and meets every neighbor on the street',{friends:4,happy:2}]],'home'),
+  E(40,95,'{n} mentors a young person in their community',[['who calls them years later to say thank you',{happy:7}]]),
 ];
 
 // more two-option decisions
@@ -3305,20 +3424,28 @@ function rollTraits(){ const n = Math.random() < 0.5 ? 1 : 2, t = []; while(t.le
 function hasTrait(r, t){ return !!(r.traits && r.traits.includes(t)); }
 function makeRel(type, o){
   o = o || {};
-  const r = {id:relId(), name:freeName(), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
+  const gender = o.gender || (type === 'Mother' ? 'female' : type === 'Father' ? 'male' : rollGender());
+  const r = {id:relId(), name:o.name || freeName(gender), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
              closeness: o.closeness !== undefined ? o.closeness : 35, traits: o.traits || rollTraits(), origin: o.origin || ""};
   if(o.livingTogether) r.livingTogether = true;
-  r.gender = o.gender || (type === 'Mother' ? 'female' : type === 'Father' ? 'male' : rollGender());
+  r.gender = gender;
   if(PEER.includes(type) && r.age >= 22 && (type === 'Contact' || Math.random() < 0.3)) r.pro = rollPro(o.proBoost);
   return r;
 }
 const REL_WORDS = {Child:['daughter','son'], Sibling:['sister','brother'], Spouse:['wife','husband'], Partner:['girlfriend','boyfriend'], Grandchild:['granddaughter','grandson']};
 function relLabel(r){ const w = REL_WORDS[r.type]; return w && r.gender === 'female' ? w[0] : w && r.gender === 'male' ? w[1] : r.type.toLowerCase(); }
-// avoid giving two people in the same family the same name
-function freeName(){
+// a name that fits the person's gender, and that nobody else in the family already has
+function freeName(gender){
   const taken = [state.name].concat(state.relationships.map(x => x.name), state.relationships.filter(x => x.spouse).map(x => x.spouse.name));
-  const free = FRIENDS.filter(f => !taken.includes(f));
-  return pick(free.length ? free : FRIENDS);
+  const pool = gender === 'female' || gender === 'male' ? (Math.random() < 0.15 ? NAMES.unisex : NAMES[gender]) : (Math.random() < 0.6 ? NAMES.unisex : FRIENDS);
+  const free = pool.filter(f => !taken.includes(f));
+  return pick(free.length ? free : pool);
+}
+// older saves named people without regard to gender: give anyone with a clearly mismatched name one that fits
+function fixNames(){
+  if(!state || state.namesFixed) return;
+  state.relationships.forEach(r => { const g = nameGender(r.name); if(g && r.gender && g !== r.gender) r.name = freeName(r.gender); });
+  state.namesFixed = true;
 }
 function newRel(type, o){ const r = makeRel(type, o); state.relationships.push(r); return r; }
 function bump(r, n){ r.closeness = FAMILY_TYPES.includes(r.type) ? Math.max(10, Math.min(100, Math.round(r.closeness + n))) : clamp(Math.round(r.closeness + n)); }
@@ -4525,7 +4652,8 @@ function childYear(r, a, moments){
     r.spouse.age++;
     if(Math.random() < 0.012){ pushEntry(a, `${r.name} and ${r.spouse.name} divorce.`, {happy:-3}); r.spouse = null; }
   } else if(r.age >= 23 && r.age <= 48 && Math.random() < 0.1){
-    r.spouse = {name: freeName(), age: Math.max(18, r.age + rint(-4, 4)), traits: rollTraits()};
+    const sg = rollGender();
+    r.spouse = {name: freeName(sg), gender: sg, age: Math.max(18, r.age + rint(-4, 4)), traits: rollTraits()};
     const s = r.spouse.name, cost = inflR(15000, 500), opts = [];
     if(canPay(cost)) opts.push({label:`Pay for the wedding (${fmt(cost)})`, run:() => { pay(cost); bump(r, 12); pushEntry(state.age, `${n} pays for ${r.name} and ${s}'s wedding. It is a day to remember.`, {happy:6}); }});
     opts.push({label:"Give a heartfelt toast", run:() => { bump(r, 5); pushEntry(state.age, `${n} gives a toast at ${r.name}'s wedding that leaves the room in tears.`, {happy:5}); }});
@@ -9391,11 +9519,11 @@ const CROSSROADS = [
     ]);
   }},
   {key:'firstlove', min:35, max:65, cond:() => hasRel('Spouse') && state.relationships.length < 58, run(a){
-    const sp = state.relationships.find(r => r.type === 'Spouse'), name = freeName();
+    const sp = state.relationships.find(r => r.type === 'Spouse'), lg = rollGender(), name = freeName(lg);
     return presentCrossroads('A first love returns', `${name}, ${state.name}'s first love, is back in town, single, and says they never stopped thinking about ${state.name}. ${state.name} is married to ${sp.name}.`, [
       {label:`Leave ${sp.name} for ${name}`, pros:['the love that got away', 'a second chance'], cons:[`a painful divorce from ${sp.name}`, 'half your cash and savings', 'the kids may resent it'], run:() => {
         endRelationship(sp); bondDelta(['Child'], -10);
-        const l = newRel('Partner', {age: clampAge(a + rint(-2, 2)), closeness:80, origin:'your first love'}); l.name = name;
+        const l = newRel('Partner', {age: clampAge(a + rint(-2, 2)), closeness:80, origin:'your first love', gender:lg, name});
         pushEntry(a, `${state.name} leaves ${sp.name} and starts over with ${name}.`, {happy:6});
         seedThread('xr', {kind:'firstlove', rel:l.id, who:name}, `Left their marriage for ${name}, their first love`, rint(2, 4), 'firstlove');
       }},
