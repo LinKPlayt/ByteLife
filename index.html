@@ -372,6 +372,15 @@
   .xr-opt{ display:flex; flex-direction:column; gap:2px; text-align:left; }
   .xr-line{ font-size:12.5px; font-weight:500; }
   .xr-line.up{ color:var(--accent); } .xr-line.down{ color:var(--red); }
+  .spark{ vertical-align:middle; margin-left:4px; }
+  .chart-wide svg{ width:100%; height:46px; }
+  .mixrow{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px dashed var(--line); font-size:13.5px; }
+  .mixbtns{ display:flex; gap:4px; flex:none; }
+  .mixbtns .sortbtn{ margin:0; padding:6px 9px; }
+  .alloc{ display:flex; height:10px; border-radius:6px; overflow:hidden; background:var(--surface-2); margin:2px 0 6px; }
+  .alloc span{ display:block; height:100%; }
+  .star{ background:none; border:none; padding:0 4px 0 0; font-size:15px; color:var(--muted); cursor:pointer; }
+  .star.on{ color:var(--gold); }
   .chain{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; text-align:left; }
   .chain.good{ border-left:3px solid var(--accent); } .chain.bad{ border-left:3px solid var(--red); } .chain.mixed{ border-left:3px solid var(--gold); }
   .chain-h{ display:flex; justify-content:space-between; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:6px; }
@@ -539,7 +548,7 @@ function freshState(name){
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null, case:null, open:[], appeal:null, pendingArrest:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
-    namesFixed:true, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
+    namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
   };
 }
@@ -2307,7 +2316,7 @@ function mortalityChance(age, health){
 function ageUp(){
   if(!state || !state.alive) return;
   state.panel = null; inYear = true;
-  try{ ageUpYear(); if(state.alive && newsDraft){ worldEnd(state.age); render(); } } finally{ inYear = false; newsDraft = null; }
+  try{ ageUpYear(); if(state.alive) recordYearHistory(); if(state.alive && newsDraft){ worldEnd(state.age); render(); } } finally{ inYear = false; newsDraft = null; }
   window.scrollTo({top:0, behavior:"smooth"});
 }
 function ageUpYear(){
@@ -2768,6 +2777,7 @@ function updateMarket(a){
       : `Markets rally hard this year — ${state.name}'s portfolio surges.`,
       {happy: bias < 0 ? -4 : 5});
   }
+  marketAfterYear(a);
   processOrders(a);
 }
 
@@ -2775,12 +2785,18 @@ function payDividends(a){
   let total = 0;
   STOCKS.forEach(x => {
     if(x.div > 0){
-      const owned = state.portfolio[x.key] || 0;
-      if(owned > 0) total += owned * state.market[x.key].price * x.div;
+      const owned = state.portfolio[x.key] || 0, m = state.market[x.key];
+      if(owned > 0 && m){
+        const d = owned * m.price * x.div; total += d;
+        if(state.drip){ state.portfolio[x.key] += d / m.price; state.basis[x.key] = (state.basis[x.key] || 0) + d; }   // buys more of the same holding
+      }
     }
   });
+  state.divLast = total; state.divTotal = (state.divTotal || 0) + total;
+  if(state.flow) state.flow.dividends = total;
   if(total <= 0) return;
-  if(total >= 5) pushEntry(a, `${state.name} collects dividend payouts from their portfolio.`, {money: total});
+  if(state.drip){ if(total >= 5) pushEntry(a, `${state.name}'s ${fmt(total)} in dividends is reinvested automatically.`, {}); return; }
+  if(total >= 5) pushEntry(a, `${state.name} collects ${fmt(total)} in dividends from their portfolio.`, {money: total});
   else applyDelta({money: total});
 }
 
@@ -3009,7 +3025,10 @@ function investRow(x){
   const m = state.market[x.key], t = state.ticket;
   const pct = pctChange(x.key) * 100, dir = pct >= 0 ? "up" : "down", arrow = pct >= 0 ? "▲" : "▼";
   const owned = state.portfolio[x.key] || 0, basis = state.basis[x.key] || 0, val = owned * m.price;
-  const tagText = (instrType(x.key) === "stock" ? x.sector : "Crypto") + " · " + riskLabel(x.vol) + (x.div > 0 ? " · " + (x.div*100).toFixed(1) + "% div" : "");
+  const r5 = histReturn(m, 5);
+  const tagText = (instrType(x.key) === "stock" ? x.sector : "Crypto") + " · " + riskLabel(x.vol) + (x.div > 0 ? " · " + (x.div*100).toFixed(1) + "% div" : "") +
+    (r5 !== null ? " · 5y " + pctTxt(r5) : "") + (m.rating ? ' · analysts: <span class="' + RATING_CLS[m.rating] + '">' + m.rating + '</span>' : '');
+  const star = (state.watch || []).includes(x.key);
   let pos = "";
   if(owned > 0){
     pos = " · Holding " + fmtQty(owned) + " (" + fmt(val) + ")";
@@ -3018,7 +3037,7 @@ function investRow(x){
   const nOrd = state.orders.filter(o => o.key === x.key).length;
   const open = t.key === x.key;
   let h = '<div class="invrow">' +
-    '<div class="itop"><span><b>' + x.name + '</b> <span class="tick">' + x.key + '</span></span><span class="price ' + dir + '">' + arrow + " " + Math.abs(pct).toFixed(1) + "% " + fmtPrice(m.price) + "</span></div>" +
+    '<div class="itop"><span><button class="star' + (star ? ' on' : '') + '" onclick="toggleWatch(\'' + x.key + '\')" aria-label="Watchlist">' + (star ? '★' : '☆') + '</button><b>' + x.name + '</b> <span class="tick">' + x.key + '</span> ' + sparkline(m.hist, 54, 16) + '</span><span class="price ' + dir + '">' + arrow + " " + Math.abs(pct).toFixed(1) + "% " + fmtPrice(m.price) + "</span></div>" +
     '<div class="owned">' + tagText + pos + (nOrd ? " · " + nOrd + " open order" + (nOrd > 1 ? "s" : "") : "") + "</div>" +
     '<div class="assetbuy"><button onclick="openTicket(\'' + x.key + '\')">' + (open ? "Close ticket" : "Trade") + "</button>" +
     (owned > 0 && !open ? '<button onclick="sellPercent(\'' + x.key + '\',\'' + instrType(x.key) + '\',1)">Sell all</button>' : "") + "</div>";
@@ -4635,6 +4654,7 @@ function childYear(r, a, moments){
       const tuition = inflR(36000, 1000), half = Math.round(tuition / 2);
       const go = (paid, text, b, d) => { r.inCollege = true; r.movedOut = true; r.collegeEnd = r.age + 4; r.collegePaid = paid; bump(r, b); pushEntry(state.age, text, d || {}); };
       const opts = [];
+      if(state.collegeFund > 0){ const use = Math.min(state.collegeFund, tuition); opts.push({label: use >= tuition ? `Pay it all from the college fund (${fmt(tuition)})` : `Use the college fund (${fmt(use)} of ${fmt(tuition)})`, run:() => { state.collegeFund -= use; go(use >= tuition, use >= tuition ? `${n}'s college fund pays for ${r.name}'s education.` : `${n}'s college fund covers ${fmt(use)} of ${r.name}'s tuition.`, use >= tuition ? 14 : 8, {happy:5}); }}); }
       if(canPay(tuition)) opts.push({label:`Pay all of it (${fmt(tuition)})`, run:() => { pay(tuition); go(true, `${n} pays ${r.name}'s way through college.`, 12, {happy:4}); }});
       if(canPay(half)) opts.push({label:`Cover half (${fmt(half)})`, run:() => { pay(half); go(false, `${n} covers half of ${r.name}'s tuition.`, 6, {happy:2}); }});
       opts.push({label:"They'll take out student loans", run:() => go(false, `${r.name} heads off to college on student loans.`, -3)});
@@ -5927,7 +5947,7 @@ function totalDebt(){
   return (state.creditCard ? state.creditCard.balance : 0) + state.loans.reduce((s,l) => s + l.balance, 0);
 }
 function netWorth(){
-  return state.money + state.savings + (state.trustFund || 0) + (state.retirement ? state.retirement.balance : 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value * bizShare(state.business) : 0) - totalDebt();
+  return state.money + state.savings + (state.trustFund || 0) + (state.collegeFund || 0) + (state.retirement ? state.retirement.balance : 0) + cdTotal() + portfolioValue() + assetsValue() + (state.business ? state.business.value * bizShare(state.business) : 0) - totalDebt();
 }
 function toSavings(amt){ if(state.money < amt) return; state.money -= amt; state.savings += amt; render(); }
 function toChecking(amt){ if(state.savings < amt) return; state.savings -= amt; state.money += amt; render(); }
@@ -6134,6 +6154,7 @@ function loansYear(a){
     const due = Math.min(l.yearsLeft <= 1 ? Infinity : l.yearlyPayment, l.balance + interest);
     if(ensureCash(due)){
       state.money -= due;
+      if(state.flow) state.flow.loans += due;
       l.balance = Math.max(0, l.balance + interest - due);
       l.yearsLeft--;
       adjustCredit(l.type === 'Builder' ? 8 : 2);
@@ -6147,7 +6168,7 @@ function loansYear(a){
       missed = true;
     }
   });
-  if(missed){ adjustCredit(-25); pushEntry(a, `${state.name} misses a loan payment this year — credit takes a hit.`, {}); }
+  if(missed){ state.missedAges = (state.missedAges || []).concat([a]).slice(-10); adjustCredit(-25); pushEntry(a, `${state.name} misses a loan payment this year — credit takes a hit.`, {}); }
 }
 function applyCard(){
   if(state.creditCard || state.age < 18 || state.bankrupt || state.done.cardApp) return;
@@ -6666,23 +6687,25 @@ function yearlyFinances(a){
   const e = state.edu, econ = state.econ;
   let income = 0;
   const jailed = !!state.crime.prison;
-  if(a >= 8 && a < 18 && !jailed) income += Math.round(300 * econ.cumInflation);
+  const flow = state.flow = {salary:0, spouse:0, business:0, rentals:0, pension:0, dividends:0, interest:0, allowance:0, housing:0, living:0, kids:0, insurance:0, loans:0, incomeTotal:0};
+  if(a >= 8 && a < 18 && !jailed){ flow.allowance = Math.round(300 * econ.cumInflation); income += flow.allowance; }
   if(state.job){
     // retirement contributions come out before tax, and the employer matches half of them up to 3% of salary
     const R = state.retirement, contrib = Math.round(state.job.salary * R.pct), match = Math.round(Math.min(contrib, state.job.salary * 0.06) / 2);
     const taxable = state.job.salary - contrib;
-    income += Math.round(taxable - incomeTax(taxable));
+    flow.salary = Math.round(taxable - incomeTax(taxable)); income += flow.salary;
     if(contrib > 0){ R.balance += contrib + match; R.contributed += contrib; }
   }
   retirementYear();
-  income += rentalsYear(a);
-  income += businessYear(a);
+  flow.rentals = rentalsYear(a); income += flow.rentals;
+  flow.business = businessYear(a); income += flow.business;
   if(a >= 65 && !state.job && !state.retired) retire(true);
   if(state.retired && state.pension > 0){
-    income += Math.round(state.pension * 0.92);                          // after a modest tax
+    flow.pension = Math.round(state.pension * 0.92); income += flow.pension;   // after a modest tax
     state.pension = Math.round(state.pension * (1 + Math.max(0, yrInfl())));   // yearly cost-of-living adjustment
   }
-  if(state.savings > 0) state.savings += state.savings * savingsRate();
+  if(state.savings > 0){ flow.interest = state.savings * savingsRate(); state.savings += flow.interest; }
+  if(state.collegeFund > 0) state.collegeFund = Math.round(state.collegeFund * (1.04 + Math.max(0, yrInfl())));
   state.cds = state.cds.filter(cd => {
     cd.value *= (1 + cd.rate); cd.yearsLeft--;
     if(cd.yearsLeft > 0) return true;
@@ -6702,25 +6725,28 @@ function yearlyFinances(a){
   const spouse = state.relationships.find(r => r.type === 'Spouse');
   const kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
   let kidCost = 0, studentShort = 0;
-  if(spouse && !jailed) income += spouseIncome(spouse);
+  if(spouse && !jailed){ flow.spouse = spouseIncome(spouse); income += flow.spouse; }
   if(a >= 18 && independent && !jailed){
     const ownsHome = state.assets.some(x => x.category === 'Homes' && !x.rental);
     const student = (e.program || e.gradAge === a) && !spouse;
     if(student){
-      expenses += Math.round(9000 * cum * L.mult);                         // dorms, meal plans, shared apartments
+      flow.housing = Math.round(9000 * cum * L.mult);                     // dorms, meal plans, shared apartments
     } else {
-      if(!ownsHome) expenses += Math.round(13000 * cum * L.rent * (spouse ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1));   // young singles share with roommates
-      expenses += Math.round(11000 * cum * L.mult * (spouse ? 1.6 : 1));   // food, transport, utilities and everything else
+      if(!ownsHome) flow.housing = Math.round(13000 * cum * L.rent * (spouse ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1));   // young singles share with roommates; landlords charge felons more
+      flow.living = Math.round(11000 * cum * L.mult * (spouse ? 1.6 : 1));   // food, transport, utilities and everything else
     }
-    kidCost = Math.round(kids * 8000 * cum * Math.sqrt(L.mult));
-    expenses += kidCost;
-    if(state.insurance.health) expenses += Math.round(1200 * cum);
-    if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) expenses += Math.round(900 * cum);
-    if(state.insurance.home && ownsHome) expenses += Math.round(800 * cum);
+    kidCost = flow.kids = Math.round(kids * 8000 * cum * Math.sqrt(L.mult));
+    if(state.insurance.health) flow.insurance += Math.round(1200 * cum);
+    if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) flow.insurance += Math.round(900 * cum);
+    if(state.insurance.home && ownsHome) flow.insurance += Math.round(800 * cum);
+    expenses += flow.housing + flow.living + flow.kids + flow.insurance;
     if(L.happy) applyDelta({happy: L.happy});
   }
   if(a >= 65) expenses = Math.round(expenses * 0.85);                     // downsized, simpler living
   expenses = Math.round(expenses * (state.world.costMult || 1));
+  const raw = flow.housing + flow.living + flow.kids + flow.insurance;
+  if(raw > 0) ['housing', 'living', 'kids', 'insurance'].forEach(k => flow[k] = Math.round(flow[k] * expenses / raw));
+  flow.incomeTotal = income;
   let net = income - expenses;
   // students cover a shortfall with student loans instead of going broke
   if((e.program || e.gradAge === a) && net < 0 && state.money + state.savings + net < 0){
@@ -7614,7 +7640,7 @@ function mePanelHtml(){
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
-    ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
+    ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
     '<div class="itop" style="border-top:1px solid var(--line);padding-top:7px;"><span><b>Total</b></span><span class="price"><b>' + fmt(netWorth()) + "</b></span></div>" +
     '<div class="owned">About ' + fmt(netWorth() / cum) + " in today's money. Prices have risen " + Math.round((cum - 1) * 100) + "% since the family line began.</div></div>";
@@ -7903,6 +7929,7 @@ function renderPanel(){
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
+      h += marketOverviewHtml() + portfolioHtml() + mixesHtml();
       h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
@@ -7915,19 +7942,19 @@ function renderPanel(){
         state.marketNews.map(n => '<span class="' + (n.up ? 'up' : 'down') + '">' + (n.up ? '▲' : '▼') + '</span> ' + n.text + (n.key ? ' <span class="tick">' + n.key + '</span>' : '')).join('<br>') + '</div></div>';
       const f = state.invFilter || 'all', owns = x => (state.portfolio[x.key] || 0) > 0;
       h += '<div class="plabel">SHOW</div><div class="sortrow">' +
-        [['all','All'],['owned','Owned'],['stocks','Stocks'],['funds','Funds'],['crypto','Crypto']].map(([m,l]) => `<button class="sortbtn${f===m?' active':''}" onclick="state.invFilter='${m}';renderPanel()">${l}</button>`).join('') + '</div>';
+        [['all','All'],['owned','Owned'],['watch','Watchlist'],['stocks','Stocks'],['funds','Funds'],['crypto','Crypto']].map(([m,l]) => `<button class="sortbtn${f===m?' active':''}" onclick="state.invFilter='${m}';renderPanel()">${l}</button>`).join('') + '</div>';
       const stocks = STOCKS.filter(x => !FUND_SECTORS.includes(x.sector)), funds = STOCKS.filter(x => FUND_SECTORS.includes(x.sector));
-      const groups = [['STOCKS', stocks, ['all','stocks','owned']], ['FUNDS', funds, ['all','funds','owned']], ['CRYPTO', CRYPTO, ['all','crypto','owned']]];
+      const groups = [['STOCKS', stocks, ['all','stocks','owned','watch']], ['FUNDS', funds, ['all','funds','owned','watch']], ['CRYPTO', CRYPTO, ['all','crypto','owned','watch']]];
       let shown = 0;
       groups.forEach(([label, list, modes]) => {
         if(!modes.includes(f)) return;
-        const rows = sortedList(f === 'owned' ? list.filter(owns) : list);
+        const rows = sortedList(f === 'owned' ? list.filter(owns) : f === 'watch' ? list.filter(x => (state.watch || []).includes(x.key)) : list);
         if(!rows.length) return;
         shown += rows.length;
         h += '<div class="plabel">' + label + ' (' + rows.length + ')</div>';
         rows.forEach(x => h += investRow(x));
       });
-      if(!shown) h += '<div class="status">' + (f === 'owned' ? "You don't own any investments yet." : 'Nothing to show.') + '</div>';
+      if(!shown) h += '<div class="status">' + (f === 'owned' ? "You don't own any investments yet." : f === 'watch' ? 'Tap the ☆ next to any investment to watch it here.' : 'Nothing to show.') + '</div>';
     }
   } else if(state.panel === 'ast'){
     const av = assetsValue();
@@ -7953,7 +7980,8 @@ function renderPanel(){
 
     if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
       Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
-    h += trustHtml() + savingsPanelHtml();
+    h += netWorthHistHtml() + cashFlowHtml() + emergencyHtml() + creditHtml();
+    h += trustHtml() + savingsPanelHtml() + collegeFundHtml();
     if(a >= 16) h += retirementHtml();
 
     h += '<div class="plabel">CREDIT CARD</div>';
@@ -7974,7 +8002,9 @@ function renderPanel(){
       h += bankRow('Credit Builder Loan', '$500, low rate, always approved — rebuilds credit fast when paid on time.', `<button onclick="applyBuilderLoan()">Take Loan</button>`);
     state.loans.forEach(l => {
       h += bankRow(`${l.type} Loan`, `Balance ${fmt(l.balance)} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'deferred while in school' : fmt(l.yearlyPayment)+'/yr · '+l.yearsLeft+'yr left'}`,
-        !l.deferred ? `<button onclick="payoffLoan('${l.id}')" ${state.money < l.balance ? 'disabled' : ''}>Pay Off ${fmt(l.balance)}</button>` : '');
+        !l.deferred ? `<button onclick="payoffLoan('${l.id}')" ${state.money < l.balance ? 'disabled' : ''}>Pay Off ${fmt(l.balance)}</button>` +
+          `<button onclick="extraPayment('${l.id}')" ${canPay(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1)))) ? '' : 'disabled'}>Pay extra ${fmt(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1))))}</button>` +
+          (canRefi(l) ? `<button onclick="refinanceLoan('${l.id}')">Refinance to ${(refiRate(l) * 100).toFixed(1)}%</button>` : '') : '');
     });
 
     h += '<div class="plabel">INSURANCE</div><div class="sortrow">' +
@@ -10089,6 +10119,167 @@ function crossroadsHtml(){
   const x = xrList(); if(!x.length) return '';
   return '<div class="plabel">⚡ Crossroads</div><div class="timeline">' + x.map(c => `<div class="tl-row"><span class="tl-age">${c.age}</span><span class="tl-tx"><b>${c.title}</b>${c.news ? '<br><span style="color:var(--muted);font-size:12px">📰 ' + c.news + '</span>' : ''}<br>Chose: ${c.chose}${c.other.length ? ' <span style="color:var(--muted)">· not: ' + c.other.join(', ') + '</span>' : ''}</span></div>`).join('') + '</div>';
 }
+
+// ---------- Markets and banking: history, ratings, analytics, cash flow, credit and planning tools ----------
+// a tiny line chart for any series of numbers
+function sparkline(vals, w, h, color){
+  vals = (vals || []).filter(v => isFinite(v));
+  if(vals.length < 2) return '';
+  const mn = Math.min(...vals), mx = Math.max(...vals), r = mx - mn || 1;
+  const pts = vals.map((v, i) => (1 + i * (w - 2) / (vals.length - 1)).toFixed(1) + ',' + (h - 1 - (v - mn) / r * (h - 2)).toFixed(1)).join(' ');
+  const up = vals[vals.length - 1] >= vals[0];
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--${color || (up ? 'green' : 'red')})" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+const pctTxt = p => `<span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p * 100).toFixed(1)}%</span>`;
+function histReturn(m, years){ const h = m.hist || []; return h.length > years ? h[h.length - 1] / h[h.length - 1 - years] - 1 : null; }
+// after each year's prices: history, analyst views and splits
+function marketAfterYear(a){
+  const wf = wfx(), news = state.marketNews || [];
+  ALL_INSTR.forEach(x => {
+    const m = state.market[x.key]; if(!m) return;
+    m.hist = (m.hist && m.hist.length ? m.hist : [m.prev]).concat([m.price]).slice(-30);
+    const last = m.prev ? m.price / m.prev - 1 : 0;
+    const score = x.drift * 4 + (wf.sectors[x.sector] || 0) * 3 + (last < -0.2 ? 0.25 : last > 0.45 ? -0.2 : 0) - x.vol * 0.3 + (Math.random() - 0.5) * 0.5;
+    m.rating = score > 0.32 ? 'Buy' : score < 0.02 ? 'Sell' : 'Hold';
+    // expensive shares get split so they stay easy to buy
+    if(x.type === 'stock' && m.price > 1500){
+      m.price /= 10; m.prev /= 10; m.hist = m.hist.map(v => v / 10);
+      if(state.portfolio[x.key]) state.portfolio[x.key] *= 10;
+      state.orders.forEach(o => { if(o.key === x.key) o.trigger = o.trigger / 10; });
+      news.push({text: x.name + ' announces a 10-for-1 stock split', up: true, key: x.key});
+      if(state.portfolio[x.key]) pushEntry(a, `${x.name} splits its stock 10-for-1. ${state.name} now holds ten times as many shares at a tenth of the price.`, {});
+    }
+  });
+  state.marketNews = news;
+}
+const RATING_CLS = {Buy:'up', Sell:'down', Hold:''};
+const toggleWatch = key => { state.watch = state.watch || []; state.watch = state.watch.includes(key) ? state.watch.filter(k => k !== key) : state.watch.concat([key]); renderPanel(); };
+// ready-made portfolios for people who don't want to pick stocks
+const MIXES = {
+  conservative:{label:'Conservative', parts:{BNDF:0.55, IDXF:0.3, GLDF:0.15}, blurb:'mostly bonds and gold, small swings'},
+  balanced:{label:'Balanced', parts:{IDXF:0.6, BNDF:0.3, GLDF:0.1}, blurb:'the classic 60/40 mix'},
+  growth:{label:'Growth', parts:{IDXF:0.55, TECF:0.35, BNDF:0.1}, blurb:'mostly stocks, bigger ups and downs'},
+};
+function buyMix(kind, share){
+  const mix = MIXES[kind], total = Math.floor(state.money * share); if(!mix || total < 50) return;
+  for(const k in mix.parts) if(state.market[k]) execBuy(k, Math.floor(total * mix.parts[k]));
+  pushEntry(state.age, `${state.name} invests ${fmt(total)} in a ${mix.label.toLowerCase()} portfolio.`, {});
+  render();
+}
+function portfolioHtml(){
+  const pv = portfolioValue(); if(pv < 1) return '';
+  const cls = {stock:0, fund:0, crypto:0}, sec = {};
+  let vol = 0, big = null;
+  for(const k in state.portfolio){
+    const m = state.market[k], x = ALL_INSTR.find(i => i.key === k); if(!m || !x) continue;
+    const v = state.portfolio[k] * m.price;
+    const kind = x.type === 'crypto' ? 'crypto' : FUND_SECTORS.includes(x.sector) ? 'fund' : 'stock';
+    cls[kind] += v; vol += v * x.vol;
+    const s = x.type === 'crypto' ? 'Crypto' : x.sector; sec[s] = (sec[s] || 0) + v;
+    if(!big || v > big.v) big = {v, name: x.name};
+  }
+  const w = vol / pv, risk = w < 0.12 ? 'low' : w < 0.25 ? 'moderate' : w < 0.45 ? 'high' : 'very high';
+  const bar = [['stock', 'var(--blue)', 'Stocks'], ['fund', 'var(--green)', 'Funds'], ['crypto', 'var(--gold)', 'Crypto']].filter(c => cls[c[0]] > 0);
+  const top = Object.keys(sec).sort((a, b) => sec[b] - sec[a]).slice(0, 3).map(s => s + ' ' + Math.round(sec[s] / pv * 100) + '%').join(' · ');
+  const gain = (state.realized || 0) + unrealizedPL();
+  let h = '<div class="plabel">Your portfolio</div><div class="invrow">';
+  h += '<div class="alloc">' + bar.map(c => `<span style="width:${(cls[c[0]] / pv * 100).toFixed(1)}%;background:${c[1]}"></span>`).join('') + '</div>';
+  h += '<div class="owned">' + bar.map(c => `<b style="color:${c[1]}">■</b> ${c[2]} ${Math.round(cls[c[0]] / pv * 100)}%`).join(' &nbsp; ') + '<br>Top sectors: ' + top +
+    `<br>Risk: <b>${risk}</b> · Total gain ${gain >= 0 ? '<span class="up">+' : '<span class="down">-'}${fmt(Math.abs(gain)).replace('-', '')}</span> (sold and unsold)` +
+    `<br>Dividends: ${fmt(state.divLast || 0)} last year, ${fmt(state.divTotal || 0)} all-time${state.drip ? ' · reinvested automatically' : ''}` +
+    (big && big.v / pv > 0.5 && pv > 2000 ? `<br><span class="down">⚠ ${Math.round(big.v / pv * 100)}% of your money is in ${big.name}. Spreading it out lowers the risk.</span>` : '') + '</div>';
+  h += `<div class="sortrow" style="margin-top:6px"><button class="sortbtn${state.drip ? ' active' : ''}" onclick="state.drip=!state.drip;renderPanel()">Reinvest dividends ${state.drip ? '✓' : ''}</button></div></div>`;
+  return h;
+}
+function marketOverviewHtml(){
+  const m = state.market.IDXF; if(!m) return '';
+  const y1 = m.prev ? m.price / m.prev - 1 : 0, y5 = histReturn(m, 5);
+  const mood = worldHas('bear') || y1 < -0.1 ? 'a bear market' : y1 > 0.15 ? 'a bull market' : 'steady';
+  return '<div class="plabel">The market</div><div class="invrow"><div class="itop"><span><b>Total market</b> ' + sparkline(m.hist, 90, 22) + '</span><span class="price">' + pctTxt(y1) + ' this year</span></div>' +
+    '<div class="owned">' + (y5 !== null ? '5 years: ' + pctTxt(y5) + ' · ' : '') + 'Mood: <b>' + mood + '</b>. Analyst ratings below are informed guesses, not promises.</div></div>';
+}
+function mixesHtml(){
+  if(state.money < 100) return '';
+  return '<div class="plabel">Ready-made portfolios</div><div class="invrow"><div class="owned">Don\'t want to pick stocks? Put a share of your ' + fmt(state.money) + ' cash into a mix of funds.</div>' +
+    Object.keys(MIXES).map(k => `<div class="mixrow"><span><b>${MIXES[k].label}</b> <span class="sub-meta">${MIXES[k].blurb}</span></span><span class="mixbtns">` +
+      [[0.25, '25%'], [0.5, '50%'], [1, 'All']].map(([s, l]) => `<button class="sortbtn" onclick="buyMix('${k}',${s})">${l}</button>`).join('') + '</span></div>').join('') + '</div>';
+}
+// ---- banking ----
+function recordYearHistory(){
+  state.nwHist = (state.nwHist || []).concat([{age: state.age, v: Math.round(netWorth() / state.econ.cumInflation)}]).slice(-120);
+  state.csHist = (state.csHist || []).concat([state.creditScore]).slice(-60);
+}
+function cashFlowHtml(){
+  const f = state.flow; if(!f || state.age < 16) return '';
+  const inc = [['Salary', f.salary], ['Spouse', f.spouse], ['Business', f.business], ['Rentals', f.rentals], ['Pension', f.pension], ['Dividends', f.dividends], ['Interest', f.interest], ['Allowance', f.allowance]].filter(r => Math.round(r[1] || 0) !== 0);
+  const out = [['Housing', f.housing], ['Food, transport and bills', f.living], ['Kids', f.kids], ['Insurance', f.insurance], ['Loan payments', f.loans]].filter(r => Math.round(r[1] || 0) > 0);
+  const ti = inc.reduce((t, r) => t + r[1], 0), to = out.reduce((t, r) => t + r[1], 0);
+  const row = (l, v, cls) => `<div class="itop"><span>${l}</span><span class="price ${cls || ''}">${fmt(v)}</span></div>`;
+  return '<div class="plabel">Last year\'s money</div><div class="invrow">' + inc.map(r => row(r[0], r[1], r[1] < 0 ? 'down' : '')).join('') +
+    '<div class="owned" style="margin:2px 0 6px">Coming in: <b>' + fmt(ti) + '</b></div>' + out.map(r => row(r[0], -r[1], 'down')).join('') +
+    `<div class="itop" style="border-top:1px solid var(--line);padding-top:6px"><span><b>${ti - to >= 0 ? 'Left over' : 'Shortfall'}</b></span><span class="price ${ti - to >= 0 ? 'up' : 'down'}"><b>${fmt(ti - to)}</b></span></div></div>`;
+}
+function netWorthHistHtml(){
+  const hs = (state.nwHist || []).filter(x => x.age >= 18);
+  if(hs.length < 3) return '';
+  const now = hs[hs.length - 1].v, peak = hs.reduce((m, x) => x.v > m.v ? x : m, hs[0]);
+  return '<div class="plabel">Net worth over time</div><div class="invrow"><div class="chart-wide">' + sparkline(hs.map(x => x.v), 300, 46) + '</div>' +
+    `<div class="owned">In today's money: ${fmt(now)} now · peak ${fmt(peak.v)} at ${peak.age} · ${hs.length} years tracked</div></div>`;
+}
+function creditFactors(){
+  const c = state.creditCard, missed = (state.missedAges || []).filter(x => state.age - x <= 7).length;
+  const util = c && c.limit ? c.balance / c.limit : 0, inc = Math.max(1, state.flow ? state.flow.incomeTotal : 0), dti = totalDebt() / inc, ageYrs = Math.max(0, state.age - 18);
+  return [
+    ['Payment history', missed === 0 ? 'good' : missed <= 1 ? 'fair' : 'poor', missed ? missed + ' missed payment year' + (missed > 1 ? 's' : '') + ' in the last 7' : 'no missed payments recently'],
+    ['Card utilization', !c ? 'none' : util < 0.3 ? 'good' : util < 0.7 ? 'fair' : 'poor', c ? Math.round(util * 100) + '% of your limit used' : 'no credit card yet'],
+    ['Debt to income', dti < 1 ? 'good' : dti < 3 ? 'fair' : 'poor', 'debts are ' + dti.toFixed(1) + '× a year\'s income'],
+    ['Credit history', ageYrs >= 10 ? 'good' : ageYrs >= 4 ? 'fair' : 'poor', ageYrs + ' year' + (ageYrs === 1 ? '' : 's') + ' of history'],
+    ['Public records', state.bankrupt ? 'poor' : state.bankruptcies ? 'fair' : 'good', state.bankrupt ? 'a recent bankruptcy' : state.bankruptcies ? 'an old bankruptcy' : 'nothing on file'],
+  ];
+}
+function creditHtml(){
+  if(state.age < 18) return '';
+  const tag = {good:'up', fair:'', poor:'down', none:''};
+  return '<div class="plabel">Credit score</div><div class="invrow"><div class="itop"><span><b>' + state.creditScore + '</b> ' + creditTier(state.creditScore) + ' ' + sparkline(state.csHist, 80, 20) + '</span></div>' +
+    '<div class="owned">' + creditFactors().map(f => `${f[0]}: <span class="${tag[f[1]]}">${f[1]}</span> · ${f[2]}`).join('<br>') + '<br>Good credit means cheaper loans and refinancing. Pay on time and keep card balances low.</div></div>';
+}
+function emergencyHtml(){
+  if(state.age < 18 || !state.movedOut) return '';
+  const monthly = Math.max(1, livingEstimate() / 12), months = (Math.max(0, state.money) + state.savings + cdTotal()) / monthly, pct = Math.min(100, months / 6 * 100);
+  return '<div class="plabel">Emergency fund</div><div class="invrow"><div class="itop"><span>Cash and savings cover about <b>' + months.toFixed(1) + ' months</b> of living costs</span></div>' +
+    `<div class="stat-track"><div class="stat-fill" style="width:${pct}%;background:var(--${months >= 6 ? 'green' : months >= 3 ? 'gold' : 'red'})"></div></div>` +
+    `<div class="owned">${months >= 6 ? 'A solid cushion for a job loss or emergency.' : 'Aim for 3 to 6 months (' + fmt(monthly * 3) + ' to ' + fmt(monthly * 6) + ') in savings.'}</div></div>`;
+}
+// loans: pay extra or refinance when rates and credit allow
+function refiRate(l){ return Math.max(0.03, state.econ.rate + Math.max(0.005, (720 - state.creditScore) / 4000) + (l.type === 'Personal' || l.type === 'Business' ? 0.03 : l.type === 'Car' ? 0.01 : 0) + (felon() ? 0.03 : 0)); }
+const canRefi = l => !l.deferred && !['Builder', 'Collections'].includes(l.type) && state.creditScore >= 640 && !state.bankrupt && !state.done['refi_' + l.id] && l.yearsLeft > 1 && refiRate(l) < l.apr - 0.01;
+function refinanceLoan(id){
+  const l = state.loans.find(x => x.id === id); if(!l || !canRefi(l)) return;
+  const fee = Math.round(l.balance * 0.01); if(!canPay(fee)) return;
+  pay(fee); state.done['refi_' + l.id] = true;
+  const old = l.apr; l.apr = refiRate(l);
+  l.yearlyPayment = Math.round(l.balance * l.apr / (1 - Math.pow(1 + l.apr, -Math.max(1, l.yearsLeft))));
+  pushEntry(state.age, `${state.name} refinances their ${l.type.toLowerCase()} loan from ${(old * 100).toFixed(1)}% to ${(l.apr * 100).toFixed(1)}%, now ${fmt(l.yearlyPayment)} a year.`, {happy:3});
+  render();
+}
+function extraPayment(id){
+  const l = state.loans.find(x => x.id === id); if(!l || l.deferred) return;
+  const amt = Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1)));
+  if(!canPay(amt)) return;
+  pay(amt); l.balance -= amt;
+  if(l.balance <= 1){ state.loans = state.loans.filter(x => x !== l); pushEntry(state.age, `${state.name} pays off their ${l.type.toLowerCase()} loan.`, {happy:4}); }
+  else { l.yearlyPayment = Math.round(l.balance * l.apr / (1 - Math.pow(1 + l.apr, -Math.max(1, l.yearsLeft)))); pushEntry(state.age, `${state.name} puts an extra ${fmt(amt)} toward their ${l.type.toLowerCase()} loan.`, {}); }
+  render();
+}
+// a fund for the kids' college, invested until they need it
+function collegeFundHtml(){
+  if(state.age < 20 || !(hasRel('Child') || state.collegeFund > 0)) return '';
+  const steps = [inflR(1000, 100), inflR(5000, 100)];
+  return '<div class="plabel">College fund</div><div class="invrow"><div class="itop"><span><b>Kids\' college fund</b></span><span class="price">' + fmt(state.collegeFund || 0) + '</span></div>' +
+    '<div class="owned">Invested for growth (about 6% a year). When a child heads to college, it pays their tuition first.</div>' +
+    '<div class="assetbuy">' + steps.map(s => `<button onclick="fundCollege(${s})" ${state.money < s ? 'disabled' : ''}>Add ${fmt(s)}</button>`).join('') + '</div></div>';
+}
+function fundCollege(amt){ if(state.money < amt) return; state.money -= amt; state.collegeFund = (state.collegeFund || 0) + amt; render(); }
 
 // ---------- Achievements and milestones ----------
 // Achievements belong to the player, not to one life: they live in their own save and survive every new record.
