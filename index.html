@@ -536,7 +536,7 @@ function freshState(name){
     estates:[], estateSeq:0, will:'family', trust:false, famEstate:0, inheritedTotal:0, evTarget:null, openRel:null, socMenu:null,
     generation:1, lineage:[], traits:[], trustFund:0, willSplit:'equal', willHeir:null,
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
-    crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null},
+    crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null, case:null, open:[], appeal:null, pendingArrest:null},
     health:{conditions:[], history:[], lastCheckup:null, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal'}},
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
@@ -2336,7 +2336,7 @@ function ageUpYear(){
   crimeYear(a);
   if(state.crime.prison){ prisonYear(a); render(); return; }
   const schoolPrompted = schoolYear(a);
-  const prompted = healthYear(a, !schoolPrompted) || schoolPrompted || crossroadsYear(a);   // a crossroads takes the year's main decision
+  const prompted = healthYear(a, !schoolPrompted) || schoolPrompted || justiceYear(a) || crossroadsYear(a);   // a crossroads takes the year's main decision
   yearlyFinances(a);
   workYear(a);
   loansYear(a);
@@ -3106,7 +3106,7 @@ function buyAsset(key, financed){
     state.assets.push({id, key:t.key, name:t.name, category:t.category, value:price, boughtPrice:price, boughtAge:state.age});
     const term = t.category === 'Cars' ? (t.price >= 200000 ? 15 : 5) : 30;
     const spread = Math.max(0.005, (700 - state.creditScore) / 5000);
-    const apr = Math.max(0.03, Math.min(0.15, state.econ.rate + spread));
+    const apr = Math.max(0.03, Math.min(0.18, state.econ.rate + spread + (felon() ? 0.03 : 0)));
     takeLoan(t.category === 'Cars' ? 'Car' : 'Mortgage', price - down, term, apr, {assetId:id});
     pushEntry(state.age, `${state.name} finances a ${t.name} with ${fmt(down)} down at ${(apr*100).toFixed(1)}% APR.`, CAT_BUY_DELTA[t.category]);
   } else {
@@ -3182,7 +3182,7 @@ function buyListing(id, financed){
   state.assets.push({id:id2, key:t.key, name:loc.name + ' ' + t.name, category:'Real Estate', value:l.fair, boughtPrice:l.price, boughtAge:state.age,
     rental:{units:l.units, occupied:0, rent:'market', cond:l.cond, manager:false, loc:l.loc, lastRent:0, lastNet:null}});
   if(financed){
-    const apr = Math.max(0.035, Math.min(0.15, state.econ.rate + 0.01 + Math.max(0.005, (700 - state.creditScore) / 5000)));
+    const apr = Math.max(0.035, Math.min(0.18, state.econ.rate + 0.01 + Math.max(0.005, (700 - state.creditScore) / 5000) + (felon() ? 0.03 : 0)));
     takeLoan('Mortgage', l.price - Math.round(l.price * 0.25), 30, apr, {assetId:id2});
   }
   state.listings = state.listings.filter(x => x.id !== id);
@@ -3977,6 +3977,7 @@ function tripState(d){
 }
 function takeTrip(key){
   const d = TRAVEL_DESTS.find(x => x.key === key); if(!d || !tripState(d).ok) return;
+  if(felon() && !d.domestic && Math.random() < 0.4){ state.done['trip_' + key] = true; pushEntry(state.age, `${state.name}'s visa is denied because of their criminal record. The trip is off.`, {happy:-5}); render(); return; }
   const cost = tripCost(d), cls = TRAVEL_CLASS[state.travelClass || 'standard'], party = travelParty(), n = state.name, tv = TV();
   pay(cost);
   state.done['trip_' + key] = true; state.done.trips = (state.done.trips || 0) + 1;
@@ -4516,7 +4517,7 @@ function dateOut(key){
   const d = DATE_KINDS.find(x => x.key === key); if(!d || !dateState(d).ok) return;
   state.done["date_" + key] = true; state.done.dates = (state.done.dates || 0) + 1;
   if(dCost(d)){ ensureCash(dCost(d)); state.money -= dCost(d); }
-  const chance = Math.min(0.9, d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0));
+  const chance = Math.min(0.9, d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0)) * (felon() ? 0.75 : 1);
   if(Math.random() < chance){
     const p = newRel("Partner", {age: Math.max(0, state.age + rint(-4,4)), closeness: rint(42,58), origin: d.origin || "on a date"});
     pushEntry(state.age, `${state.name} goes on a date ${d.text} with ${p.name}, and it turns into something real. ${p.name} seems ${p.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:8});
@@ -5023,7 +5024,7 @@ function applyHeir(h){
   if(kid.spouse){
     const sp = copy("Spouse", kid.spouse, {closeness: rint(55, 80), origin:"your spouse", livingTogether:true});
     rels.push(sp);
-    old.relationships.filter(g => g.type === "Grandchild" && g.parentId === kid.id).forEach(g => { const c = copy("Child", g, {closeness: Math.max(50, g.closeness + 20), origin:"your child"}); c.coParent = sp.id; rels.push(c); });
+    old.relationships.filter(g => g.type === "Grandchild" && g.parentId === kid.id).forEach(g => { const c = copy("Child", g, {closeness: Math.min(100, Math.max(50, g.closeness + 20)), origin:"your child"}); c.coParent = sp.id; rels.push(c); });
   } else if(age >= 22 && Math.random() < 0.2) rels.push(makeRel("Partner", {age: Math.max(18, age + rint(-5, 5)), closeness: rint(45, 70), origin:"on a date"}));
   if(age >= 3) for(let i = 0, n = age < 12 ? rint(1, 3) : rint(2, 4); i < n; i++)
     rels.push(makeRel("Friend", {age: Math.max(0, age + rint(-4, 4)), closeness: rint(35, 60), origin: age < 18 ? "at school" : pick(["in the neighborhood", "through work", "online"])}));
@@ -5480,57 +5481,12 @@ function commitCrime(key){
     const delta = {money: amt, happy: c.happy || (amt > 0 ? 3 : 1)};
     if(c.health) delta.health = c.health;
     pushEntry(state.age, amt > 0 ? `${n} gets away with ${c.ing} and comes out ${fmt(amt)} ahead.` : `${n} gets away with ${c.ing}.`, delta);
+    if(c.felony) openInvestigation(c, c.key === 'fraud' || c.key === 'tax' ? amt : 0);
     if(c.felony && !hasThread('blackmail') && Math.random() < 0.3) seedThread('blackmail', {crime: c.key, ing: c.ing}, `Got away with ${c.ing}`, rint(1, 4), 'note');
   }
   render();
 }
-function lawyerFees(felony){ return {priv: inflR(felony ? 8000 : 2000, 100), top: inflR(felony ? 40000 : 8000, 500)}; }
-function arrest(c, amt){
-  const n = state.name;
-  if(state.fame.level >= 30) pushEntry(state.age, `${n}'s arrest is front-page news.`, {image:-20, fame:4});
-  if(state.age < 18){                              // juvenile court: no lawyer choice, record sealed at 18
-    if(c.felony && Math.random() < 0.45){ addRecord(c, true, "juvenile detention"); imprison(rint(1, 2), c.charge, true); }
-    else { addRecord(c, true, "probation"); CR().probation = Math.max(CR().probation, 2); pushEntry(state.age, `A juvenile court gives ${n} probation and community service.`, {happy:-3, family:-5}); }
-    return;
-  }
-  const f = lawyerFees(c.felony), opts = [];
-  opts.push({label:"Plead guilty for a lighter sentence", run:() => sentence(c, amt, true)});
-  opts.push({label:"Go to trial with a public defender", run:() => trial(c, amt, 0)});
-  if(canPay(f.priv)) opts.push({label:`Hire a private lawyer (${fmt(f.priv)})`, run:() => { pay(f.priv); trial(c, amt, 0.18); }});
-  if(canPay(f.top)) opts.push({label:`Hire a top defense attorney (${fmt(f.top)})`, run:() => { pay(f.top); trial(c, amt, 0.34); }});
-  const lawFriend = myNetwork().find(r => r.pro === 'lawyer' && r.closeness >= 50);
-  if(lawFriend) opts.push({label:`Call ${lawFriend.name}, the attorney you know (free)`, run:() => { bump(lawFriend, -10); trial(c, amt, 0.3); }});
-  presentCustom(`${n} is charged with ${c.charge}${c.felony ? ', a felony' : ''}. ${priorCount() ? 'Their record will count against them. ' : ''}How do they plead?`, opts);
-}
-function trial(c, amt, lawyer){
-  const n = state.name;
-  const p = Math.max(0.08, Math.min(0.95, 0.72 - lawyer - state.stats.smarts / 600 + priorCount() * 0.05 - state.fame.level / 500));
-  if(Math.random() < p){ pushEntry(state.age, `The jury finds ${n} guilty.`, {happy:-5}); sentence(c, amt, false); }
-  else { CR().heat = Math.max(0, CR().heat - 10); pushEntry(state.age, `The jury finds ${n} not guilty. ${n} walks free.`, {happy:8}); }
-}
 function addRecord(c, juvenile, outcome){ CR().record.push({crime:c.charge, age:state.age, felony:!!c.felony, juvenile:!!juvenile, outcome}); CR().lastConviction = state.age; }
-function sentence(c, amt, plea){
-  const k = CR(), n = state.name, priors = priorCount();
-  if(amt > 0 && (c.key === 'fraud' || c.key === 'tax')){ ensureCash(amt); state.money -= amt; pushEntry(state.age, `${n} is ordered to repay ${fmt(amt)}.`, {}); }
-  if(!c.felony){
-    if(Math.random() < 0.55){
-      const fine = inflR(rint(3, 25) * 100, 50); addRecord(c, false, "fined " + fmt(fine));
-      pushEntry(state.age, `${n} is convicted and fined ${fmt(fine)}.`, {money:-fine, happy:-3});
-    } else {
-      addRecord(c, false, "probation"); k.probation = Math.max(k.probation, rint(1, 2));
-      pushEntry(state.age, `${n} is convicted and given ${k.probation} year${k.probation > 1 ? "s" : ""} of probation.`, {happy:-3});
-    }
-    return;
-  }
-  let years = Math.max(1, Math.round(rint(c.years[0], c.years[1]) * (1 + priors * 0.35) * (plea ? 0.55 : 1) * ((state.world.laws || []).includes('toughCrime') ? 1.3 : 1) + (k.probation > 0 ? 1 : 0)));
-  if(years <= 2 && !priors && Math.random() < 0.5){
-    addRecord(c, false, "probation"); k.probation = 3;
-    pushEntry(state.age, `${n} is convicted of ${c.charge} but avoids prison with 3 years of probation.`, {happy:-4});
-    return;
-  }
-  addRecord(c, false, years + " years in prison");
-  imprison(years, c.charge, false);
-}
 function imprison(years, crime, juvenile){
   const k = CR(), n = state.name;
   k.prison = {left:years, total:years, crime, behavior:0, juvenile:!!juvenile, gang:false};
@@ -5579,7 +5535,8 @@ function prisonYear(a){
   }
   pr.left--;
   if(pr.left <= 0) release('served');
-  else if(pr.behavior >= 2 && pr.left <= pr.total / 2 && Math.random() < 0.4 + pr.behavior * 0.05) release('parole');
+  else if(pr.juvenile && pr.behavior >= 2 && pr.left <= pr.total / 2 && Math.random() < 0.4 + pr.behavior * 0.05) release('parole');
+  else if(!pr.juvenile && pr.behavior >= 1 && pr.total - pr.left >= Math.ceil(pr.total / 3) && (pr.nextHearing || 0) <= a) paroleHearing(a);
   else pushEntry(a, `${n} has ${pr.left} year${pr.left > 1 ? "s" : ""} left to serve.`, {});
 }
 function crimeYear(a){
@@ -5591,6 +5548,7 @@ function crimeYear(a){
     if(Math.random() < 0.3){ k.wanted = false; pushEntry(a, `Police finally catch up with ${state.name}, still wanted for escaping prison.`, {happy:-10}); imprison(k.wantedYears + 3, "escaping prison", false); return; }
     applyDelta({happy:-2});
   }
+  investigationsYear(a);
 }
 // ---- prison actions ----
 const PRISON_ACTS = [
@@ -5598,14 +5556,13 @@ const PRISON_ACTS = [
   {key:'workout', label:'Work out', meta:'+health'},
   {key:'study', label:'Study', meta:'+smarts'},
   {key:'gang', label:'Join a crew', meta:'protection, worse parole odds'},
-  {key:'appeal', label:'Appeal your case', meta:'lawyer'},
+  {key:'appeal', label:'Appeal your conviction', meta:'lawyer'},
   {key:'escape', label:'Try to escape', meta:'very risky'},
 ];
-const appealCost = () => inflR(10000, 500);
 function prisonAct(key, ok){
   const k = CR(), pr = k.prison, n = state.name; if(!pr || state.done['pr_' + key]) return;
   if(key === 'escape' && ok !== true) return askConfirm("Try to escape? If it fails, two years are added to the sentence.", "Try it", () => prisonAct('escape', true));
-  if(key === 'appeal' && (!canPay(appealCost()) || pr.juvenile || pr.appealed)) return;
+  if(key === 'appeal' && (pr.juvenile || !canAppeal())) return;
   if(key === 'gang' && pr.gang) return;
   state.done['pr_' + key] = true;
   if(key === 'behave'){ pr.behavior++; pushEntry(state.age, `${n} keeps their head down and stays out of trouble.`, {happy:-1}); }
@@ -5619,11 +5576,7 @@ function prisonAct(key, ok){
     if(Math.random() < 0.3) pushEntry(state.age, `${n} joins a crew, and the initiation is brutal.`, {health:-8, happy:-2});
     else pushEntry(state.age, `${n} falls in with a crew that watches their back.`, {happy:2});
   } else if(key === 'appeal'){
-    pay(appealCost()); pr.appealed = true;
-    if(Math.random() < 0.22 + state.stats.smarts / 500){
-      if(Math.random() < 0.4){ pushEntry(state.age, `${n}'s appeal succeeds and the conviction is overturned.`, {happy:12}); const last = k.record[k.record.length - 1]; if(last) last.expunged = true; release('served'); }
-      else { pr.left = Math.max(1, Math.round(pr.left / 2)); pushEntry(state.age, `${n}'s appeal succeeds in cutting the sentence to ${pr.left} more year${pr.left > 1 ? "s" : ""}.`, {happy:8}); }
-    } else pushEntry(state.age, `${n}'s appeal is denied.`, {happy:-4});
+    return appealPrompt();
   } else if(key === 'escape'){
     if(Math.random() < 0.06 + k.skill / 600){
       k.wanted = true; k.wantedYears = pr.left; k.prison = null; k.heat = 100;
@@ -5643,6 +5596,257 @@ function expungeRecord(){
   CR().record.forEach(x => x.expunged = true);
   pushEntry(state.age, `${state.name} gets their criminal record expunged. A clean slate.`, {happy:8});
   render();
+}
+// ---------- The justice system: investigations, bail, lawyers, evidence, pleas, trials, sentencing, parole, appeals ----------
+// An arrest opens a case that moves through real stages, and a felony keeps costing you long after the sentence ends.
+const LICENSED_BIZ = ['bar', 'dispensary', 'realestate', 'dealership'];
+const felon = () => felonyCount() > 0;
+const lawyerStars = s => s >= 85 ? 5 : s >= 70 ? 4 : s >= 55 ? 3 : s >= 40 ? 2 : 1;
+const LAWYER_REP = ['', 'overworked', 'average', 'solid', 'respected', 'legendary'];
+function makeLawyer(skill, o){
+  const g = rollGender();
+  return Object.assign({name: freeName(g) + ' ' + pick(SURNAMES), skill, wins: Math.max(10, Math.min(92, Math.round(6 + skill * 0.85 + rint(-5, 5))))}, o || {});
+}
+// who can take your case: a public defender, three private lawyers of different calibre, and an attorney you know
+function lawyerOptions(felony, appeal){
+  const base = (felony ? 7000 : 1500) * (appeal ? 1.4 : 1);
+  const list = [makeLawyer(rint(30, 48), {pd:true, name:'The public defender', cost:0})];
+  [rint(45, 60), rint(62, 78), rint(80, 96)].forEach(sk => list.push(makeLawyer(sk, {cost: inflR(base * Math.pow(sk / 50, 3), 500)})));
+  const fr = myNetwork().find(r => r.pro === 'lawyer' && r.closeness >= 50);
+  if(fr) list.push({name: fr.name, skill: rint(62, 85), wins: 70, cost: 0, friend: fr.id});
+  return list;
+}
+const lawyerLabel = l => `${l.name}${l.pd ? ', overworked' : l.friend ? ', the attorney you know' : ', ' + '★'.repeat(lawyerStars(l.skill)) + ' ' + LAWYER_REP[lawyerStars(l.skill)]} · wins ${l.wins}% of trials · ${l.cost ? fmt(l.cost) : l.friend ? 'free, as a favor' : 'free'}`;
+function hireLawyer(l){ if(l.cost) pay(l.cost); if(l.friend){ const r = findRel(l.friend); if(r) bump(r, -10); } }
+const JUDGE_MULT = {lenient:0.75, fair:1, harsh:1.35};
+const evidenceWord = e => e >= 80 ? 'overwhelming' : e >= 60 ? 'strong' : e >= 40 ? 'moderate' : 'thin';
+function convictChance(cs){
+  const p = cs.evidence / 100 * 0.8 + cs.witnesses * 0.06 + priorCount() * 0.04 - (cs.lawyer ? cs.lawyer.skill : 35) / 220 - state.stats.smarts / 900 - state.fame.level / 700
+    - (cs.character ? 0.04 : 0) + ({harsh:0.03, lenient:-0.03}[cs.judge.temper] || 0);
+  return Math.max(0.05, Math.min(0.95, p));
+}
+function arrest(c, amt, how){
+  const n = state.name, k = CR();
+  if(state.fame.level >= 30) pushEntry(state.age, `${n}'s arrest is front-page news.`, {image:-20, fame:4});
+  if(state.age < 18){                              // juvenile court: no lawyer choice, record sealed at 18
+    if(c.felony && Math.random() < 0.45){ addRecord(c, true, "juvenile detention"); imprison(rint(1, 2), c.charge, true); }
+    else { addRecord(c, true, "probation"); k.probation = Math.max(k.probation, 2); pushEntry(state.age, `A juvenile court gives ${n} probation and community service.`, {happy:-3, family:-5}); }
+    return;
+  }
+  const w = c.key === 'heist' ? rint(2, 4) : c.key === 'fraud' || c.key === 'tax' || c.key === 'bribery' ? rint(0, 1) : rint(0, 2);
+  const ev = Math.max(25, Math.min(95, rint(42, 72) + k.heat / 6 + (how === 'investigation' ? 6 : 0) - k.skill / 8));
+  const harsh = (state.world.laws || []).includes('toughCrime');
+  k.case = {key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years || [1, 3], amt: amt || 0, evidence: Math.round(ev), witnesses: w, how: how || 'caught',
+    judge:{name:'Judge ' + pick(SURNAMES), temper: pick(harsh ? ['fair', 'harsh', 'harsh'] : ['lenient', 'fair', 'fair', 'harsh'])}, jailed:false, bail:0, bailPaid:0, lawyer:null};
+  bailHearing();
+}
+// 1. bail
+function bailHearing(){
+  const cs = CR().case, n = state.name;
+  if(!cs.felony){ pushEntry(state.age, `${n} is booked and released until their court date.`, {}); return lawyerStage(); }
+  const denied = priorCount() >= 2 && cs.judge.temper === 'harsh' || cs.key === 'heist' && Math.random() < 0.5;
+  if(denied){ cs.jailed = true; pushEntry(state.age, `${cs.judge.name} denies bail. ${n} will wait for trial in jail.`, {happy:-6}); jailLosesJob(); return lawyerStage(); }
+  const bail = inflR(rint(5, 25) * 1000 * (1 + priorCount() * 0.6) * (cs.key === 'heist' ? 6 : 1) * (state.fame.level >= 40 ? 2 : 1) * (cs.judge.temper === 'harsh' ? 1.5 : cs.judge.temper === 'lenient' ? 0.7 : 1), 500);
+  cs.bail = bail;
+  const opts = [];
+  if(canPay(bail)) opts.push({label:`Post the full ${fmt(bail)} (returned if ${n} shows up for trial)`, run:() => { pay(bail); cs.bailPaid = bail; pushEntry(state.age, `${n} posts ${fmt(bail)} bail and goes home to wait for trial.`, {}); lawyerStage(); }});
+  const bond = Math.round(bail * 0.1);
+  if(canPay(bond)) opts.push({label:`Use a bail bondsman (${fmt(bond)}, not refundable)`, run:() => { pay(bond); pushEntry(state.age, `A bail bondsman posts ${n}'s bail for a ${fmt(bond)} fee.`, {}); lawyerStage(); }});
+  opts.push({label:'Stay in jail until trial', run:() => { cs.jailed = true; pushEntry(state.age, `${n} can't make bail and waits for trial behind bars.`, {happy:-6}); jailLosesJob(); lawyerStage(); }});
+  presentCustom(`${n} is charged with ${cs.charge}, a felony. ${cs.judge.name}, known as a ${cs.judge.temper} judge, sets bail at ${fmt(bail)}.`, opts);
+}
+function jailLosesJob(){ if(state.job && Math.random() < 0.5){ const t = state.job.title; leaveRoleFor('jail'); convertCoworkersToFriends(); state.job = null; pushEntry(state.age, `${state.name} loses their job as ${t} while sitting in jail.`, {happy:-4}); } }
+// 2. a lawyer
+function lawyerStage(){
+  const cs = CR().case, n = state.name;
+  const opts = lawyerOptions(cs.felony).filter(l => !l.cost || canPay(l.cost)).map(l => ({label: lawyerLabel(l), run:() => { hireLawyer(l); cs.lawyer = l; if(!l.pd) pushEntry(state.age, `${n} hires ${l.name} to defend them.`, {}); defenseStage(); }}));
+  presentCustom(`${n} needs a lawyer for the ${cs.charge} charge. Who will defend them?`, opts);
+}
+// 3. evidence, witnesses and a defense strategy
+function defenseStage(){
+  const cs = CR().case, n = state.name, L = cs.lawyer;
+  const opts = [
+    {label:'Attack the evidence', run:() => { const cut = Math.round(rint(5, 25) * L.skill / 65); cs.evidence = Math.max(5, cs.evidence - cut); pushEntry(state.age, cut >= 15 ? `${L.name} gets key evidence thrown out.` : `${L.name} chips away at the evidence.`, {}); pleaStage(); }},
+    {label:'Build a character defense', run:() => { cs.character = true; pushEntry(state.age, `Friends and family line up to vouch for ${n}.`, {family:2}); pleaStage(); }},
+  ];
+  if(cs.witnesses > 0){
+    opts.splice(1, 0, {label:'Tear apart the witnesses', run:() => { let gone = 0; for(let i = 0; i < 2 && cs.witnesses > 0; i++) if(Math.random() < L.skill / 120){ cs.witnesses--; gone++; } pushEntry(state.age, gone ? `${L.name} discredits ${gone} of the witnesses.` : `The witnesses hold up under cross-examination.`, {}); pleaStage(); }});
+    if(!L.pd) opts.push({label:'Pressure a witness to change their story', run:() => {
+      if(Math.random() < 0.45){ cs.witnesses = 0; pushEntry(state.age, `A witness suddenly can't remember anything.`, {}); }
+      else { cs.evidence = Math.min(98, cs.evidence + 20); cs.years = [cs.years[0] + 1, cs.years[1] + 3]; CR().heat = Math.min(100, CR().heat + 20); pushEntry(state.age, `The witness goes to the prosecutor, who adds a charge of witness tampering.`, {happy:-6}); }
+      pleaStage(); }});
+  }
+  presentCustom(`The prosecution's case against ${n}: <b>${evidenceWord(cs.evidence)}</b> evidence and <b>${cs.witnesses}</b> witness${cs.witnesses === 1 ? '' : 'es'}. ${L.name} lays out the options.`, opts);
+}
+// 4. the plea offer
+function pleaStage(){
+  const cs = CR().case, n = state.name, p = convictChance(cs), opts = [];
+  const down = cs.felony && cs.evidence < 55;
+  opts.push({label: down ? 'Take the deal: plead to a misdemeanor (no felony record)' : 'Take the deal: plead guilty for a reduced sentence', run:() => { pushEntry(state.age, `${n} takes the plea deal.`, {happy:-2}); sentencing(true, down); }});
+  opts.push({label:`Go to trial (${cs.lawyer.name.replace(/^The /, 'the ')} puts the odds of conviction near ${Math.round(p * 100)}%)`, run:() => trialStage()});
+  if(cs.felony && !cs.jailed) opts.push({label:'Skip bail and run', run:() => {
+    const k = CR(); k.wanted = true; k.wantedYears = Math.max(1, Math.round((cs.years[0] + cs.years[1]) / 2)); k.heat = 100; k.case = null;
+    pushEntry(state.age, `${n} skips bail and disappears${cs.bailPaid ? ', forfeiting ' + fmt(cs.bailPaid) : ''}. Every year on the run risks getting caught.`, {happy:-4});
+  }});
+  presentCustom(`The prosecutor offers ${n} a deal: ${down ? 'plead guilty to a misdemeanor and avoid a felony record' : 'plead guilty and serve about half the usual sentence'}.`, opts);
+}
+// 5. trial
+function trialStage(){
+  const cs = CR().case, n = state.name;
+  if(Math.random() < 0.08){
+    if(Math.random() < 0.5){ pushEntry(state.age, `The jury deadlocks, and prosecutors decide not to try ${n} again.`, {happy:10}); return closeCase(false); }
+    pushEntry(state.age, `The jury deadlocks. A new trial is ordered.`, {happy:-2});
+  }
+  if(Math.random() < convictChance(cs)){ pushEntry(state.age, `The jury finds ${n} guilty of ${cs.charge}.`, {happy:-6}); sentencing(false, false); }
+  else { pushEntry(state.age, `The jury finds ${n} not guilty. ${n} walks out of ${cs.judge.name}'s courtroom a free person.`, {happy:10}); closeCase(false); }
+}
+// 6. sentencing
+function sentencing(plea, misdemeanor){
+  const k = CR(), cs = k.case, n = state.name, priors = priorCount(), J = JUDGE_MULT[cs.judge.temper] * ((state.world.laws || []).includes('toughCrime') ? 1.3 : 1);
+  const c = {key:cs.key, charge: misdemeanor ? cs.charge + ' (reduced to a misdemeanor)' : cs.charge, felony: cs.felony && !misdemeanor};
+  if(cs.amt > 0){ ensureCash(cs.amt); state.money -= cs.amt; pushEntry(state.age, `${n} is ordered to pay back ${fmt(cs.amt)} in restitution.`, {}); }
+  const appeal = {age: state.age, used:false, felony: c.felony, pd: !!(cs.lawyer && cs.lawyer.pd), harsh: cs.judge.temper === 'harsh', charge: c.charge};
+  if(!c.felony){
+    if(Math.random() < 0.55){
+      const fine = inflR(rint(3, 25) * 100 * J, 50); addRecord(c, false, "fined " + fmt(fine));
+      pushEntry(state.age, `${cs.judge.name} fines ${n} ${fmt(fine)}.`, {money:-fine, happy:-3});
+    } else {
+      addRecord(c, false, "probation"); k.probation = Math.max(k.probation, rint(1, 2));
+      pushEntry(state.age, `${cs.judge.name} sentences ${n} to ${k.probation} year${k.probation > 1 ? 's' : ''} of probation.`, {happy:-3});
+    }
+    return closeCase(true);
+  }
+  let years = Math.max(1, Math.round(rint(cs.years[0], cs.years[1]) * (1 + priors * 0.35) * (plea ? 0.5 : 1) * J * (cs.character ? 0.85 : 1) + (k.probation > 0 ? 1 : 0)));
+  const fine = inflR(rint(1, 10) * 1000 * J, 100);
+  if(cs.jailed) years = Math.max(0, years - 1);                  // credit for time already served awaiting trial
+  if(years === 0 || (years <= 2 && !priors && Math.random() < (cs.judge.temper === 'lenient' ? 0.75 : cs.judge.temper === 'fair' ? 0.5 : 0.2))){
+    addRecord(c, false, "probation and a " + fmt(fine) + " fine"); k.probation = 3;
+    pushEntry(state.age, `${cs.judge.name} sentences ${n} to 3 years of probation and a ${fmt(fine)} fine instead of prison.`, {money:-fine, happy:-4});
+    k.appeal = appeal; felonyFallout(); return closeCase(true);
+  }
+  addRecord(c, false, years + " years in prison and a " + fmt(fine) + " fine");
+  applyDelta({money:-fine});
+  k.appeal = appeal;
+  closeCase(true);
+  felonyFallout();
+  imprison(years, cs.charge, false);
+}
+function closeCase(convicted){
+  const k = CR(), cs = k.case; if(!cs) return;
+  if(cs.bailPaid){ state.money += cs.bailPaid; pushEntry(state.age, `The court returns ${state.name}'s ${fmt(cs.bailPaid)} bail.`, {}); }
+  if(!convicted) k.heat = Math.max(0, k.heat - 15);
+  k.case = null;
+}
+// a felony's shadow: reputation, the people around you, and any business that needs a license
+function felonyFallout(){
+  const n = state.name;
+  if(state.fame.level >= 10) applyDelta({image:-15});
+  applyDelta({rep:-15, partner:-10, family:-6});
+  myNetwork().forEach(r => bump(r, -10));
+  const b = state.business;
+  if(b){
+    b.reputation = clampRep(b.reputation - 15);
+    if(LICENSED_BIZ.includes(b.type)){
+      const sale = Math.round(b.value * 0.5 * bizShare(b));
+      state.relationships.forEach(r => { if(r.familyBiz) r.familyBiz = false; });
+      state.business = null; state.money += sale;
+      pushEntry(state.age, `With a felony conviction, ${bizName(b)} loses its license. ${n} is forced to sell for ${fmt(sale)}.`, {happy:-8});
+    }
+  }
+}
+// parole hearings decide who leaves early
+function paroleHearing(a){
+  const pr = CR().prison, n = state.name, cost = inflR(3000, 100);
+  const base = 0.12 + pr.behavior * 0.1 - (pr.gang ? 0.2 : 0) - felonyCount() * 0.03;
+  const hear = (p, text) => { if(Math.random() < p) release('parole'); else { pr.nextHearing = a + 2; pushEntry(a, `The parole board denies ${n}${text}. The next hearing is in two years.`, {happy:-6}); } };
+  const opts = [
+    {label:'Express genuine remorse', run:() => hear(base + 0.2, '')},
+    {label:'Maintain your innocence', run:() => hear(base, ' for refusing to accept responsibility')},
+  ];
+  if(canPay(cost)) opts.push({label:`Bring a lawyer to argue for you (${fmt(cost)})`, run:() => { pay(cost); hear(base + 0.3, ''); }});
+  presentCustom(`${n} goes before the parole board with ${pr.left} year${pr.left > 1 ? 's' : ''} left to serve.`, opts);
+  return true;
+}
+// appeals, from prison or from home, within a few years of a conviction
+const canAppeal = () => { const ap = CR().appeal; return !!(ap && !ap.used && ap.felony && state.age - ap.age <= 3 && state.age >= 18); };
+function appealPrompt(){
+  const k = CR(), ap = k.appeal, n = state.name; if(!canAppeal()) return;
+  const opts = lawyerOptions(true, true).filter(l => !l.pd && (!l.cost || canPay(l.cost))).map(l => ({label: lawyerLabel(l), run:() => {
+    hireLawyer(l); ap.used = true;
+    const p = 0.08 + l.skill / 350 + (ap.pd ? 0.07 : 0) + (ap.harsh ? 0.06 : 0);
+    if(Math.random() < p){
+      const rec = k.record.slice().reverse().find(x => x.crime === ap.charge && !x.expunged);
+      if(Math.random() < 0.45 || !k.prison){ if(rec) rec.expunged = true; k.probation = 0; pushEntry(state.age, `${l.name} wins ${n}'s appeal. The conviction is overturned.`, {happy:14}); if(k.prison) release('served'); }
+      else { k.prison.left = Math.max(1, Math.round(k.prison.left / 2)); pushEntry(state.age, `${l.name} wins ${n}'s appeal, cutting the sentence to ${k.prison.left} more year${k.prison.left > 1 ? 's' : ''}.`, {happy:8}); }
+    } else pushEntry(state.age, `The appeals court upholds ${n}'s conviction.`, {happy:-5});
+    render();
+  }}));
+  if(!opts.length) return pushEntry(state.age, `${n} can't afford an appeals lawyer.`, {});
+  opts.push({label:'Not now', run:() => {}});
+  presentCustom(`An appeal needs a lawyer who can find mistakes in ${n}'s trial${ap.pd ? ', and a rushed public defender may have made some' : ''}${ap.harsh ? '. The judge was known to be harsh' : ''}.`, opts);
+}
+// detectives keep working the cases you thought you got away with
+function openInvestigation(c, amt){
+  CR().open = CR().open || [];
+  CR().open.push({key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years, amt: amt || 0, age: state.age, ev: rint(5, 30)});
+}
+function investigationsYear(a){
+  const k = CR(); k.open = k.open || [];
+  k.open = k.open.filter(o => {
+    if(a - o.age > 10) return false;                          // the statute of limitations runs out
+    if(Math.random() < 0.5) o.ev += rint(2, 12) + Math.round(k.heat / 10);     // many years the trail stays cold
+    if(o.ev >= 75 && !k.pendingArrest){ k.pendingArrest = o; return false; }
+    return true;
+  });
+}
+function justiceYear(a){
+  const k = CR(), n = state.name;
+  if(k.prison || k.wanted || state.age < 18) return false;
+  if(k.pendingArrest){
+    const o = k.pendingArrest; k.pendingArrest = null; k.arrests++;
+    pushEntry(a, `Detectives arrest ${n} for ${o.ing} back at age ${o.age}. The case was never closed.`, {happy:-10});
+    arrest({key:o.key, charge:o.charge, ing:o.ing, felony:o.felony, years:o.years}, o.amt, 'investigation');
+    return true;
+  }
+  const hot = (k.open || []).find(o => o.ev >= 45 && !o.warned);
+  if(hot){
+    hot.warned = true;
+    const cost = inflR(5000, 100);
+    const opts = [
+      {label:'Say nothing and wait it out', run:() => pushEntry(a, `${n} keeps quiet and hopes the trail goes cold.`, {happy:-3})},
+      {label:'Leave town for a while', run:() => { hot.ev = Math.max(0, hot.ev - 30); drift(['Friend', 'Coworker', 'Contact'], 45); if(state.job){ leaveRoleFor('fled'); convertCoworkersToFriends(); state.job = null; } pushEntry(a, `${n} quietly moves away and starts over.`, {happy:-6}); }},
+      {label:'Turn yourself in', run:() => { k.open = k.open.filter(o => o !== hot); k.arrests++; pushEntry(a, `${n} walks into the station and confesses to ${hot.ing}.`, {happy:-4}); arrest({key:hot.key, charge:hot.charge, ing:hot.ing, felony:hot.felony, years:[Math.max(1, hot.years[0] - 1), Math.max(1, hot.years[1] - 2)]}, hot.amt, 'confessed'); }},
+    ];
+    if(canPay(cost)) opts.splice(1, 0, {label:`Hire a lawyer to shut down the questions (${fmt(cost)})`, run:() => { pay(cost); hot.ev = Math.max(0, hot.ev - 20); pushEntry(a, `${n}'s lawyer makes the detectives back off, for now.`, {}); }});
+    presentCustom(`Detectives are asking questions about the ${hot.ing} from when ${n} was ${hot.age}.`, opts);
+    return true;
+  }
+  if(k.probation > 0 && Math.random() < 0.12 + (state.health.habits.drink === 2 ? 0.08 : 0)){
+    const what = pick(['misses a check-in with their probation officer', 'fails a drug test', 'is caught out past curfew']), cost = inflR(3000, 100);
+    const revoke = () => { k.probation = 0; pushEntry(a, `The judge revokes ${n}'s probation.`, {happy:-8}); imprison(rint(1, 2), 'a probation violation', false); };
+    const opts = [
+      {label:'Beg the judge for another chance', run:() => { if(Math.random() < 0.55) pushEntry(a, `The judge gives ${n} a stern warning.`, {happy:-2}); else revoke(); }},
+      {label:'Skip the hearing', run:() => { k.wanted = true; k.wantedYears = 2; k.heat = 100; k.probation = 0; pushEntry(a, `${n} skips the hearing, and a warrant goes out.`, {happy:-5}); }},
+    ];
+    if(canPay(cost)) opts.splice(1, 0, {label:`Bring a lawyer (${fmt(cost)})`, run:() => { pay(cost); if(Math.random() < 0.82) pushEntry(a, `${n}'s lawyer talks the judge into a warning.`, {}); else revoke(); }});
+    presentCustom(`${n} ${what}, violating probation.`, opts);
+    return true;
+  }
+  return false;
+}
+// the ways a felony record follows someone
+function recordEffects(){
+  const out = [];
+  if(!felon()) return out;
+  out.push('Jobs: law, medicine, teaching, police and finance are closed, and other employers hire you far less often');
+  out.push('Loans and credit cards are often denied, and mortgages cost about 3% more');
+  out.push('Landlords charge renters about 10% more');
+  out.push('Dating is harder once people look you up');
+  out.push('Visas for trips abroad are often denied, and moving abroad is off the table');
+  out.push('No bar, dispensary, real estate or car dealer licenses');
+  out.push('Voters and the military will hold it against you');
+  out.push('Expunging the record after 7 clean years removes all of this');
+  return out;
 }
 // ---- lawsuits ----
 function legalYear(a){
@@ -5691,12 +5895,17 @@ function crimePanelHtml(){
       '<div class="owned">Sentence: ' + pr.total + " year" + (pr.total > 1 ? "s" : "") + " · Behavior: " + (pr.behavior >= 3 ? "excellent" : pr.behavior >= 2 ? "good" : pr.behavior >= 1 ? "fair" : "unproven") + (pr.gang ? " · in a crew" : "") + ". Good behavior can earn early parole once half the sentence is served.</div></div>";
     PRISON_ACTS.forEach(x => {
       let dis = !!state.done['pr_' + x.key], meta = x.meta;
-      if(x.key === 'appeal'){ meta = pr.appealed ? "already appealed" : fmt(appealCost()); dis = dis || pr.appealed || pr.juvenile || !canPay(appealCost()); }
+      if(x.key === 'appeal'){ meta = canAppeal() ? "hire an appeals lawyer" : "no appeal left"; dis = dis || pr.juvenile || !canAppeal(); }
       if(x.key === 'gang' && pr.gang){ dis = true; meta = "already in one"; }
       h += opt(x.label, state.done['pr_' + x.key] ? "done ✓" : meta, `prisonAct('${x.key}')`, dis);
     });
     return h;
   }
+  if(canAppeal()) h += opt('Appeal your conviction', 'within ' + (3 - (a - k.appeal.age)) + ' more year' + (3 - (a - k.appeal.age) === 1 ? '' : 's'), 'appealPrompt()', false);
+  const open = (k.open || []).filter(o => o.ev >= 30);
+  if(open.length) h += '<div class="status"><span class="down">Detectives are still working ' + open.length + ' old case' + (open.length > 1 ? 's' : '') + ' against you.</span> Cases stay open for 10 years.</div>';
+  const fx = recordEffects();
+  if(fx.length) h += '<div class="plabel">What a felony record costs you</div><div class="invrow"><div class="owned">' + fx.map(x => '• ' + x).join('<br>') + '</div></div>';
   h += '<div class="plabel">Crimes</div>';
   CRIMES.forEach(c => {
     if(a < c.min - 2) return;
@@ -5901,6 +6110,7 @@ function takeLoan(type, principal, term, apr, opts){
 function applyPersonalLoan(){
   if(state.age < 18 || state.bankrupt || state.done.personalLoan) return;
   state.done.personalLoan = true;
+  if(felon() && Math.random() < 0.5){ pushEntry(state.age, `${state.name}'s loan application is denied after a background check.`, {happy:-3}); render(); return; }
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a personal loan but gets denied.`, {happy:-2}); render(); return; }
   const amt = inflR(Math.max(1000, (state.creditScore-500)*20), 100);
   const apr = Math.max(0.06, Math.min(0.22, state.econ.rate + (850-state.creditScore)/4000));
@@ -5942,6 +6152,7 @@ function loansYear(a){
 function applyCard(){
   if(state.creditCard || state.age < 18 || state.bankrupt || state.done.cardApp) return;
   state.done.cardApp = true;
+  if(felon() && Math.random() < 0.4){ pushEntry(state.age, `${state.name}'s credit card application is denied after a background check.`, {happy:-2}); render(); return; }
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a credit card but gets denied.`, {happy:-2}); render(); return; }
   const limit = inflR(Math.max(500, Math.round((state.creditScore-500)*15/100)*100), 100);
   const apr = Math.max(0.12, 0.30 - state.creditScore/4000);
@@ -6059,6 +6270,7 @@ function tickerFor(name){
 }
 function startBusiness(typeKey){
   const t = bizType(typeKey);
+  if(felon() && LICENSED_BIZ.includes(typeKey)) return;
   if(!t || state.business || state.money < bizCost(t) || state.age < 21) return;
   const typed = document.getElementById('bizName');
   const name = cleanName(typed && typed.value) || suggestBizName(typeKey);
@@ -6107,6 +6319,7 @@ function expandLocation(){
 function applyBusinessLoan(){
   const b = state.business; if(!b || state.age < 21 || state.bankrupt || state.done.bizLoan) return;
   state.done.bizLoan = true;
+  if(felon() && Math.random() < 0.5){ pushEntry(state.age, `The bank turns down ${state.name}'s business loan after a background check.`, {happy:-3}); render(); return; }
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a business loan but gets denied.`, {happy:-2}); render(); return; }
   const amt = inflR(Math.max(2000, (state.creditScore-400)*60), 100);
   const apr = Math.max(0.07, Math.min(0.20, state.econ.rate + (850-state.creditScore)/3500));
@@ -6437,7 +6650,7 @@ function spouseIncome(sp){
 function livingEstimate(){
   const cum = state.econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, sp = hasRel('Spouse');
   const own = state.assets.some(x => x.category === 'Homes' && !x.rental), kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
-  return Math.round((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult));
+  return Math.round((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1) * (felon() ? 1.1 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult));
 }
 // sell investments to cover a negative balance before debts get out of hand
 function coverWithInvestments(a){
@@ -7781,7 +7994,7 @@ function renderPanel(){
     else if(!b){
       h += '<div class="status">Name your company, then pick what kind of business to start. Each needs upfront capital.</div>';
       h += '<div class="invrow"><input id="bizName" class="amt-input" maxlength="32" placeholder="Business name (optional)" aria-label="Business name"><div class="assetbuy"><button onclick="fillBizName()">Suggest a name</button></div></div>';
-      BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => h += opt(t.name, fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, state.money < bizCost(t)));
+      BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => { const lic = felon() && LICENSED_BIZ.includes(t.key); h += opt(t.name, lic ? 'needs a license a felony bars' : fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, lic || state.money < bizCost(t)); });
     } else h += bizPanelHtml();
   } else {
     if(a < 12){ h = '<div class="status">Too young to work.</div>'; }
@@ -9453,7 +9666,7 @@ const CROSSROADS = [
       }},
     ]);
   }},
-  {key:'abroad', min:24, max:55, cond:() => !worldHas('pandemic') && state.relationships.some(r => (r.type === 'Partner' || r.type === 'Spouse') && r.closeness >= 40), run(a){
+  {key:'abroad', min:24, max:55, cond:() => !worldHas('pandemic') && !felon() && state.relationships.some(r => (r.type === 'Partner' || r.type === 'Spouse') && r.closeness >= 40), run(a){
     const p = state.relationships.find(r => r.type === 'Partner' || r.type === 'Spouse'), place = pick(CITIES.concat(['Tokyo', 'Sydney', 'London', 'Paris']));
     return presentCrossroads('Follow love abroad?', `${p.name} has been offered a dream job in ${place} and asks ${state.name} to come along.`, [
       {label:`Move to ${place} with ${p.name}`, pros:[`a stronger bond with ${p.name}`, 'an adventure abroad'], cons:[state.job ? 'leave your job behind' : 'start over', 'friends and family far away'], run:() => {
