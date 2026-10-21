@@ -577,7 +577,7 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null, case:null, open:[], appeal:null, pendingArrest:null},
     health:{conditions:[], history:[], lastCheckup:null, lastDentist:null, fluShot:null, therapy:null, glasses:false, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal', exercise:0}},
-    goals:[], goalPick:false, meDot:false, lifeStory:false, bucket:[],
+    goals:[], goalPick:false, meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
@@ -792,7 +792,7 @@ function drawAvatar(){
   const old = ['MIDDLE AGE','ELDER'].includes(stage);
   const headR = young ? 46 : kid ? 40 : 38;
   const cy = young ? 108 : 100;
-  const hairColor = (old && health < 40) || stage === 'ELDER' ? '#c9c3b4' : hair;
+  const hairColor = state.appearance.dye || ((old && health < 40) || stage === 'ELDER' ? '#c9c3b4' : hair);
 
   // mouth by happiness
   let mouth;
@@ -802,7 +802,7 @@ function drawAvatar(){
 
   const blush = health > 55 ? 0.35 : 0.08;
   const pale = health < 25 ? 'saturate(0.55) brightness(0.92)' : 'none';
-  const glasses = smarts > 74;
+  const glasses = smarts > 74 || (!young && !!(state.health && state.health.glasses));
   const sparkle = looks > 74;
   const wrinkles = old ? `
     <path d="M66,${cy-2} q10,4 18,0" stroke="rgba(0,0,0,.25)" stroke-width="1.2" fill="none"/>
@@ -813,6 +813,8 @@ function drawAvatar(){
     if(young) hairShape = `<path d="M62,${cy-30} Q100,${cy-52} 138,${cy-30}" stroke="${hairColor}" stroke-width="8" fill="none" stroke-linecap="round"/>`;
     else if(hairStyle === 0) hairShape = `<path d="M56,${cy-14} Q60,${cy-58} 100,${cy-58} Q140,${cy-58} 144,${cy-14} Q120,${cy-40} 100,${cy-40} Q80,${cy-40} 56,${cy-14}Z" fill="${hairColor}"/>`;
     else if(hairStyle === 1) hairShape = `<path d="M54,${cy-10} Q58,${cy-60} 100,${cy-60} Q142,${cy-60} 146,${cy-10} Q146,${cy+10} 138,${cy-6} Q120,${cy-44} 100,${cy-44} Q80,${cy-44} 62,${cy-6} Q54,${cy+10} 54,${cy-10}Z" fill="${hairColor}"/>`;
+    else if(hairStyle === 3) hairShape = `<path d="M62,${cy-18} Q64,${cy-44} 100,${cy-44} Q136,${cy-44} 138,${cy-18} Q120,${cy-34} 100,${cy-34} Q80,${cy-34} 62,${cy-18}Z" fill="${hairColor}" opacity="0.85"/>`;
+    else if(hairStyle === 4) hairShape = '';
     else hairShape = `<path d="M58,${cy-8} Q56,${cy-56} 100,${cy-56} Q144,${cy-56} 142,${cy-8} Q126,${cy-38} 100,${cy-38} Q74,${cy-38} 58,${cy-8}Z" fill="${hairColor}"/><circle cx="52" cy="${cy-4}" r="6" fill="${hairColor}"/><circle cx="148" cy="${cy-4}" r="6" fill="${hairColor}"/>`;
   }
 
@@ -2688,6 +2690,16 @@ const ACTIVITIES = [
   {key:'gamble', icon:'🎰', label:'Gamble at the casino', min:21, cost:200, delta:{}, text:n=>`${n} tries their luck at the casino`},
   {key:'meditate', icon:'🧘', label:'Meditate', min:10, cost:0, delta:{happy:3,health:1}, text:n=>`${n} sits with their thoughts for a while and comes out calmer.`},
   {key:'surgery', icon:'💉', label:'Cosmetic surgery', min:18, cost:6000, delta:{}, text:n=>`${n} goes under the knife`},
+  {key:'beach', icon:'🏝️', label:'Spend a day at the beach', min:3, cost:0, delta:{happy:3,health:1}, text:n=>`${n} spends a lazy day at the beach.`},
+  {key:'movies', icon:'🎬', label:'Go to the movies', min:5, cost:20, delta:{happy:3}, text:n=>`${n} catches a new movie on the big screen.`},
+  {key:'museum', icon:'🏛️', label:'Visit a museum', min:6, cost:25, delta:{smarts:2,happy:1}, text:n=>`${n} wanders a museum for an afternoon.`},
+  {key:'themepark', icon:'🎢', label:'Go to a theme park', min:6, cost:150, delta:{happy:6}, text:n=>`${n} rides every roller coaster at the theme park.`},
+  {key:'camping', icon:'🏕️', label:'Go camping', min:8, cost:60, delta:{happy:4,health:2}, text:n=>`${n} spends a weekend camping under the stars.`},
+  {key:'concert', icon:'🎤', label:'See a concert', min:12, cost:120, delta:{happy:6}, text:n=>`${n} sings along at a packed concert.`},
+  {key:'karaoke', icon:'🎙️', label:'Karaoke night', min:14, cost:30, delta:{happy:4}, text:n=>`${n} belts out a few songs at karaoke night.`},
+  {key:'cooking', icon:'🍳', label:'Take a cooking class', min:14, cost:90, delta:{smarts:1,happy:2}, text:n=>`${n} takes a cooking class and learns a few new dishes.`},
+  {key:'worship', icon:'🕊️', label:'Attend a place of worship', min:6, cost:0, delta:{happy:2}, text:n=>`${n} attends a service and feels a sense of community.`},
+  {key:'club', icon:'🪩', label:'Go out dancing at a club', min:21, cost:100, delta:{happy:5,health:-1}, text:n=>`${n} dances until closing time.`},
 ];
 
 // ---------- Investing: stocks & crypto ----------
@@ -3086,8 +3098,12 @@ const ASSET_CATALOG = {
     {key:'suburb', name:'Suburban House', price:450000, appreciation:0.040, vol:0.05, upkeepPct:0.010},
     {key:'lux', name:'Luxury Home', price:900000, appreciation:0.045, vol:0.07, upkeepPct:0.012},
     {key:'mansion', name:'Hillside Mansion', price:2200000, appreciation:0.050, vol:0.09, upkeepPct:0.015},
+    {key:'beach', name:'Beach House', price:650000, appreciation:0.045, vol:0.08, upkeepPct:0.016},
+    {key:'ranch', name:'Country Ranch', price:750000, appreciation:0.035, vol:0.06, upkeepPct:0.014},
+    {key:'penthouse', name:'City Penthouse', price:1400000, appreciation:0.045, vol:0.08, upkeepPct:0.013},
   ],
   Cars: [
+    {key:'ebike', name:'Electric Bike', kind:'bike', price:1800, appreciation:-0.15, vol:0.05, upkeepFlat:100, minAge:14},
     {key:'scooter', name:'Moped', kind:'bike', price:2500, appreciation:-0.12, vol:0.06, upkeepFlat:300, minAge:16},
     {key:'used', name:'Used Sedan', kind:'car', price:8000, appreciation:-0.15, vol:0.08, upkeepFlat:900},
     {key:'motorcycle', name:'Motorcycle', kind:'bike', price:12000, appreciation:-0.12, vol:0.08, upkeepFlat:700, speed:true},
@@ -3101,6 +3117,7 @@ const ASSET_CATALOG = {
     {key:'luxcar', name:'Luxury Sedan', kind:'car', price:95000, appreciation:-0.19, vol:0.09, upkeepFlat:2800},
     {key:'rv', name:'Motorhome', kind:'rv', price:120000, appreciation:-0.10, vol:0.06, upkeepFlat:4000},
     {key:'supercar', name:'Supercar', kind:'car', price:320000, appreciation:-0.10, vol:0.12, upkeepFlat:12000, speed:true},
+    {key:'sailboat', name:'Sailboat', kind:'boat', price:35000, appreciation:-0.08, vol:0.07, upkeepFlat:2500},
     {key:'speedboat', name:'Speedboat', kind:'boat', price:60000, appreciation:-0.10, vol:0.08, upkeepFlat:4000},
     {key:'yacht', name:'Yacht', kind:'boat', price:2500000, appreciation:-0.06, vol:0.10, upkeepFlat:200000},
     {key:'jet', name:'Private Jet', kind:'plane', price:8000000, appreciation:-0.08, vol:0.10, upkeepFlat:900000},
@@ -3110,12 +3127,20 @@ const ASSET_CATALOG = {
     {key:'ring', name:'Diamond Ring', price:8000, appreciation:0.015, vol:0.08},
     {key:'necklace', name:'Gold Necklace', price:3000, appreciation:0.025, vol:0.12},
     {key:'luxwatch', name:'Luxury Timepiece', price:25000, appreciation:0.030, vol:0.15},
+    {key:'bracelet', name:'Tennis Bracelet', price:6000, appreciation:0.015, vol:0.10},
+    {key:'earrings', name:'Emerald Earrings', price:12000, appreciation:0.020, vol:0.12},
   ],
   Collectibles: [
     {key:'art', name:'Original Painting', price:15000, appreciation:0.040, vol:0.25},
     {key:'cards', name:'Rare Card Collection', price:2000, appreciation:0.060, vol:0.40},
     {key:'guitar', name:'Vintage Guitar', price:6000, appreciation:0.030, vol:0.18},
     {key:'wine', name:'Wine Cellar Collection', price:4000, appreciation:0.050, vol:0.20},
+    {key:'comics', name:'Vintage Comic Books', price:2500, appreciation:0.050, vol:0.30},
+    {key:'sneakers', name:'Rare Sneaker Collection', price:3000, appreciation:0.050, vol:0.35},
+    {key:'coins', name:'Rare Coin Set', price:5000, appreciation:0.035, vol:0.12},
+    {key:'memorabilia', name:'Signed Sports Memorabilia', price:4000, appreciation:0.040, vol:0.25},
+    {key:'gold', name:'Gold Bullion', price:10000, appreciation:0.030, vol:0.12},
+    {key:'sculpture', name:'Bronze Sculpture', price:40000, appreciation:0.040, vol:0.20},
   ],
   'Real Estate': [
     {key:'condo-rental', name:'Rental Condo', price:200000, appreciation:0.030, vol:0.05, upkeepPct:0.013, rentalYield:0.075, units:1},
@@ -3281,7 +3306,7 @@ function repairRental(id){
 }
 function rentOutHome(id){
   const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Homes' || x.rental) return;
-  x.rental = {units:1, occupied:0, rent:'market', cond:80, manager:false, loc:'suburbs', lastRent:0, lastNet:null, home:true};
+  x.rental = {units:1, occupied:0, rent:'market', cond:80, manager:false, loc:'suburbs', lastRent:0, lastNet:null, home:true}; x.roommate = false;
   pushEntry(state.age, `${state.name} puts the ${x.name} up for rent.`, {});
   render();
 }
@@ -3423,9 +3448,11 @@ function assetsYear(a){
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5;
     const property = t.category === 'Homes' || t.category === 'Real Estate';
     x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
-    if(property && !x.rental) upkeep += x.value * t.upkeepPct;
+    if(property && !x.rental) upkeep += x.value * t.upkeepPct * (x.solar ? 0.7 : 1);
     if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation * (state.world.fx.gas || 1);
   });
+  const mate = state.assets.find(x => x.roommate && !x.rental);
+  if(mate) pushEntry(a, `${state.name}'s roommate pays ${fmt(inflR(8400, 100))} in rent for the room in the ${mate.name}.`, {money:inflR(8400, 100), happy:-1});
   if(upkeep <= 0) return;
   if(upkeep >= 20) pushEntry(a, `${state.name} covers maintenance and upkeep on their property.`, {money:-upkeep});
   else applyDelta({money:-upkeep});
@@ -3457,6 +3484,7 @@ function ownedAssetRow(x){
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
+    ${homeExtrasHtml(x)}
     <div class="assetbuy">${x.category === 'Homes' && state.age >= 21 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
   </div>`;
 }
@@ -4170,11 +4198,19 @@ const FAME_ACTS = [
   {key:'reality', label:'Star in a reality show', min:15, meta:'big fame, big risk', every:5},
   {key:'memoir', label:'Write a memoir', min:40, meta:'one big payday', once:true},
   {key:'product', label:'Launch a product line', min:35, cost:50000, meta:'yearly royalties'},
+  {key:'commercial', label:'Audition for a TV commercial', min:0, minAge:6, meta:'looks get you hired'},
+  {key:'openmic', label:'Perform at an open mic', min:0, minAge:14, meta:'music, comedy or poetry'},
+  {key:'fundraiser', label:'Run a charity 5K', min:0, minAge:12, meta:'+health, good for your image'},
+  {key:'podcast', label:'Record a podcast season', min:0, minAge:16, cost:500, meta:'fame builds slowly'},
+  {key:'gameshow', label:'Go on a game show', min:0, minAge:18, meta:'smarts win prizes · every 3 years'},
 ];
+const FAME_ICONS = {interview:'🗞️', talkshow:'📺', carpet:'👗', gala:'🥂', stunt:'🎪', feud:'🔥', reality:'🎥', memoir:'📖', product:'🛍️', commercial:'📣', openmic:'🎸', fundraiser:'🏃', podcast:'🎧', gameshow:'🎰'};
 function fameActState(x){
   const f = FM();
   if(state.crime.prison) return {ok:false, why:'not from prison'};
   if(state.age < 16 && x.min > 0) return {ok:false, why:'from age 16'};
+  if(x.minAge && state.age < x.minAge) return {ok:false, why:'from age ' + x.minAge};
+  if(x.key === 'gameshow' && f.lastGame != null && state.age - f.lastGame < 3) return {ok:false, why:'once every 3 years'};
   if(f.level < x.min) return {ok:false, why:'needs fame ' + x.min};
   if(state.done['fa_' + x.key]) return {ok:false, why:'done this year'};
   if(x.once && f.memoir) return {ok:false, why:'already written'};
@@ -4208,6 +4244,24 @@ function fameAct(key){
     f.memoir = true;
     const adv = inflR(Math.round(20000 * Math.pow(f.level / 10, 1.4)), 1000);
     pushEntry(state.age, `${n}'s memoir becomes a bestseller, earning ${fmt(adv)}.`, {money:adv, fame:4, image:5, happy:8});
+  } else if(key === 'commercial'){
+    if(Math.random() < Math.min(0.75, 0.12 + state.stats.looks / 200 + f.level / 200)){ const pay = inflR(rint(2, 8) * 1000, 100); pushEntry(state.age, `${n} lands a TV commercial for ${pick(['a cereal brand', 'a car dealership', 'a phone company', 'a toothpaste', 'a fast-food chain', 'an insurance company'])} and earns ${fmt(pay)}.`, {money:pay, fame:2, happy:4}); }
+    else pushEntry(state.age, `${n} auditions for a TV commercial but never gets a callback.`, {happy:-2});
+  } else if(key === 'openmic'){
+    const best = ['music', 'acting', 'writing'].sort((p, q) => hobbyLevel(q) - hobbyLevel(p))[0], what = {music:'plays a few songs', acting:'tries out a comedy set', writing:'reads some poetry'}[best];
+    if(Math.random() < 0.25 + hobbyLevel(best) / 150 + (hasMyTrait('Funny') ? 0.15 : 0) + state.stats.looks / 1000){ bumpHobby(best, 2); pushEntry(state.age, `${n} ${what} at an open mic and wins over the room.`, {fame:2, happy:5}); }
+    else pushEntry(state.age, `${n} ${what} at an open mic and bombs.`, {fame:1, happy:-3});
+  } else if(key === 'fundraiser'){
+    const d = {health:2, happy:4}; if(f.level >= 10) d.image = 3;
+    pushEntry(state.age, `${n} runs a charity 5K and raises money for ${pick(CHARITIES)}.`, d);
+  } else if(key === 'podcast'){
+    const grow = rint(1, 3) + (state.stats.smarts >= 70 ? 1 : 0) + (f.level >= 20 ? 2 : 0), d = {fame:grow, happy:2};
+    if(f.level >= 20) d.money = inflR(f.level * 400, 100);
+    pushEntry(state.age, `${n} records a season of their podcast${f.level >= 20 ? ', and sponsors pay ' + fmt(d.money) : ''}.`, d);
+  } else if(key === 'gameshow'){
+    f.lastGame = state.age;
+    if(Math.random() < Math.min(0.8, 0.1 + state.stats.smarts / 140)){ const prize = inflR(rint(5, 100) * 1000, 100); pushEntry(state.age, `${n} goes on a game show and wins ${fmt(prize)}!`, {money:prize, fame:4, happy:8}); }
+    else pushEntry(state.age, `${n} goes on a game show and leaves with a consolation prize.`, {fame:2, happy:-2});
   } else if(key === 'product'){
     const kind = pick(['fragrance', 'clothing line', 'sneaker', 'makeup line', 'energy drink', 'cookbook', 'headphones'].filter(k => !f.products.some(p => p.kind === k)));
     f.products.push({kind, age:0, base:inflR(rint(40, 120) * 1000, 1000)});
@@ -4237,7 +4291,7 @@ function famePanelHtml(){
     f.offers.forEach(d => h += bankRow(`${d.brand} ${d.kind}`, `Pays ${fmt(d.pay)}. Ads cost a little authenticity.`, `<button onclick="acceptDeal('${d.id}')">Sign</button><button onclick="declineDeal('${d.id}')">Decline</button>`));
   }
   h += '<div class="plabel">In the spotlight</div>';
-  FAME_ACTS.forEach(x => { const st = fameActState(x); if(lvl >= x.min - 15 || x.min === 0) h += opt(x.label, st.ok ? (x.cost ? fmt(Math.round(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) + ' · ' : '') + x.meta : st.why, `fameAct('${x.key}')`, !st.ok); });
+  FAME_ACTS.forEach(x => { const st = fameActState(x), done = st.why === 'done this year'; if(lvl >= x.min - 15 || x.min === 0) h += iopt(FAME_ICONS[x.key] || '⭐', x.label, done ? 'done ✓' : st.ok ? (x.cost ? fmt(Math.round(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) + ' · ' : '') + x.meta : st.why, `fameAct('${x.key}')`, !st.ok, done); });
   if(f.products.length) h += '<div class="owned" style="margin:2px">Product lines: ' + f.products.map(p => p.kind).join(', ') + '. Royalties fade as they age and follow your fame and image.</div>';
   if(lvl >= 20 || f.publicist || f.security){
     h += '<div class="plabel">Your team</div>';
@@ -5164,6 +5218,7 @@ function socialPanelHtml(){
     h += '<div class="plabel">How do you want to meet someone romantically?</div><div class="btnrow-social">' + DATE_KINDS.map(d => { const st = dateState(d); return '<button onclick="dateOut(\'' + d.key + '\')" ' + (st.ok ? "" : "disabled") + ">" + d.label + (dCost(d) ? " (" + fmt(dCost(d)) + ")" : "") + (st.ok ? "" : " · " + st.why) + "</button>"; }).join("") + "</div>";
   }
   }
+  h += groupActsHtml();
   if(!people.length) h += '<div class="status">No connections yet. Use "Meet people" to start.</div>';
   const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child","Grandchild"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"], ["Professional network", r => r.type === "Contact"]];
   groups.forEach(([label, test]) => {
@@ -5514,6 +5569,8 @@ const WELLNESS = [
   {key:'blood', icon:'🩸', label:'Donate blood', min:17, cost:0, meta:'+happy, a free screening'},
   {key:'acupuncture', icon:'🪡', label:'Try acupuncture', min:18, cost:350, meta:'may or may not help'},
   {key:'retreat', icon:'🧘', label:'Wellness retreat', min:18, cost:3500, meta:'a week to reset bad habits'},
+  {key:'support', icon:'🫂', label:'Join a support group', min:14, cost:0, meta:'helps with mood and addiction'},
+  {key:'hearing', icon:'👂', label:'Hearing test', min:50, cost:200, med:true, meta:'hearing aids if you need them'},
 ];
 const wellCost = x => !x.cost || (x.kidFree && state.age < 18) ? 0 : x.med ? medCost(x.cost) : inflR(x.cost, 10);
 function wellState(x){
@@ -5563,6 +5620,15 @@ function wellnessAct(key){
     const helps = Math.random() < (hh.conditions.some(c => c.known && ['arthritis', 'migraine'].includes(c.key)) ? 0.6 : 0.4);
     Object.assign(delta, helps ? {happy:3, health:2} : {happy:-1});
     text = helps ? `${n} tries acupuncture and is surprised by how much better they feel.` : `${n} tries acupuncture and doesn't notice any difference.`;
+  } else if(key === 'support'){
+    delta.happy = 3;
+    const add = condOf('addiction'), mood = hh.conditions.find(c => c.known && !c.treated && CONDITIONS[c.key].mood);
+    if(add && Math.random() < 0.15){ hh.conditions = hh.conditions.filter(c => c !== add); hb.drink = Math.min(hb.drink, 1); Object.assign(delta, {happy:8, health:3}); text = `${n} keeps going to a support group, and with their help, gets clean.`; }
+    else if(mood && Math.random() < 0.15){ hh.conditions = hh.conditions.filter(c => c !== mood); delta.happy = 7; text = `${n} finds people who understand at a support group, and their ${CONDITIONS[mood.key].name.replace(/^(an?|the) /, '')} finally lifts.`; }
+    else text = `${n} goes to a support group and finds people who understand.`;
+  } else if(key === 'hearing'){
+    if(!hh.hearingAid && Math.random() < (a >= 65 ? 0.5 : 0.25)){ hh.hearingAid = true; Object.assign(delta, {happy:3, smarts:1}); text = `${n} gets hearing aids and is amazed at everything they were missing.`; }
+    else text = hh.hearingAid ? `${n}'s hearing aids get a tune-up.` : `${n}'s hearing test comes back fine.`;
   } else if(key === 'retreat'){
     Object.assign(delta, {happy:8, health:4, looks:1});
     const bits = [];
@@ -5622,7 +5688,13 @@ const CRIMES = [
   {key:'fraud', ing:'embezzling', charge:'embezzlement', label:'Embezzle from work', min:18, needs:'job', risk:0.28, felony:true, years:[2,8], blurb:'skim from your employer'},
   {key:'tax', ing:'cheating on taxes', charge:'tax evasion', label:'Cheat on taxes', min:18, needs:'income', risk:0.16, felony:true, years:[1,4], blurb:'hide some income'},
   {key:'heist', ing:'robbing a bank', charge:'armed robbery', label:'Plan a bank heist', min:21, minSkill:40, pay:[100000,900000], risk:0.50, felony:true, years:[8,20], blurb:'the big score'},
+  {key:'piracy', ing:'pirating movies and software', charge:'copyright infringement', label:'Pirate movies and software', min:12, pay:[50,300], risk:0.05, blurb:'saves a little money'},
+  {key:'scam', ing:'running an online scam', charge:'wire fraud', label:'Run an online scam', min:18, pay:[2000,25000], risk:0.24, felony:true, years:[2,7], blurb:'phishing for cash'},
+  {key:'insurance', ing:'faking an insurance claim', charge:'insurance fraud', label:'Fake an insurance claim', min:18, needs:'insured', pay:[3000,20000], risk:0.22, felony:true, years:[1,5], blurb:'stage an accident'},
+  {key:'hack', ing:'hacking a company', charge:'computer intrusion', label:'Hack a company', min:16, hobby:['coding', 50], pay:[5000,60000], risk:0.28, felony:true, years:[2,8], blurb:'needs serious coding skill'},
+  {key:'smuggle', ing:'smuggling contraband', charge:'smuggling', label:'Smuggle contraband', min:18, pay:[8000,40000], risk:0.30, felony:true, years:[3,8], blurb:'across the border'},
 ];
+const CRIME_ICONS = {shoplift:'🛍️', vandal:'🎨', pickpocket:'👛', burglary:'🏚️', cartheft:'🚗', dealing:'💊', fraud:'🧾', tax:'📑', heist:'🏦', piracy:'🏴‍☠️', scam:'📧', insurance:'💥', hack:'💻', smuggle:'📦'};
 const CR = () => state.crime;
 const priorCount = () => CR().record.filter(x => !x.expunged && !x.juvenile).length;
 const felonyCount = () => CR().record.filter(x => x.felony && !x.expunged && !x.juvenile).length;
@@ -5644,6 +5716,8 @@ function crimeState(c){
   if(state.age < c.min) return {ok:false, why:"from age " + c.min};
   if(c.needs === 'job' && !state.job) return {ok:false, why:"needs a job"};
   if(c.needs === 'income' && !state.job && !state.business) return {ok:false, why:"needs income"};
+  if(c.needs === 'insured' && !((state.insurance.auto && roadVehicles().length) || (state.insurance.home && state.assets.some(x => x.category === 'Homes')))) return {ok:false, why:"needs insured car or home"};
+  if(c.hobby && hobbyLevel(c.hobby[0]) < c.hobby[1]) return {ok:false, why:"needs " + c.hobby[0] + " skill " + c.hobby[1]};
   if(c.minSkill && k.skill < c.minSkill) return {ok:false, why:"needs more experience"};
   if(state.done['crime_' + c.key]) return {ok:false, why:"done this year"};
   if((state.done.crimes || 0) >= 2) return {ok:false, why:"laying low this year"};
@@ -5820,7 +5894,7 @@ function arrest(c, amt, how){
     else { addRecord(c, true, "probation"); k.probation = Math.max(k.probation, 2); pushEntry(state.age, `A juvenile court gives ${n} probation and community service.`, {happy:-3, family:-5}); }
     return;
   }
-  const w = c.key === 'heist' ? rint(2, 4) : c.key === 'fraud' || c.key === 'tax' || c.key === 'bribery' ? rint(0, 1) : rint(0, 2);
+  const w = c.key === 'heist' ? rint(2, 4) : ['fraud', 'tax', 'bribery', 'scam', 'hack', 'insurance'].includes(c.key) ? rint(0, 1) : rint(0, 2);
   const ev = Math.max(25, Math.min(95, rint(42, 72) + k.heat / 6 + (how === 'investigation' ? 6 : 0) - k.skill / 8));
   const harsh = (state.world.laws || []).includes('toughCrime');
   k.case = {key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years || [1, 3], amt: amt || 0, evidence: Math.round(ev), witnesses: w, how: how || 'caught',
@@ -6091,6 +6165,7 @@ function crimePanelHtml(){
   if(canAppeal()) h += opt('Appeal your conviction', 'within ' + (3 - (a - k.appeal.age)) + ' more year' + (3 - (a - k.appeal.age) === 1 ? '' : 's'), 'appealPrompt()', false);
   const open = (k.open || []).filter(o => o.ev >= 30);
   if(open.length) h += '<div class="status"><span class="down">Detectives are still working ' + open.length + ' old case' + (open.length > 1 ? 's' : '') + ' against you.</span> Cases stay open for 10 years.</div>';
+  h += lawHtml();
   const fx = recordEffects();
   if(fx.length) h += '<div class="plabel">What a felony record costs you</div><div class="invrow"><div class="owned">' + fx.map(x => '• ' + x).join('<br>') + '</div></div>';
   h += '<div class="plabel">Crimes</div>';
@@ -6098,7 +6173,7 @@ function crimePanelHtml(){
     if(a < c.min - 2) return;
     const st = crimeState(c);
     const payTxt = c.key === 'fraud' || c.key === 'tax' ? "varies" : c.pay[1] ? fmt(inflR(c.pay[0], 10)) + "–" + fmt(inflR(c.pay[1], 10)) : "for fun";
-    h += opt(c.label + (c.felony ? ' <span class="tick">FELONY</span>' : ''), st.ok ? Math.round(crimeRisk(c) * 100) + "% risk · " + payTxt : st.why, `commitCrime('${c.key}')`, !st.ok);
+    h += iopt(CRIME_ICONS[c.key] || '•', c.label + (c.felony ? ' <span class="tick">FELONY</span>' : ''), st.ok ? Math.round(crimeRisk(c) * 100) + "% risk · " + payTxt : st.why, `commitCrime('${c.key}')`, !st.ok);
   });
   if(k.record.length){
     h += '<div class="plabel">Your record</div><div class="invrow"><div class="owned">' + k.record.map(x => "Age " + x.age + ": " + x.crime.toLowerCase() + " · " + x.outcome + (x.expunged ? " (expunged)" : x.juvenile ? " (juvenile, sealed at 18)" : "")).join("<br>") + "</div>";
@@ -6754,6 +6829,7 @@ function bizPanelHtml(){
        [0, 0.25, 0.5, 0.75].map(x => pill(x ? Math.round(x * 100) + '%' : 'None', b.reinvest === x, `setReinvest(${x})`)).join('') + '</div></div>';
   h += bankRow('Advertise', `Spend ${fmt(adCost())} on a campaign to boost revenue and reputation.`, `<button onclick="advertiseBiz()" ${state.money < adCost() ? 'disabled' : ''}>Run campaign</button>`);
 
+  h += bizExtrasHtml(b);
   h += '<div class="plabel">Upgrades</div>';
   BIZ_UPGRADES.forEach(u => { const c = upgradeCost(u, b); h += bankRow(u.label + (U[u.key] ? ' <span class="tick">OWNED</span>' : ''), u.blurb + '.', U[u.key] ? '' : `<button onclick="buyBizUpgrade('${u.key}')" ${canPay(c) ? '' : 'disabled'}>Buy (${fmt(c)})</button>`); });
 
@@ -7508,11 +7584,12 @@ function admitChance(c){
   if(!c.minGpa) return 1;
   if(c.minSmarts && s.smarts < c.minSmarts - 10) return 0.02;
   const extra = Math.min(0.15, (e.clubs || 0) * 0.05) + (e.testPrep ? 0.08 : 0) + (e.rec ? 0.12 : 0) + (Object.keys(state.hobbies).some(k => state.hobbies[k].level >= 50) ? 0.05 : 0) +
-                (e.seasons ? 0.03 : 0) + Math.min(0.06, (e.awards || 0) * 0.03) + (e.council ? 0.03 : 0) + (e.ap ? 0.05 : 0);
+                (e.seasons ? 0.03 : 0) + Math.min(0.06, (e.awards || 0) * 0.03) + (e.council ? 0.03 : 0) + (e.ap ? 0.05 : 0) + (e.toured ? 0.04 : 0);
   const p = 0.5 + (e.gpa - c.minGpa) / 22 + (s.smarts - 60) / 200 + extra;
   return Math.max(0.03, Math.min(c.key === 'elite' ? 0.75 : 0.97, p));
 }
-function aidFor(c){
+function aidFor(c){ return Math.min(1, baseAid(c) + Math.min(0.1, (ED().essays || 0) * 0.05)); }      // essays add a little on top
+function baseAid(c){
   const g = ED().gpa, poor = (state.famEstate || 0) < 120000;
   if(c.key === 'community') return g >= 85 ? 1 : 0;
   if(c.key === 'state') return g >= 90 ? 1 : g >= 82 ? 0.5 : g >= 72 ? 0.25 : 0;
@@ -7704,8 +7781,9 @@ function eduPanelHtml(){
     h += core('🛹', 'Skip class', '−GPA', 'skipClass()', state.done.skip);
     if(a >= 10) h += core('🧩', 'Join a club', 'friends, college applications', "campusAct('club')", state.done.campus_club);
     if(hs && a >= 15) h += iopt('✏️', 'Test prep course', e.testPrep ? 'done ✓' : canPay(inflR(600, 50)) ? fmt(inflR(600, 50)) : 'costs ' + fmt(inflR(600, 50)), "campusAct('prep')", e.testPrep || state.done.campus_prep || !canPay(inflR(600, 50)), e.testPrep || state.done.campus_prep);
+    if(a <= 10) h += '<div class="plabel">School life</div>' + act('recess', '🛝', 'Play at recess', 'fun, maybe a new friend');
     if(a >= 8){
-      h += '<div class="plabel">School life</div>';
+      if(a > 10) h += '<div class="plabel">School life</div>';
       h += act('sports', '⚽', 'Try out for a sports team', e.seasons ? e.seasons + ' season' + (e.seasons > 1 ? 's' : '') + ' on the team so far' : 'fitness and friends');
       h += act('play', '🎭', 'Audition for the school play', 'a shot at the spotlight');
       if(a >= 9) h += act('fair', '🔬', 'Enter the science fair', 'smarts decide it');
@@ -7714,6 +7792,11 @@ function eduPanelHtml(){
       if(hs && a >= 15){
         h += act('ap', '📚', 'Take advanced classes', '+smarts, impresses colleges', e.ap ? 'already taking them' : '');
         h += act('dance', '💃', a >= 17 ? 'Go to prom' : 'Go to the school dance', 'a night to remember');
+      }
+      if(hs && a >= 16){
+        const k = cost('tour');
+        h += act('tour', '🏫', 'Tour colleges', fmt(k.c) + ' · a better shot at getting in', e.toured ? 'already toured' : k.why);
+        h += act('essays', '✍️', 'Write scholarship essays', 'more scholarship money later', (e.essays || 0) >= 2 ? 'written enough' : '');
       }
     }
     h += iopt('🚪', 'Drop out', '', 'dropOut()', false);
@@ -7753,7 +7836,7 @@ function eduPanelHtml(){
   return h;
 }
 // ---- school life, campus life and learning for its own sake ----
-const SCH_COST = {abroad:6000, greek:800, course:250, cert:2000, conference:900, langclass:400};
+const SCH_COST = {abroad:6000, greek:800, course:250, cert:2000, conference:900, langclass:400, tour:400};
 const CERTS = {
   Retail:['a retail management certificate', 'a supply chain certification'], Business:['a project management certification', 'a Six Sigma black belt'],
   Technology:['a cloud architecture certification', 'a security certification'], Medicine:['board certification', 'a specialty fellowship'],
@@ -7774,7 +7857,7 @@ function schoolAct(key){
   if(state.done['sch_' + key] || state.crime.prison) return;
   const kid = !!e.school && !p, hs = kid && e.school === 'High School';
   const allowed = {
-    sports: kid && a >= 8, play: kid && a >= 8, fair: kid && a >= 9, cheat: kid && a >= 10, ap: hs && a >= 15 && !e.ap, dance: hs && a >= 15,
+    recess: kid && a <= 10, tour: hs && a >= 16 && !e.toured, essays: hs && a >= 16 && (e.essays || 0) < 2, sports: kid && a >= 8, play: kid && a >= 8, fair: kid && a >= 9, cheat: kid && a >= 10, ap: hs && a >= 15 && !e.ap, dance: hs && a >= 15,
     council: (kid && a >= 11) || (!!p && p.kind !== 'trade'), allnighter: !!p && p.kind !== 'trade', research: !!p && (p.kind === 'college' || p.kind === 'grad'),
     abroad: !!p && p.kind === 'college' && p.year >= 1 && !p.abroad, greek: !!p && p.kind === 'college' && !p.greek, tutor: !!p && p.kind !== 'trade' && e.gpa >= 80,
     scholar: !!p && (p.kind === 'college' || p.kind === 'community') && e.financeMethod !== 'paid' && (p.aid || 0) < 1, apprentice: !!p && p.kind === 'trade',
@@ -7789,7 +7872,14 @@ function schoolAct(key){
   const friend = (chance, origin, age) => Math.random() < chance && state.relationships.length < 60 ? newRel('Friend', {age: age !== undefined ? age : Math.max(5, a + rint(-1, 1)), closeness:rint(35, 50), origin}) : null;
   const pro = r => (proTitle(r).match(/^[AEIOU]/) ? 'an ' : 'a ') + proTitle(r).toLowerCase();
   let text = '';
-  if(key === 'sports'){
+  if(key === 'recess'){
+    const f = friend(0.4, 'at recess');
+    delta.happy = 3; text = f ? `${n} makes a new friend at recess: ${f.name}.` : `${n} spends recess ${pick(['on the monkey bars', 'playing tag', 'building a fort', 'trading cards'])}.`;
+  } else if(key === 'tour'){
+    e.toured = true; delta.happy = 2; text = `${n} tours a few college campuses and starts picturing life there.`;
+  } else if(key === 'essays'){
+    e.essays = (e.essays || 0) + 1; Object.assign(delta, {smarts:1, happy:-1}); text = `${n} spends weekends writing scholarship essays.`;
+  } else if(key === 'sports'){
     e.sport = e.sport || pick(['soccer', 'basketball', 'track', 'swim', 'volleyball', 'baseball', 'tennis']);
     if(Math.random() < Math.min(0.9, 0.3 + s.health / 250 + hobbyLevel('sports') / 200 + (e.seasons ? 0.15 : 0))){
       e.seasons = (e.seasons || 0) + 1; bumpHobby('sports', 4); Object.assign(delta, {health:4, happy:5});
@@ -7975,8 +8065,8 @@ function workYear(a){
   state.peakSalary = Math.max(state.peakSalary, j.salary);
   if(a >= 70 && j.track !== 'Politics'){ retire(true); return; }           // elected officials serve out their terms
   const track = CAREERS[j.track], rank = track[j.rank];
-  const stressHealth = rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0;
-  const stressHappy = rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0;
+  const stressHealth = Math.min(0, (rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0) + (j.remote ? 1 : 0));   // working from home takes the edge off
+  const stressHappy = Math.min(0, (rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0) + (j.remote ? 1 : 0));
   if(stressHealth || stressHappy) applyDelta({health:stressHealth, happy:stressHappy});
   const info = TRACK_INFO[j.track] || {};
   if(info.maxAge && a >= info.maxAge){
@@ -8034,7 +8124,7 @@ function mePanelHtml(){
     (traits ? "<br>Personality: " + traits : "") +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
-  h += goalsHtml() + selfHtml();
+  h += goalsHtml() + selfHtml() + styleHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
@@ -8078,6 +8168,7 @@ const LIFE_GOALS = [
   {k:'friends', icon:'🫂', label:'Keep eight close friends', min:10, test:() => closeFriends() >= 8, prog:() => closeFriends() / 8, note:() => closeFriends() + ' of 8 close friends'},
   {k:'debt', icon:'🧾', label:'Pay off every debt', min:18, avail:() => totalDebt() > 0, test:() => totalDebt() <= 0, note:() => fmt(totalDebt()) + ' still owed'},
   {k:'retire', icon:'🌅', label:'Retire with $500,000', min:40, test:() => state.retired && todayWorth() >= 5e5, prog:() => todayWorth() / 5e5, note:() => (state.retired ? 'Retired' : 'Still working') + ' · worth ' + fmt(Math.max(0, todayWorth())) + " in today's money"},
+  {k:'giver', icon:'🤲', label:'Give $100,000 to charity', min:18, test:() => (state.donated || 0) >= 1e5, prog:() => (state.donated || 0) / 1e5, note:() => fmt(state.donated || 0) + " of $100,000 given, in today's money"},
   {k:'century', icon:'💯', label:'Live to 100', min:50, test:() => state.age >= 100, prog:() => state.age / 100, note:() => (100 - state.age) + ' years to go'},
 ];
 const goalDef = k => LIFE_GOALS.find(x => x.k === k);
@@ -8085,7 +8176,7 @@ const goalsList = () => state.goals || (state.goals = []);
 const activeGoals = () => goalsList().filter(g => g.done == null);
 const goalMet = d => { try{ return !!d.test(); } catch(e){ return false; } };
 const goalOpen = d => state.age >= d.min && !goalsList().some(g => g.k === d.k) && (!d.avail || d.avail()) && !goalMet(d);
-function setGoal(k){
+function setLifeGoal(k){
   const d = goalDef(k); if(!d || activeGoals().length >= 3 || !goalOpen(d)) return;
   goalsList().push({k, set:state.age, done:null});
   state.goalPick = false;
@@ -8115,7 +8206,7 @@ function goalsHtml(){
   done.forEach(g => { const d = goalDef(g.k); if(d) h += `<div class="goal done"><span class="oi" aria-hidden="true">✓</span><div class="goal-tx">${d.label}<small>Reached at age ${g.done}</small></div></div>`; });
   if(act.length < 3){
     const open = LIFE_GOALS.filter(goalOpen);
-    if(state.goalPick && open.length) h += '<div class="pickgrid">' + open.map(d => `<button class="sortbtn" onclick="setGoal('${d.k}')">${d.icon} ${d.label}</button>`).join('') + '</div><div><button class="linkbtn" onclick="state.goalPick=false;renderPanel()">Cancel</button></div>';
+    if(state.goalPick && open.length) h += '<div class="pickgrid">' + open.map(d => `<button class="sortbtn" onclick="setLifeGoal('${d.k}')">${d.icon} ${d.label}</button>`).join('') + '</div><div><button class="linkbtn" onclick="state.goalPick=false;renderPanel()">Cancel</button></div>';
     else if(open.length) h += '<div class="btnrow-social" style="margin:0"><button onclick="state.goalPick=true;renderPanel()">＋ Set a life goal</button></div>';
   }
   return h + '</div>';
@@ -8205,6 +8296,15 @@ function doActivity(i){
     else { delta.looks = -rint(5, 10); delta.happy = -8; delta.health = -4; text += ', and it goes badly wrong.'; }
   } else if(x.cost){ delta.money = -actCost(x); }
   if(x.key === 'vacation' && hasMyTrait('Adventurous')) delta.happy = (delta.happy || 0) + 4;
+  if((x.key === 'camping' || x.key === 'themepark') && hasMyTrait('Adventurous')) delta.happy = (delta.happy || 0) + 2;
+  if(x.key === 'karaoke' && hasMyTrait('Funny')){ delta.happy = (delta.happy || 0) + 2; text = text.replace(/\.$/, ' and has the whole bar laughing.'); }
+  if(x.key === 'cooking'){ bumpHobby('cooking', 4); if(Math.random() < 0.3 && H().habits.diet === 'junk'){ H().habits.diet = 'normal'; text = text.replace(/\.$/, ' and gives up junk food.'); } }
+  if((x.key === 'concert' || x.key === 'worship') && Math.random() < 0.25 && state.relationships.length < 60){
+    const f = newRel('Friend', {age:Math.max(6, state.age + rint(-6, 6)), closeness:rint(30, 45), origin:x.key === 'concert' ? 'at a concert' : 'at a place of worship'}); text = text.replace(/\.$/, '') + ', and meets ' + f.name + '.';
+  }
+  if(x.key === 'club' && !hasRel('Partner', 'Spouse') && Math.random() < 0.15 && state.relationships.length < 60){
+    const r = newRel('Partner', {age:Math.max(21, state.age + rint(-4, 4)), closeness:rint(40, 55), origin:'at a club'}); text = text.replace(/\.$/, '') + ', and goes home with a number. ' + r.name + ' calls the next day.'; delta.happy = (delta.happy || 0) + 3;
+  }
   if(x.key === 'volunteer' && Math.random() < 0.3 && state.relationships.length < 60){
     const f = newRel('Friend', {closeness: rint(30, 45), origin:'volunteering'}); text += ' One of them, ' + f.name + ', becomes a friend.';
   }
@@ -8351,7 +8451,7 @@ function applyJob(trackName){
   if(state.retired || state.age > 66) return;
   if(rankGap(rank0, trackName)) return;
   state.done['app_'+trackName] = true;
-  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName) + Math.min(6, fluentLangs().length * 3) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
+  const chance = Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName) + Math.min(6, fluentLangs().length * 3) + (state.interviewPrep === state.age ? 12 : 0) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1);
   if(Math.random()*100 < chance){
     leaveRoleFor(trackName);
     if(state.job){
@@ -8384,7 +8484,7 @@ function jobHunt(){
   if(Math.random() < (state.econ.recession ? 0.2 : 0.4) + state.stats.smarts / 400 + eduPromoBonus(j.track) * 2){
     const raise = Math.round(j.salary * (0.08 + Math.random() * 0.14) / 100) * 100;
     convertCoworkersToFriends();
-    j.salary += raise; j.years = 0;
+    j.salary += raise; j.years = 0; j.remote = false;
     if(Math.random() < 0.5) newRel('Coworker', {age:Math.max(18, state.age + rint(-8, 8)), closeness:35 + rint(0, 15), origin:'through work'});
     pushEntry(state.age, `${state.name} lands a ${j.title} role at a new company, with a ${fmt(raise)} raise.`, {happy:6});
   } else pushEntry(state.age, `${state.name} interviews around but no better offer comes through.`, {happy:-2});
@@ -8426,6 +8526,413 @@ function hobbiesHtml(){
   if(mine.length && rest.length) h += `<div class="btnrow-social"><button onclick="state.showHobbies=!state.showHobbies;renderPanel()">${state.showHobbies ? 'Hide other hobbies' : 'Try something new (' + rest.length + ')'}</button></div>`;
   return h;
 }
+// ---------- More to do in every tab ----------
+// shared: an icon option list built from a table whose state(x) returns {show, ok, why, done}
+function iopts(list, state_, fn){
+  return list.map(x => { const st = state_(x); return st.show === false ? '' : iopt(x.icon, typeof x.label === 'function' ? x.label() : x.label, st.why, fn + "('" + x.key + "')", !st.ok, st.done); }).join('');
+}
+
+// ---- Career: at work, between jobs, side income and retirement ----
+const REMOTE_OK = ['Business', 'Technology', 'Finance', 'Law'];
+const WORK_ACTS = [
+  {key:'project', icon:'📊', label:'Lead a big project', meta:'a shot at a bonus and a promotion', who:'job'},
+  {key:'drinks', icon:'🍻', label:'Go for after-work drinks', meta:'closer with coworkers', who:'job', min:21, cost:60},
+  {key:'newhire', icon:'🤝', label:'Train the new hire', meta:'+happy, maybe a new work friend', who:'job'},
+  {key:'suckup', icon:'🍎', label:'Butter up the boss', meta:'might help, coworkers notice', who:'job'},
+  {key:'sick', icon:'🤒', label:'Call in sick for a day off', meta:'+happy, small risk', who:'job'},
+  {key:'remote', icon:'🏠', label:'Ask to work from home', meta:'less stress if they agree', who:'job'},
+  {key:'interview', icon:'👔', label:'Practice interviewing', meta:'better odds on applications this year', who:'jobless'},
+  {key:'temp', icon:'🗂️', label:'Sign up with a temp agency', meta:'short gigs, maybe a real offer', who:'jobless'},
+  {key:'benefits', icon:'📮', label:'File for unemployment benefits', meta:'a cushion between jobs', who:'jobless'},
+  {key:'hustle', icon:'🛵', label:'Pick up a side hustle', meta:'extra cash, less free time', who:'adult'},
+  {key:'teen', icon:'🧺', label:'Do odd jobs around the neighborhood', meta:'pocket money', who:'teen'},
+  {key:'consult', icon:'💼', label:'Consult part-time', meta:'put your experience to work', who:'retired'},
+];
+const benefitClaims = () => (state.benefitAges || []).filter(x => state.age - x <= 2).length;
+function workState(x){
+  const a = state.age, j = state.job, special = j && (j.track === 'Military' || j.track === 'Politics');
+  if(state.crime.prison) return {show:false};
+  const show = {job: !!j && !special, jobless: !j && !state.retired && a >= 16 && !ED().program, adult: a >= 16 && !state.retired && !special, teen: a >= 12 && a < 18 && !j, retired: state.retired}[x.who];
+  if(!show) return {show:false};
+  if(x.min && a < x.min) return {ok:false, why:'from age ' + x.min};
+  if(x.key === 'remote' && j.remote) return {ok:false, why:'working from home ✓', done:true};
+  if(state.done['wk_' + x.key]) return {ok:false, why:'done ✓', done:true};
+  if(x.key === 'remote' && !REMOTE_OK.includes(j.track)) return {ok:false, why:'not possible in ' + j.track.toLowerCase()};
+  if(x.key === 'benefits'){ if(!state.workYears) return {ok:false, why:'needs a work history'}; if(benefitClaims() >= 2) return {ok:false, why:'benefits have run out'}; }
+  if(x.key === 'consult' && (state.workYears || 0) < 15) return {ok:false, why:'needs 15 years of work behind you'};
+  const c = x.cost ? inflR(x.cost, 5) : 0;
+  if(c && !canPay(c)) return {ok:false, why:'costs ' + fmt(c)};
+  return {ok:true, why:(c ? fmt(c) + ' · ' : '') + x.meta};
+}
+function workAct(key){
+  const x = WORK_ACTS.find(w => w.key === key); if(!x) return;
+  const st = workState(x); if(st.show === false || !st.ok) return;
+  const cost = x.cost ? inflR(x.cost, 5) : 0; if(cost && !ensureCash(cost)) return;
+  state.done['wk_' + key] = true;
+  const n = state.name, a = state.age, j = state.job, s = state.stats, delta = cost ? {money:-cost} : {};
+  const coworkers = state.relationships.filter(r => r.type === 'Coworker'), room = state.relationships.length < 60;
+  let text = '', offer = null;
+  if(key === 'project'){
+    if(Math.random() < Math.min(0.85, 0.45 + s.smarts / 300 + (hasMyTrait('Ambitious') ? 0.05 : 0))){
+      const bonus = Math.round(j.salary * rint(3, 8) / 100 / 100) * 100; state.boost = true;
+      Object.assign(delta, {money:bonus, happy:4, health:-1});
+      text = `${n} leads a big project at work and delivers. It earns a ${fmt(bonus)} bonus, and the bosses take notice.`;
+    } else { Object.assign(delta, {happy:-4, health:-1}); text = `${n} leads a big project at work, but it misses its deadline.`; }
+  } else if(key === 'drinks'){
+    coworkers.forEach(r => bump(r, 4)); delta.happy = 2;
+    const r = !coworkers.length && room && Math.random() < 0.5 ? newRel('Coworker', {age:Math.max(18, a + rint(-8, 8)), closeness:rint(40, 50), origin:'through work'}) : null;
+    text = coworkers.length ? `${n} goes for drinks with ${coworkers.length === 1 ? coworkers[0].name : 'the people from work'} after a long week.` : `${n} goes for after-work drinks${r ? ' and gets to know ' + r.name + ' from the office' : ''}.`;
+  } else if(key === 'newhire'){
+    delta.happy = 2;
+    const r = room && Math.random() < 0.4 ? newRel('Coworker', {age:Math.max(18, a - rint(2, 15)), closeness:rint(40, 55), origin:'through work'}) : null;
+    if(Math.random() < 0.25) state.boost = true;
+    text = `${n} shows the new hire${r ? ', ' + r.name + ',' : ''} the ropes${r ? ', and they hit it off' : ''}.`;
+  } else if(key === 'suckup'){
+    if(Math.random() < 0.5){ state.boost = true; delta.happy = 1; coworkers.forEach(r => bump(r, -3)); text = `${n} butters up the boss, who eats it up. Coworkers roll their eyes.`; }
+    else { delta.happy = -2; text = `${n} tries to butter up the boss, who sees right through it.`; }
+  } else if(key === 'sick'){
+    if(Math.random() < 0.15){ state.boost = false; delta.happy = -4; text = `${n} calls in sick and runs into the boss at the mall.`; }
+    else { Object.assign(delta, {happy:3, health:1}); text = `${n} calls in sick and enjoys a quiet day off.`; }
+  } else if(key === 'remote'){
+    if(Math.random() < Math.min(0.9, 0.4 + ((state.world.laws || []).includes('remote') ? 0.3 : 0) + j.years * 0.03 + s.smarts / 500)){ j.remote = true; delta.happy = 5; text = `${n}'s boss agrees to let them work from home.`; }
+    else { delta.happy = -2; text = `${n} asks to work from home, and the answer is no.`; }
+  } else if(key === 'interview'){
+    state.interviewPrep = a; Object.assign(delta, {smarts:1, happy:1}); text = `${n} rehearses interview answers until they come out smooth.`;
+  } else if(key === 'temp'){
+    const pay = inflR(rint(4, 12) * 1000, 100); Object.assign(delta, {money:pay, happy:-1});
+    text = `${n} takes temp jobs through an agency and earns ${fmt(pay)}.`;
+    const open = ['Retail', 'Business'].filter(t => trackOpen(t) && !recordBlocks(t) && !rankGap(CAREERS[t][0], t));
+    if(open.length && Math.random() < 0.25) offer = pick(open);
+  } else if(key === 'benefits'){
+    const amt = Math.max(inflR(4000, 100), Math.min(Math.round(state.peakSalary * 0.3 / 100) * 100, inflR(15000, 100)));
+    (state.benefitAges || (state.benefitAges = [])).push(a);
+    Object.assign(delta, {money:amt, happy:-1}); text = `${n} files for unemployment and receives ${fmt(amt)} in benefits.`;
+  } else if(key === 'hustle'){
+    const gigs = [roadVehicles().length ? ['drives for a rideshare app', 1.2] : ['delivers food by bike', 0.9], ['walks dogs around the neighborhood', 0.8],
+      s.smarts >= 70 ? ['tutors kids online', 1.1] : ['sells handmade crafts online', 0.8], hobbyLevel('photography') >= 35 ? ['shoots weddings on weekends', 1.4] : ['assembles furniture for neighbors', 0.9]];
+    const g = pick(gigs), pay = inflR(rint(15, 45) * 100 * g[1], 10);
+    Object.assign(delta, {money:pay, happy:-2, health:-1}); text = `${n} ${g[0]} on the side and makes ${fmt(pay)}.`;
+  } else if(key === 'teen'){
+    const pay = inflR(rint(2, 8) * 100, 10);
+    Object.assign(delta, {money:pay, happy:1}); text = `${n} ${pick(['babysits for the neighbors', 'mows lawns', 'walks dogs', 'shovels driveways', 'washes cars'])} and earns ${fmt(pay)}.`;
+  } else if(key === 'consult'){
+    const pay = inflR(rint(10, 30) * 1000, 100);
+    Object.assign(delta, {money:pay, happy:2, smarts:1}); text = `${n} takes on some consulting work and earns ${fmt(pay)}.`;
+  }
+  pushEntry(a, text, delta);
+  if(offer){
+    const sal = startingSalary(offer, 0), title = CAREERS[offer][0].title;
+    presentCustom(`The temp agency offers ${n} a permanent role as ${title} in ${offer.toLowerCase()}, paying ${fmt(sal)}.`, [
+      {label:'Take it', run:() => { const jj = threadJob(offer, 0); pushEntry(state.age, `${n} goes permanent as ${jj.title}.`, {happy:5}); }},
+      {label:'Keep looking', run:() => pushEntry(state.age, `${n} turns down the permanent spot.`, {})},
+    ]);
+  }
+  render();
+}
+function careerExtrasHtml(){
+  if(state.age < 12) return '';
+  const j = state.job;
+  const groups = j ? [['At work', 'job'], ['Side income', 'adult']] : state.retired ? [['In retirement', 'retired'], ['Side income', 'adult']] : [['Between jobs', 'jobless'], ['Side income', 'adult'], ['Earning a little', 'teen']];
+  return groups.map(([label, who]) => { const body = iopts(WORK_ACTS.filter(x => x.who === who), workState, 'workAct'); return body ? '<div class="plabel">' + label + '</div>' + body : ''; }).join('');
+}
+
+// ---- People: things to do with everyone at once ----
+const GROUP_ACTS = [
+  {key:'gamenight', icon:'🎲', label:'Host a game night', min:8, meta:'free · every friend a little closer'},
+  {key:'reconnect', icon:'📞', label:'Reconnect with old friends', min:14, meta:'free · revive faded friendships'},
+  {key:'grouptrip', icon:'🧳', label:'Plan a trip with friends', min:18, cost:1200, meta:'your closest friends, closer still'},
+  {key:'double', icon:'💑', label:'Go on a double date', min:16, cost:150, meta:'your partner and a friend'},
+  {key:'together', icon:'🌱', label:'Volunteer with your partner', min:16, meta:'free · closer together'},
+  {key:'bday', icon:'🎂', label:'Throw your kid a birthday party', min:18, cost:250, meta:'a day they will remember'},
+  {key:'bbq', icon:'🍔', label:'Host a neighborhood barbecue', min:18, cost:200, meta:'meet the neighbors'},
+];
+function groupState(x){
+  const a = state.age, R = state.relationships, friends = R.filter(r => r.type === 'Friend');
+  if(state.crime.prison || a < x.min - 2) return {show:false};
+  if(a < x.min) return {ok:false, why:'from age ' + x.min};
+  if(state.done['grp_' + x.key]) return {ok:false, why:'done ✓', done:true};
+  const need = {
+    gamenight: friends.length ? '' : 'needs a friend',
+    reconnect: R.some(r => PEER.includes(r.type) && r.closeness < 35) ? '' : 'no one has drifted away',
+    grouptrip: friends.length >= 2 ? '' : 'needs two friends',
+    double: !hasRel('Partner', 'Spouse') ? 'needs a partner' : friends.length ? '' : 'needs a friend',
+    together: hasRel('Partner', 'Spouse') ? '' : 'needs a partner',
+    bday: R.some(r => r.type === 'Child' && r.age <= 12) ? '' : 'needs a child under 13',
+    bbq: state.assets.some(x => x.category === 'Homes' && !x.rental) ? '' : 'needs a home of your own',
+  }[x.key];
+  if(need) return {ok:false, why:need};
+  const c = x.cost ? inflR(x.cost, 10) : 0;
+  if(c && !canPay(c)) return {ok:false, why:'costs ' + fmt(c)};
+  return {ok:true, why:(c ? fmt(c) + ' · ' : '') + x.meta};
+}
+function groupAct(key){
+  const x = GROUP_ACTS.find(g => g.key === key); if(!x) return;
+  const st = groupState(x); if(st.show === false || !st.ok) return;
+  const cost = x.cost ? inflR(x.cost, 10) : 0; if(cost && !ensureCash(cost)) return;
+  state.done['grp_' + key] = true;
+  const n = state.name, a = state.age, R = state.relationships, delta = cost ? {money:-cost} : {};
+  const friends = R.filter(r => r.type === 'Friend').sort((p, q) => q.closeness - p.closeness), partner = R.find(r => LOVE.includes(r.type));
+  const names = list => list.length === 1 ? list[0].name : list.length === 2 ? list[0].name + ' and ' + list[1].name : list.length + ' friends';
+  let text = '';
+  if(key === 'gamenight'){ friends.forEach(r => bump(r, 3)); delta.happy = 3; text = `${n} hosts a game night for ${names(friends)}, and it runs late.`; }
+  else if(key === 'reconnect'){
+    const faded = R.filter(r => PEER.includes(r.type) && r.closeness < 35); faded.forEach(r => bump(r, 8)); delta.happy = 2;
+    text = `${n} reaches out to ${faded.length === 1 ? faded[0].name : faded.length + ' people'} they had lost touch with.`;
+  } else if(key === 'grouptrip'){
+    const top = friends.slice(0, 3); top.forEach(r => bump(r, 8)); delta.happy = 7 + (hasMyTrait('Adventurous') ? 2 : 0);
+    text = `${n} plans a trip to ${pick(['a lake house', 'the mountains', 'a beach town', 'wine country', 'a cabin in the woods'])} with ${names(top)}.`;
+  } else if(key === 'double'){
+    const f = friends[0]; bump(partner, 5); bump(f, 5); delta.happy = 4;
+    text = `${n} and ${partner.name} go on a double date with ${f.name}.`;
+  } else if(key === 'together'){
+    bump(partner, 6); delta.happy = 4; text = `${n} and ${partner.name} spend a Saturday volunteering together.`;
+  } else if(key === 'bday'){
+    const kid = R.filter(r => r.type === 'Child' && r.age <= 12).sort((p, q) => p.age - q.age)[0];
+    bump(kid, 10); delta.happy = 4; text = `${n} throws ${kid.name} a birthday party with a bouncy castle and far too much cake.`;
+  } else if(key === 'bbq'){
+    delta.happy = 4;
+    const f = R.length < 60 && Math.random() < 0.45 ? newRel('Friend', {age:Math.max(18, a + rint(-15, 15)), closeness:rint(35, 45), origin:'in the neighborhood'}) : null;
+    text = `${n} fires up the grill for the neighbors${f ? ' and hits it off with ' + f.name + ' from down the street' : ''}.`;
+  }
+  pushEntry(a, text, delta);
+  render();
+}
+function groupActsHtml(){
+  const body = iopts(GROUP_ACTS, groupState, 'groupAct');
+  return body ? '<div class="plabel">Get together</div>' + body : '';
+}
+
+// ---- Bank: giving, credit report disputes and a money checkup ----
+const CHARITIES = ["a children's hospital", 'a food bank', 'an animal shelter', 'a scholarship fund', 'cancer research', 'a homeless shelter', 'the local library'];
+const charityAmts = () => [100, 1000, 10000, 100000].map(x => inflR(x, 10));
+function donate(i){
+  const amt = charityAmts()[i]; if(!amt || state.done.charity || state.age < 16 || state.crime.prison || !canPay(amt) || !ensureCash(amt)) return;
+  state.done.charity = true; state.donated = (state.donated || 0) + amt / state.econ.cumInflation;
+  const relief = worldHas('disaster') || worldHas('pandemic'), delta = {money:-amt, happy:[1, 3, 5, 8][i] + (hasMyTrait('Generous') ? 2 : 0) + (relief ? 1 : 0)};
+  if(state.fame.level >= 10) delta.image = [1, 2, 4, 7][i];
+  pushEntry(state.age, `${state.name} donates ${fmt(amt)} to ${relief ? (worldHas('disaster') ? 'disaster relief' : 'pandemic relief') : pick(CHARITIES)}.`, delta);
+  render();
+}
+const canDispute = () => state.age >= 18 && state.creditScore < 760 && !(state.disputeAge != null && state.age - state.disputeAge < 5);
+function disputeCredit(){
+  if(!canDispute() || state.crime.prison) return;
+  state.disputeAge = state.age;
+  if(Math.random() < 0.45){ const g = rint(15, 35); adjustCredit(g); pushEntry(state.age, `${state.name} finds an error on their credit report and gets it fixed. The score rises ${g} points.`, {happy:2}); }
+  else pushEntry(state.age, `${state.name} goes through their credit report line by line, but it's all accurate.`, {});
+  render();
+}
+function moneyTips(){
+  const t = [], a = state.age, c = state.creditCard, monthly = Math.max(1, livingEstimate() / 12);
+  if(a < 18) return t;
+  if(state.money < 0) t.push('Your checking account is overdrawn. Move money from savings or spend less to stop the fees.');
+  if(c && c.balance > 0 && !state.cardAutopay) t.push(`Your card carries ${fmt(c.balance)} at ${(c.apr * 100).toFixed(0)}% interest. Paying it off beats any investment return.`);
+  if(state.movedOut && (Math.max(0, state.money) + state.savings + cdTotal()) / monthly < 3) t.push('Less than three months of living costs set aside. Build an emergency fund in savings.');
+  if(state.job && !(state.retirement.pct > 0) && a < 60) t.push('Nothing is going into your retirement account. Even a small share of pay grows for decades.');
+  if(!state.insurance.health) t.push('No health insurance: a serious illness would cost the full price of treatment.');
+  if(state.loans.some(l => canRefi(l))) t.push('One of your loans can be refinanced to a lower rate below.');
+  if(state.money > monthly * 12 && state.savings < monthly * 3) t.push(`${fmt(state.money)} is sitting in checking and earning nothing. Savings or investments would put it to work.`);
+  if(!state.trust && netWorth() > 1500000 * state.econ.cumInflation) t.push('Your estate is above the tax threshold. A family trust would cut the estate tax.');
+  return t.slice(0, 4);
+}
+function moneyTipsHtml(){
+  if(state.age < 18) return '';
+  const t = moneyTips();
+  return '<div class="plabel">Money checkup</div><div class="invrow"><div class="owned">' + (t.length ? t.map(x => '• ' + x).join('<br>') : '✓ Your finances look healthy. Nothing urgent to fix.') + '</div></div>';
+}
+function givingHtml(){
+  if(state.age < 16) return '';
+  const given = state.donated || 0;
+  return '<div class="plabel">Giving</div><div class="invrow"><div class="owned">Donations lift your mood' + (state.fame.level >= 10 ? ' and your public image' : '') + '. Once a year.' + (given >= 1 ? ' Given so far: ' + fmt(given * state.econ.cumInflation) + '.' : '') + '</div><div class="sortrow">' +
+    charityAmts().map((x, i) => `<button class="sortbtn" onclick="donate(${i})" ${state.done.charity || !canPay(x) || state.crime.prison ? 'disabled' : ''}>Give ${fmt(x)}</button>`).join('') + '</div></div>';
+}
+
+// ---- Invest: back a startup, or cash out everything ----
+const PITCH_NAMES = ['Quillpad', 'Zentro Health', 'Lumenfold', 'Brightbox Robotics', 'Tidewater Energy', 'Mossgrove Foods', 'Pathly', 'Kitebridge', 'Orbital Seeds', 'Nimbus Pay', 'Halcyon Bio', 'Fernway Mobility'];
+const STARTUP_KINDS = ['an AI tutoring app', 'a battery startup', 'a meal-kit company', 'a payments app', 'a biotech lab', 'an electric-scooter startup', 'a farm robotics company', 'a travel app'];
+function startupPitch(){
+  if(!state.pitch || state.pitch.age !== state.age) state.pitch = {age:state.age, co:pick(PITCH_NAMES), kind:pick(STARTUP_KINDS)};
+  return state.pitch;
+}
+const angelAmts = () => [5000, 25000, 100000].map(x => inflR(x, 500));
+function backStartup(i){
+  const amt = angelAmts()[i], p = startupPitch();
+  if(!amt || state.age < 21 || state.crime.prison || hasThread('startup') || state.done.angel || !canPay(amt) || !ensureCash(amt)) return;
+  state.done.angel = true;
+  pushEntry(state.age, `${state.name} puts ${fmt(amt)} into ${p.co}, ${p.kind}, as an early backer.`, {money:-amt});
+  seedThread('startup', {co:p.co, amt}, `Invested ${fmt(amt)} in ${p.co}`, rint(2, 3), 'round');
+  render();
+}
+function angelHtml(){
+  if(state.age < 21) return '';
+  const th = threads().find(t => t.key === 'startup');
+  let h = '<div class="plabel">Angel investing</div><div class="invrow">';
+  if(th) h += `<div class="owned">You're backing ${th.data.co}${th.data.amt ? ' with ' + fmt(th.data.amt) : ''}. Most startups fail and a few pay off many times over. You'll hear how it goes.</div>`;
+  else {
+    const p = startupPitch();
+    h += `<div class="itop"><span><b>${p.co}</b></span><span class="price">seed round</span></div><div class="owned">${p.kind.charAt(0).toUpperCase() + p.kind.slice(1)} is raising money from early backers. Most startups fail, a few return 10 to 40 times the stake, and the money is locked up for years.</div><div class="sortrow">` +
+      angelAmts().map((x, i) => `<button class="sortbtn" onclick="backStartup(${i})" ${state.done.angel || !canPay(x) || state.crime.prison ? 'disabled' : ''}>Invest ${fmt(x)}</button>`).join('') + '</div>';
+  }
+  return h + '</div>';
+}
+function sellEverything(ok){
+  const keys = Object.keys(state.portfolio).filter(k => state.portfolio[k] > 1e-9 && state.market[k]); if(!keys.length) return;
+  if(ok !== true) return askConfirm(`Sell all ${keys.length} holding${keys.length > 1 ? 's' : ''} for about ${fmt(portfolioValue())}?`, 'Sell everything', () => sellEverything(true));
+  let net = 0;
+  keys.forEach(k => { const r = execSell(k, state.portfolio[k]); if(r) net += r.net; });
+  pushEntry(state.age, `${state.name} sells their entire portfolio for ${fmt(net)}.`, {});
+  render();
+}
+
+// ---- Assets: making a house a home ----
+const solarCost = () => inflR(18000, 100);
+function installSolar(id){
+  const x = state.assets.find(y => y.id === id), c = solarCost();
+  if(!x || x.category !== 'Homes' || x.rental || x.solar || !ensureCash(c)) return;
+  x.solar = true; x.value += Math.round(c * 0.7);
+  pushEntry(state.age, `${state.name} puts solar panels on the ${x.name}. Upkeep and power bills drop.`, {money:-c, happy:2});
+  render();
+}
+function toggleRoommate(id){
+  const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Homes' || x.rental) return;
+  if(!x.roommate && state.assets.some(y => y.roommate)) return;
+  x.roommate = !x.roommate;
+  pushEntry(state.age, x.roommate ? `${state.name} rents the spare room in the ${x.name} to a roommate.` : `${state.name}'s roommate moves out of the ${x.name}.`, x.roommate ? {} : {happy:1});
+  render();
+}
+const warmCost = () => inflR(300, 10);
+function housewarming(id){
+  const x = state.assets.find(y => y.id === id), c = warmCost();
+  if(!x || x.category !== 'Homes' || x.warmed || state.age - x.boughtAge > 1 || !ensureCash(c)) return;
+  x.warmed = true;
+  const guests = state.relationships.filter(r => ['Friend', 'Mother', 'Father', 'Sibling', 'Coworker'].includes(r.type)).sort((p, q) => q.closeness - p.closeness).slice(0, 10);
+  guests.forEach(r => bump(r, 4));
+  const f = state.relationships.length < 60 && Math.random() < 0.35 ? newRel('Friend', {age:Math.max(18, state.age + rint(-15, 15)), closeness:rint(35, 45), origin:'in the neighborhood'}) : null;
+  pushEntry(state.age, `${state.name} throws a housewarming party at the ${x.name}${guests.length ? ' for ' + guests.length + ' guest' + (guests.length > 1 ? 's' : '') : ''}${f ? ', and a neighbor, ' + f.name + ', drops by and stays late' : ''}.`, {money:-c, happy:5});
+  render();
+}
+function homeExtrasHtml(x){
+  if(x.category !== 'Homes' || x.rental) return '';
+  let b = '';
+  if(!x.warmed && state.age - x.boughtAge <= 1) b += `<button onclick="housewarming('${x.id}')" ${canPay(warmCost()) ? '' : 'disabled'}>Housewarming party (${fmt(warmCost())})</button>`;
+  if(!x.solar) b += `<button onclick="installSolar('${x.id}')" ${canPay(solarCost()) ? '' : 'disabled'}>Solar panels (${fmt(solarCost())})</button>`;
+  if(x.roommate || !state.assets.some(y => y.roommate)) b += `<button onclick="toggleRoommate('${x.id}')">${x.roommate ? 'Roommate moves out' : 'Take in a roommate'}</button>`;
+  return (x.solar || x.roommate ? `<div class="owned">${[x.solar ? 'Solar panels: upkeep 30% lower' : '', x.roommate ? 'A roommate pays ' + fmt(inflR(8400, 100)) + ' a year' : ''].filter(Boolean).join(' · ')}</div>` : '') + (b ? '<div class="assetbuy">' + b + '</div>' : '');
+}
+
+// ---- Business: running the place ----
+const BIZ_EXTRAS = [
+  {key:'bonus', label:'Pay staff bonuses', blurb:'Morale jumps.', cost:b => b.employees * inflR(1000, 50), need:b => b.employees > 0 ? '' : 'needs staff'},
+  {key:'retreat', label:'Take the team on a retreat', blurb:'Morale rises, and you unwind too.', cost:b => inflR(2000, 100) + b.employees * inflR(500, 50), need:b => b.employees > 0 ? '' : 'needs staff'},
+  {key:'sponsor', label:'Sponsor a local event', blurb:'Reputation and word of mouth.', cost:b => inflR(4000, 100) * b.locations},
+  {key:'shift', label:'Work a shift yourself', blurb:'Staff love seeing the owner pitch in. Tiring, though.', cost:() => 0},
+  {key:'grant', label:'Apply for a small-business grant', blurb:'Free money if you win. Once every three years.', cost:() => 0, need:b => b.grantAge != null && state.age - b.grantAge < 3 ? 'applied recently' : ''},
+];
+function bizExtra(key){
+  const b = state.business, x = BIZ_EXTRAS.find(e => e.key === key); if(!b || !x || state.done['bx_' + key] || state.crime.prison) return;
+  if(x.need && x.need(b)) return;
+  const c = x.cost(b); if(c && !ensureCash(c)) return;
+  state.done['bx_' + key] = true;
+  const n = state.name, delta = c ? {money:-c} : {};
+  let text = '';
+  if(key === 'bonus'){ b.morale = Math.min(100, b.morale + 15); delta.happy = 1; text = `${n} pays every employee a bonus, and morale jumps.`; }
+  else if(key === 'retreat'){ b.morale = Math.min(100, b.morale + 8); b.reputation = clampRep(b.reputation + 1); delta.happy = 3; text = `${n} takes the team on a retreat.`; }
+  else if(key === 'sponsor'){ b.reputation = clampRep(b.reputation + 5); b.marketing = Math.min(1, b.marketing + 0.1); delta.happy = 1; text = `${bizName(b)} sponsors a local ${pick(['street fair', 'youth soccer league', 'charity run', 'music festival'])}.`; }
+  else if(key === 'shift'){ b.morale = Math.min(100, b.morale + 5); b.reputation = clampRep(b.reputation + 2); Object.assign(delta, {happy:-1, health:-1}); text = `${n} rolls up their sleeves and works a shift alongside the staff.`; }
+  else if(key === 'grant'){
+    b.grantAge = state.age;
+    if(Math.random() < 0.3 + b.reputation / 400){ const g = inflR(rint(10, 50) * 1000, 1000); delta.money = g; delta.happy = 5; text = `${bizName(b)} wins a ${fmt(g)} small-business grant.`; }
+    else { delta.happy = -1; text = `${n} applies for a small-business grant, but ${bizName(b)} isn't picked.`; }
+  }
+  pushEntry(state.age, text, delta);
+  render();
+}
+function bizExtrasHtml(b){
+  return '<div class="plabel">Running the place</div>' + BIZ_EXTRAS.map(x => {
+    const c = x.cost(b), need = x.need ? x.need(b) : '', done = state.done['bx_' + x.key];
+    return bankRow(x.label, x.blurb + (c ? ' Costs ' + fmt(c) + '.' : ''), `<button onclick="bizExtra('${x.key}')" ${done || need || (c && !canPay(c)) ? 'disabled' : ''}>${done ? 'Done this year ✓' : need ? need.charAt(0).toUpperCase() + need.slice(1) : c ? 'Do it (' + fmt(c) + ')' : 'Do it'}</button>`);
+  }).join('');
+}
+
+// ---- Me: your look ----
+const HAIR_STYLES = ['Short', 'Long', 'Bob', 'Buzz cut', 'Shaved'];
+const HAIR_DYES = {Natural:null, Black:'#1b1410', Brown:'#6b4423', Blonde:'#d9b45a', Red:'#a8452a', Silver:'#c9c3b4', Blue:'#3e73ac', Pink:'#d77fa9'};
+const cutCost = () => inflR(40, 5), dyeCost = () => inflR(120, 5), tattooCost = () => inflR(250, 10);
+function restyle(i){
+  const ap = state.appearance;
+  if(!HAIR_STYLES[i] || state.age < 10 || state.done.me_hair || state.crime.prison || ap.hairStyle === i || !ensureCash(cutCost())) return;
+  state.done.me_hair = true; ap.hairStyle = i;
+  pushEntry(state.age, i === 4 ? `${state.name} shaves their head.` : `${state.name} gets a new ${HAIR_STYLES[i].toLowerCase()} haircut.`, {money:-cutCost(), happy:2, looks:1});
+  render();
+}
+function dyeHair(name){
+  const ap = state.appearance;
+  if(!(name in HAIR_DYES) || state.age < 13 || state.done.me_dye || state.crime.prison || (ap.dye || null) === HAIR_DYES[name]) return;
+  if(name !== 'Natural' && !ensureCash(dyeCost())) return;
+  state.done.me_dye = true; ap.dye = HAIR_DYES[name];
+  pushEntry(state.age, name === 'Natural' ? `${state.name} lets their hair go back to its natural color.` : `${state.name} dyes their hair ${name.toLowerCase()}.`, name === 'Natural' ? {} : {money:-dyeCost(), happy:2});
+  render();
+}
+function getTattoo(){
+  if(state.age < 18 || state.done.me_tattoo || state.crime.prison || !ensureCash(tattooCost())) return;
+  state.done.me_tattoo = true; state.tattoos = (state.tattoos || 0) + 1;
+  const love = state.relationships.find(r => LOVE.includes(r.type)), design = pick(['a small star', 'a rose', 'a compass', 'a phoenix', 'a line of poetry', 'a wave', love ? love.name + "'s name" : 'a mountain range']);
+  const regret = Math.random() < 0.2;
+  pushEntry(state.age, `${state.name} gets a tattoo of ${design}${regret ? ' and regrets it almost at once' : ''}.`, {money:-tattooCost(), happy: regret ? -2 : 4, looks: regret ? -1 : 1});
+  render();
+}
+function styleHtml(){
+  if(state.age < 10) return '';
+  const ap = state.appearance, dye = Object.keys(HAIR_DYES).find(k => HAIR_DYES[k] === (ap.dye || null)) || 'Natural', prison = !!state.crime.prison;
+  let h = '<div class="plabel">Your look</div><div class="invrow"><div class="owned">Hairstyle · ' + (state.done.me_hair ? 'new cut this year ✓' : 'a cut costs ' + fmt(cutCost())) + '</div><div class="sortrow">' +
+    HAIR_STYLES.map((s, i) => `<button class="sortbtn${ap.hairStyle === i ? ' active' : ''}" onclick="restyle(${i})" ${state.done.me_hair || prison || ap.hairStyle === i || !canPay(cutCost()) ? 'disabled' : ''}>${s}</button>`).join('') + '</div>';
+  if(state.age >= 13) h += '<div class="owned">Hair color · ' + (state.done.me_dye ? 'changed this year ✓' : 'dyeing costs ' + fmt(dyeCost())) + '</div><div class="sortrow">' +
+    Object.keys(HAIR_DYES).map(k => `<button class="sortbtn${k === dye ? ' active' : ''}" onclick="dyeHair('${k}')" ${state.done.me_dye || prison || k === dye || (k !== 'Natural' && !canPay(dyeCost())) ? 'disabled' : ''}>${HAIR_DYES[k] ? '<span style="color:' + HAIR_DYES[k] + '">●</span> ' : ''}${k}</button>`).join('') + '</div>';
+  if(state.age >= 18) h += `<div class="owned">${state.tattoos ? state.tattoos + ' tattoo' + (state.tattoos > 1 ? 's' : '') : 'No tattoos yet'}</div><div class="assetbuy"><button onclick="getTattoo()" ${state.done.me_tattoo || prison || !canPay(tattooCost()) ? 'disabled' : ''}>${state.done.me_tattoo ? 'Inked this year ✓' : 'Get a tattoo (' + fmt(tattooCost()) + ')'}</button></div>`;
+  return h + '</div>';
+}
+
+// ---- Crime: staying out of trouble ----
+const LAW_ACTS = [
+  {key:'laylow', icon:'🕶️', label:'Lay low for the year', meta:'police attention fades, no crimes this year'},
+  {key:'surrender', icon:'🚔', label:'Turn yourself in', meta:'a confession earns a lighter sentence'},
+  {key:'watch', icon:'🏘️', label:'Join the neighborhood watch', meta:'+happy, meet the neighbors'},
+];
+function lawState(x){
+  const k = CR(), a = state.age;
+  if(k.prison) return {show:false};
+  if(x.key === 'surrender'){ const open = (k.open || []).filter(o => o.ev >= 30); if(!open.length || a < 18 || k.case) return {show:false}; }
+  if(x.key === 'laylow' && k.heat <= 0 && !state.done.law_laylow) return {show:false};
+  if(x.key === 'watch' && a < 16) return {show:false};
+  if(state.done['law_' + x.key]) return {ok:false, why:'done ✓', done:true};
+  if(x.key === 'laylow' && (state.done.crimes || 0) > 0) return {ok:false, why:'too late, you already acted this year'};
+  if(x.key === 'watch' && (priorCount() > 0 || k.heat >= 15)) return {ok:false, why:'needs a clean record and no heat'};
+  return {ok:true, why:x.meta};
+}
+function lawAct(key){
+  const x = LAW_ACTS.find(l => l.key === key); if(!x) return;
+  const st = lawState(x); if(st.show === false || !st.ok) return;
+  const k = CR(), n = state.name, a = state.age;
+  state.done['law_' + key] = true;
+  if(key === 'laylow'){
+    k.heat = Math.max(0, k.heat - 25); state.done.crimes = 2;
+    pushEntry(a, `${n} keeps their head down all year, and the police start looking elsewhere.`, {happy:-1});
+  } else if(key === 'surrender'){
+    const o = (k.open || []).filter(c => c.ev >= 30).sort((p, q) => q.ev - p.ev)[0];
+    yearStart = serialize();
+    k.open = k.open.filter(c => c !== o); k.arrests++;
+    pushEntry(a, `${n} walks into the station and confesses to ${o.ing}.`, {happy:-4});
+    arrest({key:o.key, charge:o.charge, ing:o.ing, felony:o.felony, years:[Math.max(1, o.years[0] - 1), Math.max(1, o.years[1] - 2)]}, o.amt, 'confessed');
+  } else if(key === 'watch'){
+    const f = state.relationships.length < 60 && Math.random() < 0.3 ? newRel('Friend', {age:Math.max(18, a + rint(-15, 20)), closeness:rint(35, 45), origin:'on the neighborhood watch'}) : null;
+    pushEntry(a, `${n} joins the neighborhood watch${f ? ' and gets to know ' + f.name : ''}.`, {happy:2});
+  }
+  render();
+}
+function lawHtml(){
+  const body = iopts(LAW_ACTS, lawState, 'lawAct');
+  return body ? '<div class="plabel">Staying out of trouble</div>' + body : '';
+}
+
 // tabs with something waiting on the player get a small dot
 function tabAlerts(){
   const al = {};
@@ -8483,7 +8990,7 @@ function renderPanel(){
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
-      h += marketOverviewHtml() + portfolioHtml() + mixesHtml();
+      h += marketOverviewHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
       h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
@@ -8534,7 +9041,7 @@ function renderPanel(){
 
     if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
       Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
-    h += netWorthHistHtml() + cashFlowHtml() + emergencyHtml() + creditHtml();
+    h += moneyTipsHtml() + netWorthHistHtml() + cashFlowHtml() + emergencyHtml() + creditHtml();
     h += trustHtml() + savingsPanelHtml() + collegeFundHtml();
     if(a >= 16) h += retirementHtml();
 
@@ -8564,7 +9071,7 @@ function renderPanel(){
     h += '<div class="plabel">INSURANCE</div><div class="sortrow">' +
       ['health','auto','home'].map(k => `<button class="sortbtn${state.insurance[k] ? ' active' : ''}" onclick="toggleInsurance('${k}')">${k[0].toUpperCase()+k.slice(1)} ${state.insurance[k] ? '✓' : ''}</button>`).join('') +
       '</div>';
-    h += estatePlanHtml();
+    h += estatePlanHtml() + givingHtml();
 
     if(state.money <= -3000 && !state.bankrupt){
       h += '<div class="plabel">DEBT RELIEF</div>';
@@ -8594,17 +9101,18 @@ function renderPanel(){
         const wl = worldImpactLines().filter(l => /field|Military/.test(l));
         if(wl.length) h += `<div class="status">${wl.join('<br>')}</div>`;
         if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">needs ' + nxGap + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
-        h += opt('Work extra hard', '−2 health', 'workHarder()', state.done.work);
-        if(j.track !== 'Military' && j.track !== 'Politics') h += opt('Negotiate a raise', 'risk/reward', 'negotiateRaise()', state.done.negotiate);
-        if(j.track !== 'Military' && j.track !== 'Politics') h += opt('Look for a better offer', j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1);
-        h += opt(j.track === 'Military' ? 'Leave the military' : inOffice() ? 'Resign from office' : 'Quit job', '', 'quitJob()', false);
-        if(a >= 60) h += opt('Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
+        h += iopt('💪', 'Work extra hard', state.done.work ? 'done ✓' : '−2 health, better promotion odds', 'workHarder()', state.done.work, state.done.work);
+        if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('💵', 'Negotiate a raise', state.done.negotiate ? 'done ✓' : 'risk and reward', 'negotiateRaise()', state.done.negotiate, state.done.negotiate);
+        if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('🔍', 'Look for a better offer', state.done.hunt ? 'done ✓' : j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1, state.done.hunt);
+        h += iopt('🚪', j.track === 'Military' ? 'Leave the military' : inOffice() ? 'Resign from office' : 'Quit job', '', 'quitJob()', false);
+        if(a >= 60) h += iopt('🌅', 'Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       } else if(state.retired){
         h += `<div class="status"><b>Retired</b><br>Pension ${fmt(state.pension)}/yr, adjusted for the cost of living each year.</div>`;
       } else {
         h += '<div class="status">Currently unemployed. Browse career tracks below — you\'ll start at the entry rank of whichever one you apply to.</div>';
-        if(a >= 60) h += opt('Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
+        if(a >= 60) h += iopt('🌅', 'Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       }
+      h += careerExtrasHtml();
       h += milHtml() + govHtml();
       h += '<div class="plabel">CAREER TRACKS</div>';
       for(const trackName in CAREERS){
@@ -10186,7 +10694,7 @@ const CROSSROADS = [
     const friends = state.relationships.filter(r => ['Friend', 'Coworker', 'Contact'].includes(r.type)).length;
     return presentCrossroads('The job across the country', `${state.name} is offered a ${j.title} job in ${city}, across the country, for ${fmt(j.salary + raise)} a year.`, [
       {label:'Accept and move', pros:[`+${fmt(raise)} a year`, 'a fresh start in a new city'], cons:[friends ? 'some friendships will fade' : 'leaving everyone behind', 'far from family'], run:() => {
-        j.salary += raise; j.years = 0;
+        j.salary += raise; j.years = 0; j.remote = false;
         const lost = drift(['Friend', 'Coworker', 'Contact'], 60); bondDelta(['Mother', 'Father', 'Sibling'], -12);
         pushEntry(a, `${state.name} packs up and moves to ${city}, starting at ${fmt(j.salary)}.${lost.length ? ' Over time they lose touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy:4});
         seedThread('move', {}, `Moved to ${city} for a ${fmt(raise)} raise`, rint(1, 2), 'settle');
@@ -10795,7 +11303,8 @@ function creditHtml(){
   if(state.age < 18) return '';
   const tag = {good:'up', fair:'', poor:'down', none:''};
   return '<div class="plabel">Credit score</div><div class="invrow"><div class="itop"><span><b>' + state.creditScore + '</b> ' + creditTier(state.creditScore) + ' ' + sparkline(state.csHist, 80, 20) + '</span></div>' +
-    '<div class="owned">' + creditFactors().map(f => `${f[0]}: <span class="${tag[f[1]]}">${f[1]}</span> · ${f[2]}`).join('<br>') + '<br>Good credit means cheaper loans and refinancing. Pay on time and keep card balances low.</div></div>';
+    '<div class="owned">' + creditFactors().map(f => `${f[0]}: <span class="${tag[f[1]]}">${f[1]}</span> · ${f[2]}`).join('<br>') + '<br>Good credit means cheaper loans and refinancing. Pay on time and keep card balances low.</div>' +
+    '<div class="assetbuy"><button onclick="disputeCredit()" ' + (canDispute() && !state.crime.prison ? '' : 'disabled') + '>' + (state.creditScore >= 760 ? 'Credit report is spotless' : canDispute() ? 'Check your report for errors' : 'Checked recently') + '</button></div></div>';
 }
 function emergencyHtml(){
   if(state.age < 18 || !state.movedOut) return '';
