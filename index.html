@@ -610,11 +610,11 @@ let state = null;
 
 const STAGES = [
   [0,2,'INFANT'],[3,5,'TODDLER'],[6,12,'CHILD'],[13,17,'TEENAGER'],
-  [18,25,'YOUNG ADULT'],[26,45,'ADULT'],[46,64,'MIDDLE AGE'],[65,199,'ELDER']
+  [18,25,'YOUNG ADULT'],[26,45,'ADULT'],[46,64,'MIDDLE AGE'],[65,Infinity,'ELDER']
 ];
 
 function stageFor(age){
-  return STAGES.find(s => age >= s[0] && age <= s[1])[2];
+  return (STAGES.find(s => age >= s[0] && age <= s[1]) || STAGES[STAGES.length - 1])[2];
 }
 
 function freshState(name){
@@ -705,7 +705,7 @@ function resetSettings(ok){
   if(playing()) render(); else renderSetup();
 }
 function resetAchievements(ok){
-  if(ok !== true) return askConfirm("Erase every achievement you have unlocked, across all lives? This can't be undone.", "Erase", () => resetAchievements(true));
+  if(ok !== true) return askConfirm("Erase every achievement you have unlocked, across all lives? This can't be undone.", "Erase", () => resetAchievements(true), true);
   ACH.unlocked = {}; ACH.stats = {lives:0, years:0}; saveAch(); achSetupLabel(); renderSettings();
 }
 function renderSettings(){
@@ -746,8 +746,10 @@ function renderSettings(){
 
 // ---------- Cheats: only when switched on in settings, and they cost the life its achievements ----------
 const CH = () => state.cheats || (state.cheats = {immortal:false, uncatchable:false});
+const cheatActive = k => !!(SETTINGS.cheats && state && state.cheats && state.cheats[k]);
 function cheat(key, arg){
   if(!SETTINGS.cheats || !state || !state.alive) return;
+  if(document.querySelector('#choices .choice-btn')){ queueToast('Answer the decision above first.', '', true); return renderCheats(); }
   const n = state.name, j = state.job, note = t => pushEntry(state.age, '🛠️ ' + t, {});
   let done = true;
   switch(key){
@@ -803,6 +805,7 @@ function renderCheats(){
   const noJob = !j || j.track === 'Military' || j.track === 'Politics', top = j && CAREERS[j.track] && j.rank >= CAREERS[j.track].length - 1;
   let h = `<div class="set-note">${state.cheated ? '<span class="cheat-flag">Cheats used: achievements are off for this life.</span>' : 'Using any cheat turns off achievements for this life.'}</div>`;
   if(!state.alive) return body.innerHTML = h + '<div class="set-note">This life is over.</div>';
+  if(document.querySelector('#choices .choice-btn')) return body.innerHTML = h + '<div class="status">Answer the decision on screen first, then come back.</div>';
   h += '<div class="set-group"><div class="set-title">Money</div><div class="cheat-grid">' + b('money', '+ $10,000', false, 10000) + b('money', '+ $100,000', false, 100000) + b('money', '+ $1 million', false, 1e6) + b('money', '+ $1 billion', false, 1e9) +
     b('debt', 'Wipe out all debt', !totalDebt() && state.money >= 0) + b('credit', 'Perfect credit score', state.creditScore >= 850 && !state.bankrupt) + '</div></div>';
   h += '<div class="set-group"><div class="set-title">Stats</div>' + ['health', 'happy', 'smarts', 'looks'].map(k =>
@@ -832,7 +835,7 @@ function setupName(gender, taken){
   const pool = gender === 'female' || gender === 'male' ? NAMES[gender] : NAMES.unisex, free = pool.filter(x => !taken.includes(x));
   return pick(free.length ? free : pool);
 }
-function randomNameInput(){ const g = setup.gender === 'random' ? rollGender() : setup.gender; document.getElementById('nameInput').value = setupName(g, []); }
+function randomNameInput(){ const g = setup.gender === 'random' ? rollGender() : setup.gender, f = setupFam(); document.getElementById('nameInput').value = setupName(g, [f.mother.name, f.father.name].concat(f.siblings.map(x => x.name))); }
 // a family for the setup screen; `wild` allows single parents, no parents and big families
 function genSetupFamily(wild){
   const taken = [], take = g => { const x = setupName(g, taken); taken.push(x); return x; };
@@ -843,7 +846,7 @@ function genSetupFamily(wild){
   return fam;
 }
 function setupFam(){ return setup.family || (setup.family = genSetupFamily(false)); }
-function setupSet(k, v){ setup[k] = v; if(k === 'gender') setup.hairStyle = null; renderSetup(); }
+function setupSet(k, v){ setup[k] = v; if(k === 'gender' && !setup.hairPicked) setup.hairStyle = null; if(k === 'hairStyle') setup.hairPicked = true; renderSetup(); }
 function famField(who, field, v){
   const f = setupFam(), p = who === 'mother' || who === 'father' ? f[who] : f.siblings[+who];
   if(!p) return;
@@ -908,7 +911,7 @@ function renderSetup(){
 // what the player picked, with anything left open settled now
 function setupChoice(){
   const gender = setup.gender === 'random' ? rollGender() : setup.gender;
-  return {gender, traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairStyle != null && setup.gender !== 'random' ? setup.hairStyle : hairFor(gender),
+  return {gender, traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairPicked || (setup.hairStyle != null && setup.gender !== 'random') ? setup.hairStyle : hairFor(gender),
     talent:setup.talent, stats:null, wealth:setup.wealth, family:JSON.parse(JSON.stringify(setupFam())), pet:setup.pet === 'random' ? (Math.random() < 0.35 ? pick(['dog', 'cat']) : 'none') : setup.pet};
 }
 // a random life: every part of the person is rolled, including the extremes
@@ -923,7 +926,7 @@ function startLife(heir, randomNow){
   const c = heir ? null : rnd ? randomSetup() : setupChoice();
   const gender = heir ? (heir.kid.gender || rollGender()) : c.gender;
   const typed = heir ? '' : cleanPersonName(document.getElementById('nameInput').value);
-  const name = heir ? heir.kid.name : typed || setupName(gender, []);
+  const name = heir ? heir.kid.name : typed || setupName(gender, c.family ? [c.family.mother.name, c.family.father.name].concat(c.family.siblings.map(x => x.name)) : []);
   state = freshState(name);
   ACH.stats.lives++; saveAch();
   state.gender = gender;
@@ -942,7 +945,7 @@ function startLife(heir, randomNow){
   if(heir){ applyHeir(heir); state.namesFixed = false; fixNames(); state.appearance.skin = heir.old.appearance.skin; try{ checkAchievements(true); } catch(e){} }
   else {
     state.relationships = initFamily(c.family, c.wealth);
-    if(c.pet && c.pet !== 'none' && speciesOf(c.pet)) newPet(c.pet, {age:rint(1, 4), bond:55});
+    if(c.pet && c.pet !== 'none' && speciesOf(c.pet) && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father')) newPet(c.pet, {age:rint(1, 4), bond:55});   // a family pet needs a family
   }
   showScreen('game');
   const hb = document.getElementById('heirBox'); if(hb) hb.innerHTML = '';
@@ -956,7 +959,7 @@ function startLife(heir, randomNow){
   if(!heir){
     const R = state.relationships, mom = R.find(r => r.type === 'Mother'), dad = R.find(r => r.type === 'Father'), sibs = R.filter(r => r.type === 'Sibling'), pet = myPets()[0];
     const fam = mom && dad ? `${mom.name} and ${dad.name}` : mom ? `${mom.name}, a single mother` : dad ? `${dad.name}, a single father` : '';
-    pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}, ${fam ? 'to ' + fam + ', ' : 'and is placed in foster care, '}in a ${wealthLabel(state.famEstate)} family${sibs.length ? (sibs.length === 1 ? (sibs[0].age === 0 ? ', with a twin ' + relLabel(sibs[0]) + ', ' : ', joining an older ' + relLabel(sibs[0]) + ', ') + sibs[0].name : ', joining ' + sibs.length + ' siblings') : ''}${pet ? ', and ' + (/^[aeiou]/i.test(petLabel(pet)) ? 'an ' : 'a ') + petLabel(pet) + ' named ' + pet.name : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}.${rnd ? ' Everything about this life was left to chance.' : ''} The record begins.`, {});
+    pushEntry(0, `${name} is born${state.gender === 'female' ? ', a baby girl' : state.gender === 'male' ? ', a baby boy' : ''}${fam ? ', to ' + fam + ', in a ' + wealthLabel(state.famEstate) + ' family' : ', and is placed in foster care'}${sibs.length ? (sibs.length === 1 ? (sibs[0].age === 0 ? ', with a twin ' + relLabel(sibs[0]) + ', ' : ', joining an older ' + relLabel(sibs[0]) + ', ') + sibs[0].name : ', joining ' + sibs.length + ' siblings') : ''}${pet ? ', and ' + (/^[aeiou]/i.test(petLabel(pet)) ? 'an ' : 'a ') + petLabel(pet) + ' named ' + pet.name : ''}. They seem ${state.traits.map(t => t.toLowerCase()).join(' and ')}.${rnd ? ' Everything about this life was left to chance.' : ''} The record begins.`, {});
   }
   yearStart = serialize();          // a decision opened before the first age-up must not save an older life
   render();
@@ -984,6 +987,7 @@ function upgradeSave(saved){
     if(v === undefined) continue;
     base[k] = (b && v && typeof b === "object" && !Array.isArray(b) && typeof v === "object" && !Array.isArray(v)) ? Object.assign(b, v) : v;
   }
+  for(const k in saved) if(!(k in base)) base[k] = saved[k];      // fields set during play (lifestyle, gender, cheats...) that a fresh life doesn't start with
   base.recent = [];
   return base;
 }
@@ -1016,13 +1020,13 @@ function resumeGame(){
 function newRecord(){ clearSave(); state = null; location.reload(); }
 function restartLife(ok){
   closeSettings();
-  if(state && state.alive && ok !== true) return askConfirm("Start a new life? " + state.name + "'s life will be lost.", "Start over", () => restartLife(true));
+  if(state && state.alive && ok !== true) return askConfirm("Start a new life? " + state.name + "'s life will be lost.", "Start over", () => restartLife(true), true);
   newRecord();
 }
 // ---------- small UI helpers: confirmations and toasts ----------
 let confirmAction = null;
-function askConfirm(text, yes, fn){
-  if(!SETTINGS.confirm){ fn(); return; }
+function askConfirm(text, yes, fn, always){
+  if(!SETTINGS.confirm && !always){ fn(); return; }
   confirmAction = fn;
   document.getElementById("modalText").textContent = text;
   document.getElementById("modalYes").textContent = yes;
@@ -2738,7 +2742,7 @@ function ageUpYear(){
   const vehPrompted = vehiclesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted));
   const famePrompted = fameYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted));
   const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted));
-  if(pets.cost) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
+  if(pets.cost && state.movedOut) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
   goalsYear(a);
   const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
@@ -3881,6 +3885,7 @@ function initFamily(plan, wealth){
   state.famEstate = estateFor(wealth || 'random');
   if(plan){
     const rels = [], par = [plan.mother, plan.father].filter(p => p.on), lim = Math.max(0, Math.min(18, Math.min(...par.map(p => p.age), 60) - 16));
+    if(!par.length) state.famEstate = 0;                                  // raised in foster care: no family fortune behind them
     if(plan.mother.on) rels.push(makeRel("Mother", {name:cleanPersonName(plan.mother.name) || undefined, age:Math.max(16, Math.min(60, plan.mother.age)), closeness:70 + rint(-10,15), livingTogether:true, origin:"family"}));
     if(plan.father.on) rels.push(makeRel("Father", {name:cleanPersonName(plan.father.name) || undefined, age:Math.max(16, Math.min(60, plan.father.age)), closeness:65 + rint(-10,15), livingTogether:true, origin:"family"}));
     plan.siblings.slice(0, 5).forEach(sb => rels.push(makeRel("Sibling", {name:cleanPersonName(sb.name) || undefined, gender:sb.gender, age:Math.max(0, Math.min(lim, sb.age)), closeness:55 + rint(-15,20), origin:"family"})));
@@ -5620,7 +5625,10 @@ const CANCER_TREATMENTS = [
 ];
 const H = () => state.health;
 const condOf = key => H().conditions.find(c => c.key === key);
-const medCost = n => Math.round(inflR(n, 10) * (state.insurance.health ? 0.2 : 1));
+// a child living at home has their medical bills paid by their parents
+const parentsPayMedical = () => !state.movedOut && state.age < 18 && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father');
+const medCost = n => parentsPayMedical() ? 0 : Math.round(inflR(n, 10) * (state.insurance.health ? 0.2 : 1));
+const medTxt = (c, yearly) => c ? fmt(c) + (yearly ? '/yr' : '') : 'parents pay';
 function exercisedThisYear(){
   const d = state.lastDone || {};                // healthYear runs after the new year's slate is cleared
   return !!(d.gym || d.sport || d.play || d.petWalk || d['pr_workout'] || d.hc_trainer || ACTIVE_HOBBIES.some(k => d['hob_' + k])) ||
@@ -5666,7 +5674,7 @@ function condMort(c){
 }
 // what kills you this year, if anything: an illness, or age and general health
 function deathRoll(a){
-  if(state.cheats && state.cheats.immortal) return null;
+  if(cheatActive('immortal')) return null;
   for(const c of H().conditions){ const m = condMort(c) * diff('death'); if(m && Math.random() < m) return c; }
   return Math.random() < mortalityChance(a, state.stats.health) * 0.8 * diff('death') ? 'age' : null;   // illnesses now carry part of the risk
 }
@@ -5687,8 +5695,8 @@ function treatmentPrompt(c){
   if(d.kind === 'cancer') return cancerPrompt(c);
   if(!d.treat) return false;
   const cost = medCost(d.cost);
-  presentCustom(`${n} has ${condLabel(c)}. Treatment is ${d.treat}, costing ${fmt(cost)}${d.yearly ? ' a year' : ''}${state.insurance.health ? ' after insurance' : ''}.`, [
-    canPay(cost) ? {label:`Start treatment (${fmt(cost)}${d.yearly ? '/yr' : ''})`, run:() => startTreatment(c.key)} : null,
+  presentCustom(`${n} has ${condLabel(c)}. Treatment is ${d.treat}, ${cost ? 'costing ' + fmt(cost) + (d.yearly ? ' a year' : '') + (state.insurance.health ? ' after insurance' : '') : 'and their parents will pay for it'}.`, [
+    canPay(cost) ? {label:`Start treatment (${medTxt(cost, d.yearly)})`, run:() => startTreatment(c.key)} : null,
     {label: canPay(cost) ? 'Not now' : "Can't afford it right now", run:() => pushEntry(state.age, `${n} holds off on treating ${condLabel(c)}.`, {})},
   ].filter(Boolean));
   return true;
@@ -5696,7 +5704,7 @@ function treatmentPrompt(c){
 function cancerPrompt(c){
   const n = state.name, opts = CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).map(t => {
     const cost = medCost(t.cost);
-    return canPay(cost) ? {label:`${t.label} (${fmt(cost)}), about ${Math.round(Math.min(0.97, t.cure[t.stages.indexOf(c.stage)] + state.world.medTech) * 100)}% chance of remission`, run:() => cancerTreat(c.key, t.key)} : null;
+    return canPay(cost) ? {label:`${t.label} (${medTxt(cost)}), about ${Math.round(Math.min(0.97, t.cure[t.stages.indexOf(c.stage)] + state.world.medTech) * 100)}% chance of remission`, run:() => cancerTreat(c.key, t.key)} : null;
   }).filter(Boolean);
   opts.push({label: opts.length ? 'Decline treatment' : 'Treatment is out of reach', run:() => pushEntry(state.age, `${n} decides against cancer treatment for now.`, {happy:-2})});
   presentCustom(`${n} is facing stage ${c.stage} cancer. What do they do?`, opts);
@@ -5741,10 +5749,12 @@ function healthYear(a, canPrompt){
   const could = canPrompt, hb = H().habits, n = state.name, conds = H().conditions;
   const cash0 = state.money + state.savings;
   // habits
-  if(hb.smoke){ applyDelta({health:-1, money:-inflR(1500, 10)}); if(Math.random() < 0.4) applyDelta({looks:-1}); }
-  if(hb.drink === 1) applyDelta({happy:1, money:-inflR(500, 10)});
-  if(hb.drink === 2){ applyDelta({happy:1, health:-2, money:-inflR(2000, 10)}); if(Math.random() < 0.3) applyDelta({smarts:-1}); }
-  if(hb.diet === 'healthy'){ applyDelta({health:1, money:-inflR(1200, 10)}); }
+  // living at home, a kid only spends the cash they have on habits, and their parents buy the groceries
+  const habit = n => { const c = inflR(n, 10); return state.movedOut ? c : Math.min(c, Math.max(0, Math.round(state.money))); };
+  if(hb.smoke){ applyDelta({health:-1, money:-habit(1500)}); if(Math.random() < 0.4) applyDelta({looks:-1}); }
+  if(hb.drink === 1) applyDelta({happy:1, money:-habit(500)});
+  if(hb.drink === 2){ applyDelta({happy:1, health:-2, money:-habit(2000)}); if(Math.random() < 0.3) applyDelta({smarts:-1}); }
+  if(hb.diet === 'healthy'){ applyDelta({health:1, money:state.movedOut ? -inflR(1200, 10) : 0}); }
   if(hb.diet === 'junk'){ applyDelta({health:-1}); if(Math.random() < 0.3) applyDelta({looks:-1}); }
   const ex = state.crime.prison ? 0 : (hb.exercise || 0);
   if(ex){
@@ -5803,7 +5813,7 @@ function healthYear(a, canPrompt){
   const spent = Math.round(cash0 - state.money - state.savings);
   if(spent > 0){
     state.money += spent;
-    const why = [hb.smoke ? 'cigarettes' : '', hb.drink ? 'drinks' : '', hb.diet === 'healthy' ? 'healthy food' : '', ex && a >= 18 ? (ex === 2 ? 'training' : 'the gym') : '', conds.some(c => c.treated && CONDITIONS[c.key].yearly) ? 'medical care' : '', condOf('addiction') && !condOf('addiction').treated ? 'feeding an addiction' : ''].filter(Boolean);
+    const why = [hb.smoke ? 'cigarettes' : '', hb.drink ? 'drinks' : '', hb.diet === 'healthy' && state.movedOut ? 'healthy food' : '', ex && a >= 18 ? (ex === 2 ? 'training' : 'the gym') : '', conds.some(c => c.treated && CONDITIONS[c.key].yearly) ? 'medical care' : '', condOf('addiction') && !condOf('addiction').treated ? 'feeding an addiction' : ''].filter(Boolean);
     pushEntry(a, `${n} spends ${fmt(spent)} on ${why.length ? why.join(', ').replace(/, ([^,]*)$/, ' and $1') : 'their health'} this year.`, {money:-spent});
   }
   // new illnesses
@@ -5873,11 +5883,11 @@ function healthPanelHtml(){
       let acts = "", body;
       if(d.kind === 'cancer'){
         body = "Stage " + c.stage + " of 4. Untreated, it tends to spread." + (c.treated ? " Recently treated." : "");
-        CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).forEach(t => { const cost = medCost(t.cost); acts += '<button onclick="cancerTreat(\'' + c.key + '\',\'' + t.key + '\')" ' + (state.done.cancerTx || !canPay(cost) ? "disabled" : "") + ">" + t.label + " (" + fmt(cost) + ", " + Math.round(t.cure[t.stages.indexOf(c.stage)] * 100) + "%)</button>"; });
+        CANCER_TREATMENTS.filter(t => t.stages.includes(c.stage)).forEach(t => { const cost = medCost(t.cost); acts += '<button onclick="cancerTreat(\'' + c.key + '\',\'' + t.key + '\')" ' + (state.done.cancerTx || !canPay(cost) ? "disabled" : "") + ">" + t.label + " (" + medTxt(cost) + ", " + Math.round(t.cure[t.stages.indexOf(c.stage)] * 100) + "%)</button>"; });
       } else {
         const cost = medCost(d.cost || 0);
-        body = (d.kind === 'acute' ? "Should pass within a year." : c.treated ? "Managed with " + d.treat + (d.yearly ? " (" + fmt(cost) + " a year)." : ".") : "Untreated, it takes a toll every year.") + " Since age " + c.since + ".";
-        if(d.treat && !c.treated) acts += '<button onclick="startTreatment(\'' + c.key + '\')" ' + (canPay(cost) ? "" : "disabled") + ">" + (d.oneOff ? "Go to " : "Start ") + d.treat + " (" + fmt(cost) + (d.yearly ? "/yr" : "") + ")</button>";
+        body = (d.kind === 'acute' ? "Should pass within a year." : c.treated ? "Managed with " + d.treat + (d.yearly && cost ? " (" + fmt(cost) + " a year)." : ".") : "Untreated, it takes a toll every year.") + " Since age " + c.since + ".";
+        if(d.treat && !c.treated) acts += '<button onclick="startTreatment(\'' + c.key + '\')" ' + (canPay(cost) ? "" : "disabled") + ">" + (d.oneOff ? "Go to " : "Start ") + d.treat + " (" + medTxt(cost, d.yearly) + ")</button>";
         if(c.treated && d.yearly) acts += '<button onclick="stopTreatment(\'' + c.key + '\')">Stop treatment</button>';
       }
       h += bankRow(condName(c) + (c.treated && d.kind !== 'cancer' ? ' <span class="tick">MANAGED</span>' : ''), body, acts);
@@ -6051,7 +6061,7 @@ function heatLabel(h){ return h >= 70 ? "Wanted by police" : h >= 40 ? "High" : 
 function skillTier(s){ return s >= 70 ? "Mastermind" : s >= 40 ? "Professional" : s >= 15 ? "Amateur" : "Beginner"; }
 function crimeRisk(c){
   const k = CR();
-  if(state.cheats && state.cheats.uncatchable) return 0;
+  if(cheatActive('uncatchable')) return 0;
   const p = diff('caught') * c.risk * (state.world.fx.crackdown ? 1.4 : 1) * (1 + k.heat / 80) * (1 - k.skill / 200) * (1 - state.stats.smarts / 400) * (k.probation > 0 ? 1.2 : 1);
   return Math.max(0.03, Math.min(0.92, p));
 }
@@ -6117,6 +6127,7 @@ function imprison(years, crime, juvenile){
 }
 function release(how){
   const k = CR(), pr = k.prison, n = state.name;
+  if(!pr) return;
   k.prison = null; k.heat = 0;
   if(how === 'parole'){ k.probation = Math.max(1, pr.left); pushEntry(state.age, `${n} is granted parole and walks out early, with ${k.probation} year${k.probation > 1 ? "s" : ""} of supervision.`, {happy:15}); }
   else pushEntry(state.age, `${n} is released after ${pr.total} year${pr.total > 1 ? "s" : ""} ${pr.juvenile ? "in juvenile detention" : "behind bars"}.`, {happy:15});
@@ -6398,7 +6409,7 @@ function appealPrompt(){
 }
 // detectives keep working the cases you thought you got away with
 function openInvestigation(c, amt){
-  if(state.cheats && state.cheats.uncatchable) return;
+  if(cheatActive('uncatchable')) return;
   CR().open = CR().open || [];
   CR().open.push({key:c.key, charge:c.charge, ing:c.ing, felony:!!c.felony, years:c.years, amt: amt || 0, age: state.age, ev: rint(5, 30)});
 }
@@ -7373,8 +7384,10 @@ function yearlyFinances(a){
     state.tipFrugal = true;
     pushEntry(a, `Money is tight. Switching to a frugal lifestyle in the Bank tab would cut ${state.name}'s living costs by about a third.`, {});
   }
+  // a minor's shortfall is their parents' problem
+  if(a < 18 && state.money < 0 && !jailed && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father')) pushEntry(a, `${state.name}'s parents quietly cover the ${fmt(-state.money)} they owe.`, {money:-state.money, family:-2});
   // unpaid bills go to collections as a repayment plan; bankruptcy only when the debt truly outgrows income
-  if(state.money <= -3000 * econ.cumInflation && !state.bankrupt){
+  if(a >= 18 && state.money <= -3000 * econ.cumInflation && !state.bankrupt){
     const owed = Math.round(-state.money);
     const unsecured = owed + state.loans.filter(l => ['Personal','Collections','Business'].includes(l.type)).reduce((t, l) => t + l.balance, 0) + (state.creditCard ? state.creditCard.balance : 0);
     const yearlyIncome = Math.max(income, 30000 * econ.cumInflation);
@@ -9769,7 +9782,7 @@ function audioWire(){
 }
 
 function die(cause){
-  if(state.cheats && state.cheats.immortal){ pushEntry(state.age, `🛠️ ${state.name} should have died, but cheats death instead.`, {health:30}); return; }
+  if(cheatActive('immortal')){ pushEntry(state.age, `🛠️ ${state.name} should have died, but cheats death instead.`, {health:30}); return; }
   state.alive = false;
   const illness = cause && cause !== 'age' ? CONDITIONS[cause.key] : null;
   audioDeath();
