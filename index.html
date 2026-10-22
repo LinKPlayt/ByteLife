@@ -215,6 +215,13 @@
   .sortrow{ display:flex; gap:6px; margin-bottom:5px; flex-wrap:wrap; }
   .sortbtn{ background:var(--surface-2); color:var(--muted); border:1px solid var(--line); padding:7px 12px; font-size:12px; border-radius:99px; }
   .sortbtn.active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  #panel > [hidden]{ display:none !important; }
+  .subnav{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 12px; padding:2px 0 4px; }
+  .subnav .sortbtn{ flex:none; font-size:13px; padding:8px 14px; }
+  .name-row{ display:flex; gap:8px; }
+  .name-row .amt-input{ flex:1; min-width:0; }
+  .name-row button{ flex:none; width:46px; }
+  .name-err{ color:var(--red); font-size:13px; min-height:18px; margin:6px 0 4px; }
   .tab-btn{ background:var(--surface); color:var(--ink); border:1px solid var(--line); padding:11px 6px; font-weight:600; border-radius:12px; box-shadow:0 1px 3px rgba(35,42,36,0.05); }
   .tab-btn:hover{ border-color:var(--accent); }
   .tab-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; box-shadow:0 3px 10px rgba(44,74,66,0.25); }
@@ -530,6 +537,14 @@
     <div class="modal-btns"><button id="modalNo" onclick="closeConfirm(false)">Cancel</button><button id="modalYes" onclick="closeConfirm(true)">Yes</button></div>
   </div>
 </div>
+<div class="modal" id="nameModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="nameTitle">
+    <p id="nameTitle"></p>
+    <div class="name-row"><input id="kidName" class="amt-input" maxlength="20" autocomplete="off" aria-label="Name" onkeydown="if(event.key==='Enter') closeNameModal(true)"><button class="btn-secondary" onclick="suggestKidName()" aria-label="Suggest another name">🎲</button></div>
+    <div id="nameErr" class="name-err" role="alert"></div>
+    <div class="modal-btns"><button id="nameNo" onclick="closeNameModal(false)">Cancel</button><button onclick="closeNameModal(true)" style="background:var(--accent);color:#fff;">Save name</button></div>
+  </div>
+</div>
 <div class="modal" id="achModal" hidden onclick="if(event.target === this) closeAchievements()">
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Achievements">
     <h3>🏆 Achievements</h3>
@@ -693,7 +708,7 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null, case:null, open:[], appeal:null, pendingArrest:null},
     health:{conditions:[], history:[], lastCheckup:null, lastDentist:null, fluShot:null, therapy:null, glasses:false, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal', exercise:0}},
-    goals:[], goalPick:false, meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
+    goals:[], goalPick:false, sub:{}, nameQueue:[], meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
@@ -709,7 +724,7 @@ const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
 function hairFor(gender){ return gender === 'female' ? pick([1, 2]) : gender === 'male' ? 0 : rint(0, 2); }
 // ---------- Settings: kept on this device, apart from any one life ----------
 const SET_KEY = "ledger-settings";
-const SET_DEFAULTS = {theme:'light', textSize:'normal', motion:true, toasts:true, news:true, dots:true, deltas:true, logLen:40, difficulty:'normal', events:'normal', confirm:true, randomLife:false, cheats:false, pictures:true};
+const SET_DEFAULTS = {theme:'light', textSize:'normal', motion:true, toasts:true, news:true, dots:true, deltas:true, logLen:40, difficulty:'normal', events:'normal', confirm:true, randomLife:false, cheats:false, pictures:true, nameKids:true, subTabs:true};
 function loadSettings(){
   let s = null; try{ s = JSON.parse(localStorage.getItem(SET_KEY) || "null"); } catch(e){}
   const out = Object.assign({}, SET_DEFAULTS);
@@ -770,12 +785,14 @@ function renderSettings(){
     sw('pictures', 'Pictures', 'scenes on decisions, icons in the log and tabs') +
     sw('news', 'Newspaper', 'world headlines under the panels') +
     sw('dots', 'Tab alert dots', 'a dot on tabs that need you') +
-    sw('motion', 'Animations', 'turn off to reduce motion') + '</div>';
+    sw('motion', 'Animations', 'turn off to reduce motion') +
+    sw('subTabs', 'Split tabs into sections', 'a row of sub-menus at the top of the busier tabs') + '</div>';
   h += '<div class="set-group"><div class="set-title">Gameplay</div>' +
     '<div class="set-row"><span>Difficulty<small>' + {easy:'lower living costs, a longer life, police a little slower', normal:'the game as designed', hard:'higher living costs, a shorter life, police a little sharper'}[SETTINGS.difficulty] + '</small></span></div>' +
     seg('difficulty', [['easy', 'Easy'], ['normal', 'Normal'], ['hard', 'Hard']]) +
     '<div class="set-row"><span>Life events<small>how often decisions and surprises come up</small></span></div>' + seg('events', [['calm', 'Calm'], ['normal', 'Normal'], ['eventful', 'Eventful']]) +
-    sw('confirm', 'Ask before big actions', 'quitting, dropping out, selling everything') + '</div>';
+    sw('confirm', 'Ask before big actions', 'quitting, dropping out, selling everything') +
+    sw('nameKids', 'Name your children', 'choose a name whenever a baby is born or a child is adopted') + '</div>';
   h += '<div class="set-group"><div class="set-title">New lives</div>' +
     sw('randomLife', '🎲 Random life', 'everything about each new person is random at birth: name, looks, gifts, personality, family and fortune') + '</div>';
   h += '<div class="set-group"><div class="set-title">Cheats</div>' +
@@ -812,7 +829,7 @@ function cheat(key, arg){
     case 'baby': {
       if(state.age < 18 || state.relationships.length >= 60){ done = false; break; }
       const p = state.relationships.find(r => LOVE.includes(r.type)), c = newRel('Child', {age:0, closeness:80, origin:'your child'}); if(p) c.coParent = p.id;
-      note(`Cheat: ${n} welcomes a baby, ${c.name}.`); } break;
+      note(`Cheat: ${n} welcomes a baby, ${c.name}.`); queueChildName(c); } break;
     case 'promote': case 'top': {
       if(!j || j.track === 'Military' || j.track === 'Politics' || !CAREERS[j.track]){ done = false; break; }
       const L = CAREERS[j.track], to = key === 'top' ? L.length - 1 : Math.min(L.length - 1, j.rank + 1);
@@ -5651,6 +5668,7 @@ function birthChild(p){
   const c = newRel("Child", {age:0, closeness:80, origin:"your child"});
   c.coParent = p.id;
   pushEntry(state.age, `${state.name} and ${p.name} welcome a new child, ${c.name}.`, {happy:12});
+  queueChildName(c);
 }
 function adoptChild(){
   const cost = inflR(8000, 100);
@@ -5660,7 +5678,65 @@ function adoptChild(){
   const c = newRel("Child", {age: rint(0, 8), closeness: 65, origin: "adopted"});
   if(p) c.coParent = p.id;
   pushEntry(state.age, `${state.name}${p ? " and " + p.name : ""} adopt ${c.name}, age ${c.age}, and bring them home.`, {happy:12});
+  queueChildName(c);
   render();
+}
+// ---------- Naming your children ----------
+// New children wait in a queue, so a year with a birth and a decision still asks for the name once things settle.
+let nameTarget = null;
+function queueChildName(c){
+  if(!c || !SETTINGS.nameKids) return;
+  (state.nameQueue = state.nameQueue || []).push(c.id);
+}
+function nextChildName(){
+  const m = document.getElementById('nameModal');
+  if(!m || !m.hidden || !state || !state.alive || !(state.nameQueue || []).length) return;
+  const r = findRel(state.nameQueue.shift());
+  if(r && r.type === 'Child') openNameModal(r, true); else nextChildName();
+}
+function renameChild(id){
+  const r = findRel(id);
+  if(!r || r.type !== 'Child' || r.age >= 18) return;
+  openNameModal(r, false);
+}
+function openNameModal(r, isNew){
+  nameTarget = {id:r.id, isNew, born:state.age - r.age};
+  const word = r.gender === 'female' ? 'girl' : r.gender === 'male' ? 'boy' : 'baby';
+  document.getElementById('nameTitle').innerHTML = isNew
+    ? (r.age === 0 ? `It's a ${word}! What will ${state.name} name ${r.gender === 'female' ? 'her' : r.gender === 'male' ? 'him' : 'them'}?` : `${r.name}, age ${r.age}, joins the family. Keep their name, or choose a new one?`)
+    : `Choose a new name for ${state.name}'s ${relLabel(r)}, ${r.name}.`;
+  document.getElementById('nameNo').textContent = isNew ? 'Keep ' + r.name : 'Cancel';
+  const inp = document.getElementById('kidName');
+  inp.value = r.name; document.getElementById('nameErr').textContent = '';
+  document.getElementById('nameModal').hidden = false;
+  setTimeout(() => { try{ inp.focus(); inp.select(); } catch(e){} }, 30);
+}
+function suggestKidName(){
+  const r = nameTarget && findRel(nameTarget.id); if(!r) return;
+  const inp = document.getElementById('kidName'), cur = inp.value;
+  let nm = cur; for(let i = 0; i < 6 && nm === cur; i++) nm = freeName(r.gender);
+  inp.value = nm; document.getElementById('nameErr').textContent = '';
+}
+function closeNameModal(save){
+  const t = nameTarget, r = t && findRel(t.id);
+  if(save && r){
+    const nm = cleanPersonName(document.getElementById('kidName').value).replace(/'/g, '’');
+    const taken = [state.name].concat(state.relationships.filter(x => x.id !== r.id && FAMILY_TYPES.includes(x.type)).map(x => x.name));
+    if(!nm){ document.getElementById('nameErr').textContent = 'Type a name, or tap 🎲 for one.'; return; }
+    if(taken.includes(nm)){ document.getElementById('nameErr').textContent = `Someone in the family is already called ${nm}.`; return; }
+    if(nm !== r.name) renameRel(r, nm, t);
+  }
+  document.getElementById('nameModal').hidden = true; nameTarget = null;
+  if(state && state.alive) render();
+  setTimeout(nextChildName, 60);
+}
+function renameRel(r, nm, t){
+  const old = r.name; r.name = nm;
+  if(t.isNew){
+    // A newborn's name was only ever a placeholder, so the record is written as if it had always been this one.
+    const re = new RegExp('\\b' + old.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'g');
+    state.log.forEach(e => { if(e.age === t.born || e.age === state.age) e.text = e.text.replace(re, nm); });
+  } else pushEntry(state.age, `${state.name} changes ${relLabel(r) === 'child' ? 'their child' : 'their ' + relLabel(r)}'s name from ${old} to ${nm}.`, {});
 }
 function endRelationship(r){
   const n = state.name;
@@ -6007,6 +6083,7 @@ function relRow(r){
   } else if(!FAMILY_TYPES.includes(r.type)){
     more += '<button onclick="cutTies(\'' + r.id + '\')">Cut ties</button>';
   }
+  if(r.type === "Child" && r.age < 18) more += '<button onclick="renameChild(\'' + r.id + '\')">Change name</button>';
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
   const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
   return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b>' + (r.pro ? ' — ' + proTitle(r) : '') + ' <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
@@ -9895,6 +9972,49 @@ function updateTabDots(){
     b.title = why ? name + ': ' + why : '';
   });
 }
+// ---------- Sub-menus: the busier tabs are split into sections ----------
+// Each section heading is matched to a sub-menu; a heading that matches none stays with the one before it.
+const SUBMENUS = {
+  me:     [['you', 'You', null], ['story', 'Life story', /life so far|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world/i]],
+  act:    [['do', 'Activities', null], ['travel', 'Travel', /^travel/i], ['hobbies', 'Hobbies', /hobbies|try something new/i]],
+  edu:    [['school', 'School', /keep learning|school life|campus life/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
+  job:    [['work', 'My work', null], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
+  soc:    [['social', 'Socialize', null], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
+  bank:   [['overview', 'Overview', null], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
+  inv:    [['mine', 'My portfolio', /^the market|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
+  ast:    [['home', 'Property', null], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
+  biz:    [['run', 'Overview', null], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
+  media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
+  health: [['overview', 'Overview', null], ['care', 'Care', /care and wellness|conditions/i], ['habits', 'Habits', /^habits/i]],
+  crime:  [['law', 'Your record', /staying out|your record|prison|detention|felony/i], ['crimes', 'Crimes', /^crimes/i]],
+};
+function setSub(key){
+  (state.sub = state.sub || {})[state.panel] = key;
+  renderPanel();
+  // Keep the sub-menu in view: if it has scrolled up under the pinned header, bring it back down.
+  const nav = document.querySelector('#panel .subnav'), pin = document.querySelector('.pinned-top');
+  const off = pin && getComputedStyle(pin).position === 'sticky' ? pin.getBoundingClientRect().height : 0;
+  if(nav && nav.getBoundingClientRect().top < off) window.scrollTo({top: window.scrollY + nav.getBoundingClientRect().top - off - 8});
+}
+function applySubmenu(P){
+  const conf = SUBMENUS[state.panel];
+  if(!conf || !SETTINGS.subTabs) return;
+  const groups = {}; conf.forEach(g => groups[g[0]] = []);
+  let cur = conf[0][0], lead = true;
+  for(const el of [...P.children]){
+    if(el.classList.contains('panel-head')) continue;
+    if(lead && (el.classList.contains('status') || el.classList.contains('kv'))) continue;   // the summary at the top stays in view
+    lead = false;
+    if(el.classList.contains('plabel')){ const t = el.textContent.trim(), g = conf.find(c => c[2] && c[2].test(t)); if(g) cur = g[0]; }
+    groups[cur].push(el);
+  }
+  const live = conf.filter(g => groups[g[0]].length);
+  if(live.length < 2) return;
+  const want = (state.sub || {})[state.panel], act = live.find(g => g[0] === want) ? want : live[0][0];
+  live.forEach(g => { if(g[0] !== act) groups[g[0]].forEach(el => el.hidden = true); });
+  P.querySelector('.panel-head').insertAdjacentHTML('afterend', '<div class="subnav" role="tablist">' +
+    live.map(g => `<button class="sortbtn sub-btn${g[0] === act ? ' active' : ''}" role="tab" aria-selected="${g[0] === act}" onclick="setSub('${g[0]}')">${g[1]}</button>`).join('') + '</div>');
+}
 function renderPanel(){
   const p = document.getElementById('panel');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.panel === state.panel));
@@ -10070,9 +10190,10 @@ function renderPanel(){
     }
   }
   p.innerHTML = head + h;
+  applySubmenu(p);
   // while a decision is waiting, the panels can be read but not acted on
   if(document.querySelector('#choices .choice-btn')){
-    p.querySelectorAll('button:not(.panel-close), input').forEach(x => x.disabled = true);
+    p.querySelectorAll('button:not(.panel-close):not(.sub-btn), input').forEach(x => x.disabled = true);
     p.querySelector('.panel-head').insertAdjacentHTML('afterend', '<div class="status">Answer the decision above first.</div>');
   }
 }
@@ -11821,6 +11942,7 @@ const CROSSROADS = [
         ensureCash(inflR(2000, 100)); state.money -= inflR(2000, 100);
         const c = newRel('Child', {age:0, closeness:80, origin:'your child'}); c.coParent = p.id;
         pushEntry(a, `${state.name} and ${p.name} welcome a baby, ${c.name}.`, {happy:12});
+        queueChildName(c);
       }},
       {label:'Not now, maybe never', pros:['freedom and money'], cons:[`${p.name} wanted this badly`], run:() => {
         bump(p, -15); pushEntry(a, `${state.name} tells ${p.name} they don't want children.`, {happy:-2});
@@ -12653,7 +12775,7 @@ function creditFactors(){
   return [
     ['Payment history', missed === 0 ? 'good' : missed <= 1 ? 'fair' : 'poor', missed ? missed + ' missed payment year' + (missed > 1 ? 's' : '') + ' in the last 7' : 'no missed payments recently'],
     ['Card utilization', !c ? 'none' : util < 0.3 ? 'good' : util < 0.7 ? 'fair' : 'poor', c ? Math.round(util * 100) + '% of your limit used' : 'no credit card yet'],
-    ['Debt to income', dti < 1 ? 'good' : dti < 3 ? 'fair' : 'poor', 'debts are ' + dti.toFixed(1) + '× a year\'s income'],
+    ['Debt to income', dti < 1 ? 'good' : dti < 3 ? 'fair' : 'poor', !totalDebt() ? 'no debt' : inc <= 1 ? 'debts with no income coming in' : dti > 20 ? 'debts far beyond a year\'s income' : 'debts are ' + dti.toFixed(1) + '× a year\'s income'],
     ['Credit history', ageYrs >= 10 ? 'good' : ageYrs >= 4 ? 'fair' : 'poor', ageYrs + ' year' + (ageYrs === 1 ? '' : 's') + ' of history'],
     ['Public records', state.bankrupt ? 'poor' : state.bankruptcies ? 'fair' : 'good', state.bankrupt ? 'a recent bankruptcy' : state.bankruptcies ? 'an old bankruptcy' : 'nothing on file'],
   ];
@@ -12973,6 +13095,7 @@ function render(){
     `<span class="money${state.money < 0 ? ' neg' : ''}">${fmt(state.money)}</span>${state.age >= 16 && Math.abs(nw - state.money) >= 1 ? `<span class="networth">net worth ${fmt(nw)}</span>` : ''}` +
     (bits.length ? `<div class="tagline">${bits.join(' · ')}</div>` : '');
   renderPanel();
+  if((state.nameQueue || []).length) setTimeout(nextChildName, 60);
   document.getElementById('stageLabel').textContent = stageFor(state.age);
   for(const k of ['health','happy','smarts','looks']){
     document.getElementById(`fill-${k}`).style.width = state.stats[k] + '%';
