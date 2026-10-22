@@ -1227,6 +1227,10 @@ const infl = n => Math.round(n * state.econ.cumInflation);
 const inflR = (n, step) => Math.round(n * state.econ.cumInflation / step) * step;
 function scaleMoneyDelta(d){ if(!d || !d.money) return d; const c = Object.assign({}, d); c.money = inflR(d.money, 10); return c; }
 const scaleLabel = t => t.replace(/\$([0-9][0-9,]*)/g, (m, n) => fmt(inflR(parseInt(n.replace(/,/g, ''), 10), 10)));
+// Age limits are always worded the same way: "from age N" for a minimum and "up to age N" for a maximum.
+const fromAge = n => 'from age ' + n, upToAge = n => 'up to age ' + n;
+const needsTxt = g => /^(from|up to) age/.test(g) ? g : 'needs ' + g;
+const ageLock = (what, n) => `<div class="status">${what} from age ${n}.</div>`;
 const actCost = x => x.cost ? inflR(x.cost, 5) : 0;
 const hobCost = h => h.cost ? inflR(h.cost, 5) : 0;
 // Overdraft protection: a negative checking balance is covered from savings before it becomes debt.
@@ -3353,7 +3357,7 @@ function rankGap(rank, track){
   const s = state.stats;
   if(rank.degree && !hasDegree(rank.degree)) return (rank.degree === 'MD' ? 'a medical degree (MD)' : rank.degree === 'JD' ? 'a law degree (JD)' : 'a ' + rank.degree);
   if(rank.major && !degrees().some(d => rank.major.includes(d.major)) && (rank.noExp || expIn(track) < 3)) return 'a ' + rank.major.join(' or ') + ' degree' + (rank.noExp ? '' : ' or 3 years in the field');
-  if(state.age < rank.minAge) return 'age ' + rank.minAge;
+  if(state.age < rank.minAge) return fromAge(rank.minAge);
   if(EDU_RANK[state.edu.level] < EDU_RANK[rank.edu]) return rank.edu === 'Master' ? "a Master's" : rank.edu === 'Bachelor' ? "a Bachelor's" : rank.edu.toLowerCase() + ' diploma';
   if(s.smarts < rank.minSmarts) return rank.minSmarts + ' smarts';
   if(rank.minLooks && s.looks < rank.minLooks) return rank.minLooks + ' looks';
@@ -3975,12 +3979,12 @@ const ASSET_CATALOG = {
     {key:'classic', name:'Classic Convertible', kind:'car', price:65000, appreciation:0.02, vol:0.12, upkeepFlat:2500, classic:true},
     {key:'sports', name:'Sports Car', kind:'car', price:75000, appreciation:-0.16, vol:0.10, upkeepFlat:2200, speed:true},
     {key:'luxcar', name:'Luxury Sedan', kind:'car', price:95000, appreciation:-0.19, vol:0.09, upkeepFlat:2800},
-    {key:'rv', name:'Motorhome', kind:'rv', price:120000, appreciation:-0.10, vol:0.06, upkeepFlat:4000},
+    {key:'rv', name:'Motorhome', minAge:18, kind:'rv', price:120000, appreciation:-0.10, vol:0.06, upkeepFlat:4000},
     {key:'supercar', name:'Supercar', kind:'car', price:320000, appreciation:-0.10, vol:0.12, upkeepFlat:12000, speed:true},
-    {key:'sailboat', name:'Sailboat', kind:'boat', price:35000, appreciation:-0.08, vol:0.07, upkeepFlat:2500},
-    {key:'speedboat', name:'Speedboat', kind:'boat', price:60000, appreciation:-0.10, vol:0.08, upkeepFlat:4000},
-    {key:'yacht', name:'Yacht', kind:'boat', price:2500000, appreciation:-0.06, vol:0.10, upkeepFlat:200000},
-    {key:'jet', name:'Private Jet', kind:'plane', price:8000000, appreciation:-0.08, vol:0.10, upkeepFlat:900000},
+    {key:'sailboat', name:'Sailboat', minAge:18, kind:'boat', price:35000, appreciation:-0.08, vol:0.07, upkeepFlat:2500},
+    {key:'speedboat', name:'Speedboat', minAge:18, kind:'boat', price:60000, appreciation:-0.10, vol:0.08, upkeepFlat:4000},
+    {key:'yacht', name:'Yacht', minAge:18, kind:'boat', price:2500000, appreciation:-0.06, vol:0.10, upkeepFlat:200000},
+    {key:'jet', name:'Private Jet', minAge:18, kind:'plane', price:8000000, appreciation:-0.08, vol:0.10, upkeepFlat:900000},
   ],
   Jewelry: [
     {key:'watch', name:'Designer Watch', price:5000, appreciation:0.020, vol:0.10},
@@ -4014,7 +4018,7 @@ const ASSET_CATALOG = {
     {key:'stripmall', name:'Strip Mall', price:2600000, appreciation:0.025, vol:0.09, upkeepPct:0.014, rentalYield:0.105, units:6, commercial:true},
   ],
 };
-const CAT_MIN = {Homes:18, Cars:18, Jewelry:14, Collectibles:12, 'Real Estate':21};
+const CAT_MIN = {Homes:18, Cars:16, Jewelry:14, Collectibles:12, 'Real Estate':18};
 const CAT_BUY_DELTA = {Homes:{happy:8}, Cars:{happy:5,looks:2}, Jewelry:{looks:4,happy:2}, Collectibles:{happy:3}, 'Real Estate':{happy:4}};
 const FINANCEABLE = ['Homes','Cars','Real Estate'];
 
@@ -4104,7 +4108,7 @@ function makeListings(){
 }
 function listingRent(l){ const t = findCatalog(l.key); return Math.round(l.fair * ((t.rentalYield || 0.05) + locOf(l.loc).yield)); }
 function buyListing(id, financed){
-  const l = (state.listings || []).find(x => x.id === id); if(!l || state.age < 21) return;
+  const l = (state.listings || []).find(x => x.id === id); if(!l || state.age < 18) return;
   const t = findCatalog(l.key), loc = locOf(l.loc);
   if(financed){
     if(state.bankrupt || state.creditScore < 620) return;
@@ -4278,12 +4282,12 @@ function realEstateHtml(){
   const a = state.age, rs = rentals();
   let h = `<div class="plabel">Real estate</div><div class="status">Housing market: <b>${housingLabel()}</b>${rs.length ? `<br>${rs.length} rental${rs.length > 1 ? 's' : ''} · ${rs.reduce((s, x) => s + x.rental.occupied, 0)} of ${rs.reduce((s, x) => s + x.rental.units, 0)} units let${state.lastRentalNet !== undefined ? ' · last year net ' + fmt(state.lastRentalNet) : ''}` : '<br>Buy properties to rent out: rent comes in every year, and value rises with the market.'}</div>`;
   rs.forEach(x => h += rentalCardHtml(x));
-  if(a >= 21){
+  if(a >= 18){
     if(!state.listings || !state.listings.length) makeListings();
     h += '<div class="plabel">For sale this year</div>';
     state.listings.forEach(l => h += listingHtml(l));
     if(state.creditScore < 620) h += '<div class="owned">Investment mortgages need a credit score of 620.</div>';
-  } else h += '<div class="owned">Property investing opens at 21.</div>';
+  } else h += '<div class="owned">Property investing is available from age 18.</div>';
   return h;
 }
 
@@ -4329,7 +4333,7 @@ function assetCatalogRow(t, cat){
     <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
     <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
-      <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Locked · age ${minA}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
+      <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Buy · ${fromAge(minA)}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
       ${cat === 'Cars' && t.price <= 400000 ? `<button onclick="buyUsedVehicle('${t.key}')" ${locked || state.done['used_' + t.key] || !canPay(Math.round(price * 0.65)) ? 'disabled' : ''}>Used (~${fmt(Math.round(price * 0.58 / 100) * 100)})</button>` : ''}
       ${financeable ? `<button onclick="buyAsset('${t.key}',true)" ${(locked || !canFinance) ? 'disabled' : ''}>Finance (${fmt(down)} down)</button>` : ''}
     </div>
@@ -4345,7 +4349,7 @@ function ownedAssetRow(x){
     <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
     ${homeExtrasHtml(x)}
-    <div class="assetbuy">${x.category === 'Homes' && state.age >= 21 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
+    <div class="assetbuy">${x.category === 'Homes' && state.age >= 18 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
   </div>`;
 }
 
@@ -4850,10 +4854,10 @@ function licWhy(kind){
   if(state.crime.prison) return 'not from prison';
   if(tries >= LIC_TRIES) return 'no more tries this year';
   if(kind === 'written'){
-    if(a < 15) return 'from age 15';
+    if(a < 15) return fromAge(15);
     if(L.status !== 'none') return 'already passed';
   } else {
-    if(a < 16) return 'from age 16';
+    if(a < 16) return fromAge(16);
     if(L.status === 'none') return 'pass the written test first';
     if(L.status === 'licensed') return 'already licensed';
     if(L.status === 'surrendered' && state.stats.health < 40) return 'health too poor to pass';
@@ -4946,8 +4950,8 @@ function licenseHtml(){
   let h = `<div class="plabel">Driver's license</div><div class="invrow">`;
   if(L.status === 'licensed') h += licenseCardHtml() + `<div class="owned">${L.suspendedUntil > a ? 'Suspended after a drunk-driving stop. The cars stay parked until age ' + L.suspendedUntil + '.' : roadVehicles().length ? 'Licensed and on the road.' : 'Licensed. Buy a vehicle in the Shop to start driving.'}</div>`;
   else if(L.status === 'surrendered') h += `<div class="owned">${state.name} gave up their license. The cars stay parked until the road test is passed again.</div><div class="assetbuy">${btn('road', 'Retake the road test')}</div>`;
-  else if(L.status === 'permit') h += `<div class="owned">Learner's permit since age ${L.permitAge}. ${a < 16 ? 'The road test opens at 16.' : 'Pass the road test to drive on your own: six real situations, no dangerous mistakes and at most ' + roadMinorsAllowed() + ' minor faults.'}${L.practiced ? ' Extra practice behind the wheel allows one more minor fault.' : ''}</div><div class="assetbuy">${btn('road', 'Take the road test')}${!L.practiced && a >= 15 ? `<button onclick="practiceDriving()" ${state.done.lic_practice || state.crime.prison || (!parentsPayTest() && !canPay(inflR(300, 10))) ? 'disabled' : ''}>${parentsPayTest() ? 'Practice with a parent' : 'Take driving lessons (' + fmt(inflR(300, 10)) + ')'}</button>` : ''}</div>`;
-  else h += `<div class="owned">${a < 15 ? 'At 15 you can take the written test for a learner\'s permit.' : 'No license yet. First pass the written test on the rules of the road (6 questions, 5 right to pass) for a learner\'s permit, then the road test from 16.'} Without a license, a car stays parked.</div>` + (a >= 15 ? `<div class="assetbuy">${btn('written', 'Take the written test')}</div>` : '');
+  else if(L.status === 'permit') h += `<div class="owned">Learner's permit since age ${L.permitAge}. ${a < 16 ? 'The road test is available from age 16.' : 'Pass the road test to drive on your own: six real situations, no dangerous mistakes and at most ' + roadMinorsAllowed() + ' minor faults.'}${L.practiced ? ' Extra practice behind the wheel allows one more minor fault.' : ''}</div><div class="assetbuy">${btn('road', 'Take the road test')}${!L.practiced && a >= 15 ? `<button onclick="practiceDriving()" ${state.done.lic_practice || state.crime.prison || (!parentsPayTest() && !canPay(inflR(300, 10))) ? 'disabled' : ''}>${parentsPayTest() ? 'Practice with a parent' : 'Take driving lessons (' + fmt(inflR(300, 10)) + ')'}</button>` : ''}</div>`;
+  else h += `<div class="owned">${a < 15 ? 'The written test for a learner\'s permit is available from age 15.' : 'No license yet. First pass the written test on the rules of the road (6 questions, 5 right to pass) for a learner\'s permit, then the road test from 16.'} Without a license, a car stays parked.</div>` + (a >= 15 ? `<div class="assetbuy">${btn('written', 'Take the written test')}</div>` : '');
   return h + `</div>`;
 }
 function practiceDriving(){
@@ -5061,17 +5065,17 @@ function vehicleRowHtml(x){
 // ---------- Travel ----------
 const TRAVEL_DESTS = [
   {key:'camping', name:'Camping in a national park', place:'a national park', cost:400, happy:6, health:3, minAge:8, domestic:true},
-  {key:'roadtrip', name:'Road trip in your own vehicle', place:'a cross-country road trip', cost:900, happy:8, minAge:17, needs:'road', domestic:true},
-  {key:'beach', name:'Beach resort', places:['Cancún','Bali','the Maldives','Phuket'], cost:3000, happy:10, health:2, minAge:16},
-  {key:'city', name:'City break', places:['Paris','Tokyo','New York','Rome','London','Barcelona','Seoul'], cost:3500, happy:9, smarts:3, minAge:16},
-  {key:'ski', name:'Ski trip', places:['the Alps','the Rockies','Hokkaido'], cost:4500, happy:9, health:2, minAge:16, injury:0.08},
+  {key:'roadtrip', name:'Road trip in your own vehicle', place:'a cross-country road trip', cost:900, happy:8, minAge:16, needs:'road', domestic:true},
+  {key:'beach', name:'Beach resort', places:['Cancún','Bali','the Maldives','Phuket'], cost:3000, happy:10, health:2, minAge:18},
+  {key:'city', name:'City break', places:['Paris','Tokyo','New York','Rome','London','Barcelona','Seoul'], cost:3500, happy:9, smarts:3, minAge:18},
+  {key:'ski', name:'Ski trip', places:['the Alps','the Rockies','Hokkaido'], cost:4500, happy:9, health:2, minAge:18, injury:0.08},
   {key:'backpack', name:'Backpacking', places:['Southeast Asia','South America','Eastern Europe'], cost:2500, happy:12, smarts:3, minAge:18, rough:true},
-  {key:'safari', name:'Safari', places:['Kenya','Tanzania','Botswana'], cost:8000, happy:14, smarts:2, minAge:16},
-  {key:'cruise', name:'Cruise', places:['the Caribbean','the Norwegian fjords','the Greek islands'], cost:5000, happy:10, minAge:16},
+  {key:'safari', name:'Safari', places:['Kenya','Tanzania','Botswana'], cost:8000, happy:14, smarts:2, minAge:18},
+  {key:'cruise', name:'Cruise', places:['the Caribbean','the Norwegian fjords','the Greek islands'], cost:5000, happy:10, minAge:18},
   {key:'sailing', name:'Sailing on your own boat', place:'the Mediterranean', cost:3000, happy:14, minAge:18, needs:'boat'},
   {key:'pilgrimage', name:'Walking pilgrimage', places:['the Camino de Santiago','the Kumano Kodo'], cost:2000, happy:10, health:5, minAge:18},
-  {key:'world', name:'Luxury trip around the world', place:'around the world', cost:60000, happy:20, smarts:4, minAge:21},
-  {key:'space', name:'Suborbital space flight', place:'the edge of space', cost:450000, happy:25, fame:5, minAge:21},
+  {key:'world', name:'Luxury trip around the world', place:'around the world', cost:60000, happy:20, smarts:4, minAge:18},
+  {key:'space', name:'Suborbital space flight', place:'the edge of space', cost:450000, happy:25, fame:5, minAge:18},
 ];
 const TRAVEL_CLASS = {budget:{label:'Budget', mult:0.6, happy:0.8, mishap:1.6}, standard:{label:'Standard', mult:1, happy:1, mishap:1}, luxury:{label:'Luxury', mult:3, happy:1.3, mishap:0.4}};
 const TV = () => state.travel || (state.travel = {trips:0, places:[]});
@@ -5242,7 +5246,7 @@ const FAME_ACTS = [
   {key:'talkshow', label:'Go on a talk show', min:35, meta:'+fame, appearance fee'},
   {key:'carpet', label:'Walk a red carpet', min:25, cost:3000, meta:'looks matter'},
   {key:'gala', label:'Host a charity gala', min:20, cost:10000, meta:'+public image'},
-  {key:'stunt', label:'Pull a publicity stunt', min:0, cost:1000, meta:'risky'},
+  {key:'stunt', label:'Pull a publicity stunt', min:0, minAge:13, cost:1000, meta:'risky'},
   {key:'feud', label:'Start a celebrity feud', min:30, meta:'+fame, −image'},
   {key:'reality', label:'Star in a reality show', min:15, meta:'big fame, big risk', every:5},
   {key:'memoir', label:'Write a memoir', min:40, meta:'one big payday', once:true},
@@ -5722,7 +5726,7 @@ function propose(id){
   }
   render();
 }
-const babyWhy = r => state.done.baby ? 'a baby this year already' : state.age < 18 ? 'too young' : state.age > 55 || r.age > 55 ? 'too old for a baby' : '';
+const babyWhy = r => state.done.baby ? 'a baby this year already' : state.age < 18 ? fromAge(18) : state.age > 55 || r.age > 55 ? upToAge(55) : '';
 function haveChild(id){
   const r = findRel(id);
   if(!r || !(r.type === "Spouse" || (r.type === "Partner" && r.livingTogether)) || state.relationships.length >= 60 || state.crime.prison || babyWhy(r)) return;
@@ -6062,7 +6066,7 @@ function setWill(w){ state.will = w; renderPanel(); }
 function setWillSplit(m, id){ state.willSplit = m; state.willHeir = id || null; renderPanel(); }
 function buyTrust(){
   const cost = inflR(4000, 100);
-  if(state.trust || state.age < 21 || !ensureCash(cost)) return;
+  if(state.trust || state.age < 18 || !ensureCash(cost)) return;
   state.money -= cost; state.trust = true;
   pushEntry(state.age, `${state.name} sets up a family trust, cutting what the estate will owe in tax.`, {happy:1});
   render();
@@ -6342,7 +6346,7 @@ function socialPanelHtml(){
   return h;
 }
 function estatePlanHtml(){
-  if(state.age < 21) return "";
+  if(state.age < 18) return "";
   const pill = (label, active, js) => '<button class="sortbtn' + (active ? " active" : "") + '" onclick="' + js + '">' + label + "</button>";
   const tc = inflR(4000, 100);
   let h = '<div class="plabel">ESTATE PLANNING</div><div class="invrow"><div class="owned">Decide where your estate goes when your story ends. Estate tax applies above ' + fmt(1500000 * state.econ.cumInflation) + " (" + (state.trust ? "18%" : "35%") + ").</div>";
@@ -7693,7 +7697,7 @@ function tickerFor(name){
 function startBusiness(typeKey){
   const t = bizType(typeKey);
   if(felon() && LICENSED_BIZ.includes(typeKey)) return;
-  if(!t || state.business || state.money < bizCost(t) || state.age < 21) return;
+  if(!t || state.business || state.money < bizCost(t) || state.age < 18) return;
   const typed = document.getElementById('bizName');
   const name = cleanName(typed && typed.value) || suggestBizName(typeKey);
   state.money -= bizCost(t);
@@ -7739,7 +7743,7 @@ function expandLocation(){
   render();
 }
 function applyBusinessLoan(){
-  const b = state.business; if(!b || state.age < 21 || state.bankrupt || state.done.bizLoan) return;
+  const b = state.business; if(!b || state.age < 18 || state.bankrupt || state.done.bizLoan) return;
   state.done.bizLoan = true;
   if(felon() && Math.random() < 0.5){ pushEntry(state.age, `The bank turns down ${state.name}'s business loan after a background check.`, {happy:-3}); render(); return; }
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a business loan but gets denied.`, {happy:-2}); render(); return; }
@@ -8602,7 +8606,7 @@ function platformPills(){
 }
 function mediaPanelHtml(){
   const sm = state.social;
-  if(state.age < 13) return '<div class="status">Too young for social media. Come back at 13.</div>';
+  if(state.age < 13) return '<div class="status">Social media is available from age 13.</div>';
   if(!sm.account) return '<div class="status">Pick a platform to start your first account. Each one rewards a different style of content.</div>' + platformPills();
   const sel = sm.sel, used = state.done.postCount || 0;
   const trendT = sm.trend ? POST_TYPES.find(t => t.key === sm.trend) : null;
@@ -8912,7 +8916,7 @@ function eduPanelHtml(){
   const core = (icon, label, meta, fn, done) => iopt(icon, label, done ? 'done ✓' : meta, fn, !!done, !!done);
   const gpaBar = () => `<div class="meter"><span style="width:${Math.round(e.gpa)}%;background:${e.gpa >= 85 ? 'var(--green)' : e.gpa >= 65 ? 'var(--accent)' : 'var(--red)'}"></span></div>`;
   let h = '';
-  if(a < 5) return '<div class="status">Too young for school.</div>';
+  if(a < 5) return ageLock('School starts', 5).replace('from age', 'at age');
   if(p){
     h += `<div class="kv"><div><span>GPA</span><b>${Math.round(e.gpa)}</b>${gpaBar()}</div><div><span>Year</span><b>${p.year + 1} of ${p.years}</b><span>${p.kind === 'grad' ? 'graduate school' : p.kind === 'trade' ? 'trade program' : 'undergraduate'}</span></div><div><span>Scholarship</span><b>${Math.round((p.aid || 0) * 100)}%</b><span>of tuition</span></div></div>`;
     h += `<div class="status"><b>${p.name}</b>${p.major && p.major !== 'Undecided' ? ' · ' + p.major : ''}${e.internships ? ' · ' + e.internships + ' internship' + (e.internships > 1 ? 's' : '') : ''}${e.research ? ' · research experience' : ''}<br>Paying by ${e.financeMethod === 'loan' ? 'student loans' : e.financeMethod === 'paid' ? (p.stipend ? 'stipend' : 'scholarship or family') : 'cash'}${p.aid && p.aid < 1 ? ', ' + Math.round(p.aid * 100) + '% scholarship' : ''}.</div>`;
@@ -8989,7 +8993,7 @@ function eduPanelHtml(){
     h += '<div class="plabel">Graduate school</div>';
     GRAD_PROGRAMS.forEach(g => {
       const gap = gradGap(g);
-      h += opt(g.name + ' <span class="sub-meta">' + g.years + ' years · ' + (g.stipend ? 'paid stipend' : fmt(inflR(g.tuition, 100)) + '/yr') + (g.tracks ? ' · for ' + g.tracks.join(', ').toLowerCase() : '') + '</span>', gap ? 'needs ' + gap : state.done['gradapp_' + g.key] ? 'applied this year' : 'apply', `applyGrad('${g.key}')`, !!gap || state.done['gradapp_' + g.key]);
+      h += opt(g.name + ' <span class="sub-meta">' + g.years + ' years · ' + (g.stipend ? 'paid stipend' : fmt(inflR(g.tuition, 100)) + '/yr') + (g.tracks ? ' · for ' + g.tracks.join(', ').toLowerCase() : '') + '</span>', gap ? needsTxt(gap) : state.done['gradapp_' + g.key] ? 'applied this year' : 'apply', `applyGrad('${g.key}')`, !!gap || state.done['gradapp_' + g.key]);
     });
   }
   // what schooling is worth, in the career you are in or your best fit
@@ -9287,7 +9291,7 @@ function mePanelHtml(){
     "<br>" + fmtHeight(heightNow(state)) + " · " + BUILDS[avatarLooks(state).build].toLowerCase() + " build" +
     (traits ? "<br>Personality: " + traits : "") +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
-    "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
+    "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 12 ? "Not working" : "Work is available from age 12") + "</div>";
   if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
   h += momentsGalleryHtml() + statsChartHtml() + goalsHtml() + selfHtml() + styleHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
@@ -9922,14 +9926,14 @@ const angelAmts = () => [5000, 25000, 100000].map(x => inflR(x, 500));
 const backing = () => threads().find(t => t.key === 'startup' && t.step !== 'passed' && t.data.amt > 0);
 function backStartup(i){
   const amt = angelAmts()[i], p = startupPitch();
-  if(!amt || state.age < 21 || state.crime.prison || backing() || state.done.angel || !canPay(amt) || !ensureCash(amt)) return;
+  if(!amt || state.age < 18 || state.crime.prison || backing() || state.done.angel || !canPay(amt) || !ensureCash(amt)) return;
   state.done.angel = true;
   pushEntry(state.age, `${state.name} puts ${fmt(amt)} into ${p.co}, ${p.kind}, as an early backer.`, {money:-amt});
   seedThread('startup', {co:p.co, amt}, `Invested ${fmt(amt)} in ${p.co}`, rint(2, 3), 'round');
   render();
 }
 function angelHtml(){
-  if(state.age < 21) return '';
+  if(state.age < 18) return '';
   const th = backing();
   let h = '<div class="plabel">Angel investing</div><div class="invrow">';
   if(th) h += `<div class="owned">You're backing ${th.data.co}${th.data.amt ? ' with ' + fmt(th.data.amt) : ''}. Most startups fail and a few pay off many times over. You'll hear how it goes.</div>`;
@@ -10259,7 +10263,7 @@ function renderPanel(){
   } else if(state.panel === 'edu'){
     h += eduPanelHtml() + gpaChartHtml();
   } else if(state.panel === 'inv'){
-    if(a < 16){ h = '<div class="status">Too young to invest yet — come back at 16.</div>'; }
+    if(a < 18 && portfolioValue() < 1 && !state.orders.length){ h = ageLock('Investing is available', 18); }
     else {
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
@@ -10302,7 +10306,7 @@ function renderPanel(){
     }
     for(const cat in ASSET_CATALOG){
       if(cat === 'Real Estate') continue;
-      h += `<div class="plabel">${cat === 'Cars' ? 'VEHICLES' : cat.toUpperCase()}${a < CAT_MIN[cat] ? ' · unlocks at ' + CAT_MIN[cat] : ''}</div>`;
+      h += `<div class="plabel">${cat === 'Cars' ? 'VEHICLES' : cat.toUpperCase()}${a < CAT_MIN[cat] ? ' · ' + fromAge(CAT_MIN[cat]) : ''}</div>`;
       ASSET_CATALOG[cat].forEach(t => h += assetCatalogRow(t, cat));
     }
   } else if(state.panel === 'soc'){
@@ -10321,7 +10325,7 @@ function renderPanel(){
 
     h += '<div class="plabel">CREDIT CARD</div>';
     if(!c){
-      h += bankRow('No credit card', a < 18 ? 'Too young to apply.' : 'Approval depends on your credit score.', a >= 18 ? `<button onclick="applyCard()" ${(state.bankrupt || state.done.cardApp) ? 'disabled' : ''}>Apply</button>` : '');
+      h += bankRow('No credit card', a < 18 ? 'Credit cards are available from age 18.' : 'Approval depends on your credit score.', a >= 18 ? `<button onclick="applyCard()" ${(state.bankrupt || state.done.cardApp) ? 'disabled' : ''}>Apply</button>` : '');
     } else {
       const step = inflR(500, 50);
       h += bankRow(`Limit ${fmt(c.limit)}`, `Balance ${fmt(c.balance)} · ${(c.apr*100).toFixed(1)}% APR${state.cardAutopay ? ' · autopay on: the balance is paid in full each year, so no interest' : ''}`, `
@@ -10332,7 +10336,7 @@ function renderPanel(){
     }
 
     h += '<div class="plabel">LOANS</div>';
-    h += bankRow('Personal Loan', a < 18 ? 'Too young to apply.' : 'Amount depends on your credit score.', a >= 18 ? `<button onclick="applyPersonalLoan()" ${(state.bankrupt || state.done.personalLoan) ? 'disabled' : ''}>Apply</button>` : '');
+    h += bankRow('Personal Loan', a < 18 ? 'Loans are available from age 18.' : 'Amount depends on your credit score.', a >= 18 ? `<button onclick="applyPersonalLoan()" ${(state.bankrupt || state.done.personalLoan) ? 'disabled' : ''}>Apply</button>` : '');
     if(a >= 18 && !state.loans.some(l => l.type === 'Builder'))
       h += bankRow('Credit Builder Loan', '$500, low rate, always approved — rebuilds credit fast when paid on time.', `<button onclick="applyBuilderLoan()">Take Loan</button>`);
     state.loans.forEach(l => {
@@ -10355,14 +10359,14 @@ function renderPanel(){
     h += famePanelHtml() + fameChartHtml() + '<div class="plabel">Social media</div>' + mediaPanelHtml();
   } else if(state.panel === 'biz'){
     const b = state.business;
-    if(a < 21){ h = '<div class="status">Too young to start a business. Come back at 21.</div>'; }
+    if(a < 18){ h = ageLock('Starting a business is available', 18); }
     else if(!b){
       h += '<div class="status">Name your company, then pick what kind of business to start. Each needs upfront capital.</div>';
       h += '<div class="invrow"><input id="bizName" class="amt-input" maxlength="32" placeholder="Business name (optional)" aria-label="Business name"><div class="assetbuy"><button onclick="fillBizName()">Suggest a name</button></div></div>';
       BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => { const lic = felon() && LICENSED_BIZ.includes(t.key); h += opt(t.name, lic ? 'needs a license a felony bars' : fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, lic || state.money < bizCost(t)); });
     } else h += bizPanelHtml();
   } else {
-    if(a < 12){ h = '<div class="status">Too young to work.</div>'; }
+    if(a < 12){ h = ageLock('Work is available', 12); }
     else {
       const j = state.job;
       if(j){
@@ -10374,7 +10378,7 @@ function renderPanel(){
         const nx = track[j.rank + 1], nxGap = nx ? rankGap(nx, j.track) : '';
         const wl = worldImpactLines().filter(l => /field|Military/.test(l));
         if(wl.length) h += `<div class="status">${wl.join('<br>')}</div>`;
-        if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">needs ' + nxGap + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
+        if(nx) h += `<div class="invrow"><div class="owned">Next: <b>${nx.title}</b> at about ${fmt(startingSalary(j.track, j.rank + 1))}${nxGap ? ' · <span class="down">' + needsTxt(nxGap) + '</span>' : ''}. Your education adds ${Math.round((eduPayMult(j.track) - 1) * 100)}% to pay in this field${relevantDegree(j.track) ? ', including a relevant degree' : ''}.</div></div>`;
         h += iopt('💪', 'Work extra hard', state.done.work ? 'done ✓' : '−2 health, better promotion odds', 'workHarder()', state.done.work, state.done.work);
         if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('💵', 'Negotiate a raise', state.done.negotiate ? 'done ✓' : 'risk and reward', 'negotiateRaise()', state.done.negotiate, state.done.negotiate);
         if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('🔍', 'Look for a better offer', state.done.hunt ? 'done ✓' : j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1, state.done.hunt);
@@ -10397,7 +10401,7 @@ function renderPanel(){
         const barred = recordBlocks(trackName), gap = rankGap(rank0, trackName), info = TRACK_INFO[trackName] || {};
         const tooOld = info.maxAge && a >= info.maxAge - 4;
         const ineligible = barred || tooOld || state.retired || a > 66 || !!gap;
-        const meta = barred ? 'needs a clean record' : tooOld ? 'too old to start' : (state.retired || a > 66) ? 'hiring is closed at your age' : gap ? 'needs ' + gap : (startRankFor(trackName) ? 'as ' + CAREERS[trackName][startRankFor(trackName)].title + ' · ' : '') + fmt(startingSalary(trackName, startRankFor(trackName))) + '/yr';
+        const meta = barred ? 'needs a clean record' : tooOld ? upToAge(info.maxAge - 5) : state.retired ? 'not while retired' : a > 66 ? upToAge(66) : gap ? needsTxt(gap) : (startRankFor(trackName) ? 'as ' + CAREERS[trackName][startRankFor(trackName)].title + ' · ' : '') + fmt(startingSalary(trackName, startRankFor(trackName))) + '/yr';
         h += opt(`${trackName} <span class="sub-meta">${rank0.title} → ${CAREERS[trackName][CAREERS[trackName].length - 1].title}${info.blurb ? ' · ' + info.blurb : ''}</span>`, meta, `applyJob('${trackName}')`, already || state.done['app_'+trackName] || ineligible);
       }
     }
@@ -10815,7 +10819,7 @@ const CHAINS = {
     pitch(th, a, ask){
       const r = thRel(th);
       if(!r) return endThread(th, 'Lost touch with the coworker who had big plans', 'mixed');
-      if(a < 21 || !ask) return 'wait';
+      if(a < 18 || !ask) return 'wait';
       if(state.business) return endThread(th, `Passed on ${r.name}'s idea while running their own business`, 'mixed');
       const t = bizType(pick(CHAIN_BIZ)), half = Math.round(bizCost(t) / 2), short = Math.max(0, half - (state.money + state.savings));
       th.data.type = t.key; th.data.cost = bizCost(t);
@@ -10938,7 +10942,7 @@ const CHAINS = {
       return true;
     },
     freelance(th, a, ask){
-      if(Math.random() < 0.5 && !state.business && a >= 21){
+      if(Math.random() < 0.5 && !state.business && a >= 18){
         if(!ask) return 'wait';
         presentCustom(`${state.name}'s freelance work has more clients than one person can handle.`, [
           {label: 'Turn it into a company', run: () => { const t = bizType('agency'), name = suggestBizName('agency'); state.business = bizNormalize({type:'agency', employees: 1, locations: 1, price:'normal', marketing: 0, reputation: 62, value: bizCost(t), startAge: a, lastProfit: null, name}); pushEntry(a, `${state.name} turns their freelance work into ${name}.`, {happy:10}); endThread(th, 'Turned freelancing into ' + name, 'good'); }},
@@ -11529,8 +11533,8 @@ const atWar = () => !!(state.world && (state.world.events || []).some(e => e.key
 function milTitle(rank){ const m = MIL(), b = MIL_BRANCHES[(m && m.branch) || 'army']; return b.titles[Math.min(rank, b.titles.length - 1)]; }
 function enlistGap(key, officer){
   const b = MIL_BRANCHES[key], s = state.stats;
-  if(state.age < 18) return 'age 18';
-  if(state.age > (officer ? 32 : 35)) return 'too old to enlist';
+  if(state.age < 18) return fromAge(18);
+  if(state.age > (officer ? 32 : 35)) return upToAge(officer ? 32 : 35);
   if(felonyCount() > 0) return 'a clean record (no felonies)';
   if(state.mil && state.mil.discharge === 'dishonorable') return 'no dishonorable discharge';
   if(milActive()) return 'already serving';
@@ -11680,7 +11684,7 @@ function milHtml(){
   h += '<div class="invrow"><div class="owned">Serve 4 years, earn a salary, deploy around the world. Wartime brings danger and medals; an honorable discharge brings the GI Bill (free college), a hiring edge and, after 20 years, a pension. A degree lets you start as an officer.</div></div>';
   Object.keys(MIL_BRANCHES).forEach(k => {
     const b = MIL_BRANCHES[k], gE = enlistGap(k, false), gO = enlistGap(k, true);
-    h += `<button class="opt" ${gE && gO ? 'disabled' : ''} onclick="enlistBranch('${k}')"><span>Join the ${b.name} <span class="sub-meta">${b.blurb}</span></span><span class="meta">${!gO ? 'as an officer' : !gE ? 'enlist' : 'needs ' + gE}</span></button>`;
+    h += `<button class="opt" ${gE && gO ? 'disabled' : ''} onclick="enlistBranch('${k}')"><span>Join the ${b.name} <span class="sub-meta">${b.blurb}</span></span><span class="meta">${!gO ? 'as an officer' : !gE ? 'enlist' : needsTxt(gE)}</span></button>`;
   });
   return h;
 }
@@ -11712,7 +11716,7 @@ function officeReach(){
   return Math.min(5, Math.max(1, top + 1 + (outsider ? 1 : 0)));
 }
 function runGap(i){
-  if(state.age < 18) return 'age 18';
+  if(state.age < 18) return fromAge(18);
   if(state.crime.prison) return 'freedom';
   if(POL().campaign) return 'a campaign already under way';
   if(state.done.ran) return 'next year (one race a year)';
@@ -11941,7 +11945,7 @@ function govHtml(){
     if(inOffice() && i <= officeIdx()) continue;
     const g = runGap(i), o = OFFICES[i];
     if(g === 'experience in a lower office' && i > officeReach() + 1) continue;
-    h += `<button class="opt" ${g ? 'disabled' : ''} onclick="runForOffice(${i})"><span>Run for ${o.title} <span class="sub-meta">${o.term}-year term · ${fmt(startingSalary('Politics', i))}/yr · campaigns from ${fmt(styleCost(i, 'grass'))}</span></span><span class="meta">${g ? 'needs ' + g : 'about ' + Math.round(winChance(i, 'ads') * 100) + '% with ads'}</span></button>`;
+    h += `<button class="opt" ${g ? 'disabled' : ''} onclick="runForOffice(${i})"><span>Run for ${o.title} <span class="sub-meta">${o.term}-year term · ${fmt(startingSalary('Politics', i))}/yr · campaigns from ${fmt(styleCost(i, 'grass'))}</span></span><span class="meta">${g ? needsTxt(g) : 'about ' + Math.round(winChance(i, 'ads') * 100) + '% with ads'}</span></button>`;
   }
   return h;
 }
