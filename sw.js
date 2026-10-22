@@ -1,5 +1,5 @@
 // Bump this when you update the game so players get the new version.
-const CACHE = "ledger-v37";
+const CACHE = "ledger-v38";
 const SHELL = [
   "./",
   "./index.html",
@@ -26,9 +26,6 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-
-  // Social Hub lives in its own folder and isn't part of the game; leave it to the network.
-  if (url.origin === location.origin && url.pathname.startsWith(new URL("./social/", self.registration.scope).pathname)) return;
 
   // The game page: try the network first so updates show up, fall back to cache offline.
   if (req.mode === "navigate") {
