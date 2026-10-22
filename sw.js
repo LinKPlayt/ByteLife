@@ -1,5 +1,5 @@
 // Bump this when you update the game so players get the new version.
-const CACHE = "ledger-v41";
+const CACHE = "ledger-v42";
 const SHELL = [
   "./",
   "./index.html",

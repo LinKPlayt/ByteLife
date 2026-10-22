@@ -306,6 +306,35 @@
   .sub-meta{ display:block; font-size:11.5px; color:var(--muted); font-weight:500; margin-top:2px; }
   /* decisions */
   .decision{ background:var(--surface); border:1.5px solid var(--gold); border-radius:14px; padding:13px 15px; font-size:15px; line-height:1.5; box-shadow:0 3px 12px rgba(185,132,44,0.12); }
+  /* pictures: a painted scene on decisions, small icons in the log and tab headers */
+  .scene{ position:relative; height:92px; margin:-4px -6px 10px; border-radius:11px; overflow:hidden; display:flex; align-items:center; justify-content:center; gap:18px;
+    background:radial-gradient(circle at 18% 22%, rgba(255,255,255,.55) 0 18%, transparent 19%), radial-gradient(circle at 86% 78%, rgba(255,255,255,.35) 0 22%, transparent 23%), linear-gradient(135deg, var(--sa), var(--sb));
+    animation:scene-in .45s cubic-bezier(.2,.9,.3,1.25); }
+  .scene::after{ content:""; position:absolute; inset:auto 0 0 0; height:26px; background:linear-gradient(transparent, rgba(0,0,0,.06)); }
+  .scene-main{ font-size:50px; line-height:1; filter:drop-shadow(0 4px 6px rgba(0,0,0,.18)); animation:scene-bob 3.2s ease-in-out infinite; }
+  .scene-side, .scene-side2{ font-size:28px; line-height:1; opacity:.92; filter:drop-shadow(0 2px 3px rgba(0,0,0,.12)); }
+  .scene-side{ transform:rotate(-12deg) translateY(8px); } .scene-side2{ transform:rotate(10deg) translateY(-8px); }
+  @keyframes scene-in{ from{ opacity:0; transform:scale(.94); } to{ opacity:1; transform:none; } }
+  @keyframes scene-bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-4px); } }
+  #goArt .scene{ margin:0 0 14px; height:110px; }
+  .ei{ display:inline-block; width:1.35em; margin-right:3px; text-align:center; }
+  .panel-head.art{ position:relative; overflow:hidden; margin:-4px -4px 8px; padding:12px 12px; border-radius:12px; background:linear-gradient(120deg, var(--sa), var(--sb)); color:#232A24; }
+  .panel-head.art::after{ content:attr(data-art); position:absolute; right:44px; top:50%; transform:translateY(-50%) rotate(-10deg); font-size:58px; opacity:.22; pointer-events:none; }
+  .panel-head.art .ph-ico{ margin-right:8px; font-size:20px; }
+  .panel-head.art .panel-close{ position:relative; z-index:1; }
+  :root[data-theme="dark"] .scene, :root[data-theme="dark"] .panel-head.art{ filter:brightness(.78) saturate(.85); }
+  /* charts */
+  .chart{ margin:2px 0 4px; }
+  .chart svg{ width:100%; height:auto; display:block; overflow:visible; }
+  .chart .ct{ font-size:9.5px; fill:var(--muted); font-family:inherit; }
+  .legend{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--muted); margin-top:4px; }
+  .legend i{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .legend b{ color:var(--ink); font-weight:700; }
+  .legend .lnote{ flex-basis:100%; }
+  .spendbar{ display:flex; height:12px; border-radius:99px; overflow:hidden; margin:2px 0 4px; box-shadow:inset 0 0 0 1px var(--line); }
+  .spendbar span{ display:block; height:100%; }
+  .spendbar + .legend{ margin-bottom:8px; }
+  .bondrow{ display:flex; align-items:center; gap:8px; }
   .decision-label{ font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--gold); margin-bottom:4px; }
   .choice-btn{ display:flex; align-items:center; gap:10px; }
   .choice-btn .num{ flex:none; width:22px; height:22px; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:800; display:grid; place-items:center; }
@@ -597,6 +626,7 @@
   </section>
 
   <section id="gameover">
+    <div id="goArt"></div>
     <h2 id="goTitle">The record ends here</h2>
     <p class="epitaph" id="goText"></p>
     <div id="goHighlights"></div>
@@ -668,7 +698,7 @@ const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
 function hairFor(gender){ return gender === 'female' ? pick([1, 2]) : gender === 'male' ? 0 : rint(0, 2); }
 // ---------- Settings: kept on this device, apart from any one life ----------
 const SET_KEY = "ledger-settings";
-const SET_DEFAULTS = {theme:'light', textSize:'normal', motion:true, toasts:true, news:true, dots:true, deltas:true, logLen:40, difficulty:'normal', events:'normal', confirm:true, randomLife:false, cheats:false};
+const SET_DEFAULTS = {theme:'light', textSize:'normal', motion:true, toasts:true, news:true, dots:true, deltas:true, logLen:40, difficulty:'normal', events:'normal', confirm:true, randomLife:false, cheats:false, pictures:true};
 function loadSettings(){
   let s = null; try{ s = JSON.parse(localStorage.getItem(SET_KEY) || "null"); } catch(e){}
   const out = Object.assign({}, SET_DEFAULTS);
@@ -726,6 +756,7 @@ function renderSettings(){
     '<div class="set-row"><span>Log length<small>how many entries the log keeps on screen</small></span></div>' + seg('logLen', [[20, '20'], [40, '40'], [100, '100']]) +
     sw('deltas', 'Show stat changes in the log', 'the small +happy, −money notes') +
     sw('toasts', 'Pop-up notices', 'a short note after each action') +
+    sw('pictures', 'Pictures', 'scenes on decisions, icons in the log and tabs') +
     sw('news', 'Newspaper', 'world headlines under the panels') +
     sw('dots', 'Tab alert dots', 'a dot on tabs that need you') +
     sw('motion', 'Animations', 'turn off to reduce motion') + '</div>';
@@ -3193,15 +3224,16 @@ function ageUpYear(){
 
 let choiceSeq = 0;
 let inChoice = false;
-function presentCustom(promptText, opts){
+function presentCustom(promptText, opts, sceneText){
   const box = document.getElementById('choices');
   if(!inYear && !inChoice && box.querySelector('.choice-btn')){ queueToast('Answer the decision above first.', '', true); return false; }
   const seq = ++choiceSeq;
-  box.innerHTML = `<div class="decision"><div class="decision-label">Decision · age ${state.age}</div>${promptText}</div>` +
+  box.innerHTML = `<div class="decision">${sceneArt(sceneText || promptText)}<div class="decision-label">Decision · age ${state.age}</div>${promptText}</div>` +
     opts.map((o,i)=>`<button class="choice-btn" data-idx="${i}"><span class="num">${i + 1}</span>${o.label}</button>`).join('');
   window.scrollTo({top:0, behavior:smooth()});
   document.getElementById('ageBtn').disabled = true;
   audioPrompt();
+  try{ const sc = sceneFor(sceneText || promptText); if(sc.sfx && AUDIO.ctx && AUDIO.prefs.sfx) AUDIO.queue.push({name:sc.sfx, pri:5}); } catch(e){}
   box.querySelectorAll('.choice-btn').forEach(btn=>{
     btn.onclick = () => {
       inChoice = true;
@@ -3217,7 +3249,7 @@ function presentCustom(promptText, opts){
 
 // a choice can have a third option, a gamble (risk = chance it works out) and a side effect
 function presentChoice(ev){
-  const promptText = fill(ev[2](state.name)), opts = [ev[3], ev[4]].concat(ev[7] ? [ev[7]] : []);
+  const raw = ev[2](state.name), promptText = fill(raw), opts = [ev[3], ev[4]].concat(ev[7] ? [ev[7]] : []);
   presentCustom(promptText, opts.map(o => { const label = fill(scaleLabel(o.label)); return {
     label,
     run:()=>{
@@ -3226,7 +3258,7 @@ function presentChoice(ev){
       if(o.effect) o.effect();
       pushEntry(state.age, `${promptText} — ${state.name} chose: ${label.charAt(0).toLowerCase() + label.slice(1)}.${extra}`, scaleMoneyDelta(d));
     }
-  }; }));
+  }; }), raw);
 }
 
 const fmt = n => (n < 0 ? '-' : '') + '$' + Math.abs(Math.round(n)).toLocaleString();
@@ -5966,7 +5998,7 @@ function relRow(r){
   const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
   return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b>' + (r.pro ? ' — ' + proTitle(r) : '') + ' <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
-    '<div class="stat-track" style="margin:5px 0 2px;"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' +
+    '<div class="bondrow"><div class="stat-track" style="margin:5px 0 2px;flex:1"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' + ((r.bh || []).length >= 3 ? '<span title="Bond over the last ' + r.bh.length + ' years">' + sparkline(r.bh, 54, 16, 'pink') + '</span>' : '') + '</div>' +
     '<div class="btnrow-social">' + quick + '<button onclick="toggleRel(\'' + r.id + '\')">' + (open ? "Less" : "More") + "</button></div>" +
     (open ? '<div class="btnrow-social">' + more + "</div>" : "") + "</div>";
 }
@@ -6312,6 +6344,7 @@ function healthPanelHtml(){
   let h = '<div class="kv"><div><span>Health</span><b>' + s.health + '</b><span>' + label.toLowerCase() + '</span></div>' +
     '<div><span>Life outlook</span><b>~' + lifeOutlook() + '</b><span>est. lifespan</span></div>' +
     '<div><span>Conditions</span><b>' + known.length + '</b><span>' + (untreated ? '<span class="down" style="display:inline">' + untreated + ' untreated</span>' : known.length ? 'all managed' : 'none known') + '</span></div></div>';
+  h += healthChartHtml();
   h += '<div class="status">Last checkup: ' + (hh.lastCheckup !== null && hh.lastCheckup !== undefined ? (hh.lastCheckup === a ? "this year" : "age " + hh.lastCheckup) : "never") +
     " · Dentist: " + (hh.lastDentist != null ? (hh.lastDentist === a ? "this year" : "age " + hh.lastDentist) : "never") +
     "<br>Health insurance: " + (state.insurance.health ? "<b>yes</b>, covers 80% of treatment" : "none") +
@@ -8953,7 +8986,7 @@ function mePanelHtml(){
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
   if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
-  h += goalsHtml() + selfHtml() + styleHtml();
+  h += statsChartHtml() + goalsHtml() + selfHtml() + styleHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
@@ -9857,7 +9890,9 @@ function renderPanel(){
   if(!state.panel){ p.innerHTML = ''; return; }
   const a = state.age, e = state.edu, s = state.stats;
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis?'disabled':''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
-  const head = '<div class="panel-head"><span>' + (PANEL_TITLES[state.panel] || "") + '</span><button class="panel-close" onclick="togglePanel(null)" aria-label="Close">✕</button></div>';
+  const art = SETTINGS.pictures && PANEL_ART[state.panel];
+  const head = art ? `<div class="panel-head art" data-art="${art[0]}" style="--sa:${art[1]};--sb:${art[2]}"><span><span class="ph-ico" aria-hidden="true">${art[0]}</span>${PANEL_TITLES[state.panel] || ''}</span><button class="panel-close" onclick="togglePanel(null)" aria-label="Close">✕</button></div>`
+    : '<div class="panel-head"><span>' + (PANEL_TITLES[state.panel] || "") + '</span><button class="panel-close" onclick="togglePanel(null)" aria-label="Close">✕</button></div>';
   if(state.crime.prison && !['crime','soc','me','bank','inv','ast','health'].includes(state.panel)){
     p.innerHTML = head + '<div class="status">Not available while ' + (state.crime.prison.juvenile ? 'in juvenile detention' : 'in prison') + '. See the Crime tab for what you can do inside.</div>';
     return;
@@ -9876,14 +9911,14 @@ function renderPanel(){
     h += travelHtml();
     h += hobbiesHtml();
   } else if(state.panel === 'edu'){
-    h += eduPanelHtml();
+    h += eduPanelHtml() + gpaChartHtml();
   } else if(state.panel === 'inv'){
     if(a < 16){ h = '<div class="status">Too young to invest yet — come back at 16.</div>'; }
     else {
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
-      h += marketOverviewHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
+      h += portfolioChartHtml() + marketOverviewHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
       h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
@@ -9971,7 +10006,7 @@ function renderPanel(){
       h += bankRow('Deep in debt', 'Bankruptcy discharges unsecured debt but wrecks your credit for years.', `<button onclick="fileBankruptcy()">File for Bankruptcy</button>`);
     }
   } else if(state.panel === 'media'){
-    h += famePanelHtml() + '<div class="plabel">Social media</div>' + mediaPanelHtml();
+    h += famePanelHtml() + fameChartHtml() + '<div class="plabel">Social media</div>' + mediaPanelHtml();
   } else if(state.panel === 'biz'){
     const b = state.business;
     if(a < 21){ h = '<div class="status">Too young to start a business. Come back at 21.</div>'; }
@@ -9987,7 +10022,7 @@ function renderPanel(){
       if(j){
         const track = CAREERS[j.track], rank = track[j.rank];
         const coworkers = state.relationships.filter(r => r.type === 'Coworker');
-        h += `<div class="status"><b>${rank.title}</b> · ${j.track}<br>${fmt(j.salary)}/yr · ${rank.hours}hrs/wk · Stress ${rank.stress}/100 · ${j.years}yr on the job${coworkers.length ? `<br>Coworkers: ${coworkers.map(c=>c.name).join(', ')}` : ''}</div>`;
+        h += `<div class="status"><b>${rank.title}</b> · ${j.track}<br>${fmt(j.salary)}/yr · ${rank.hours}hrs/wk · Stress ${rank.stress}/100 · ${j.years}yr on the job${coworkers.length ? `<br>Coworkers: ${coworkers.map(c=>c.name).join(', ')}` : ''}</div>` + salaryChartHtml();
         h += '<div class="plabel">CAREER LADDER</div>';
         h += `<div class="invrow"><div class="owned">${track.map((r,i) => i === j.rank ? `<b>${r.title}</b>` : (i < j.rank ? `✓ ${r.title}` : r.title)).join(' &nbsp;→&nbsp; ')}</div></div>`;
         const nx = track[j.rank + 1], nxGap = nx ? rankGap(nx, j.track) : '';
@@ -10000,6 +10035,7 @@ function renderPanel(){
         h += iopt('🚪', j.track === 'Military' ? 'Leave the military' : inOffice() ? 'Resign from office' : 'Quit job', '', 'quitJob()', false);
         if(a >= 60) h += iopt('🌅', 'Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       } else if(state.retired){
+        h += salaryChartHtml();
         h += `<div class="status"><b>Retired</b><br>Pension ${fmt(state.pension)}/yr, adjusted for the cost of living each year.</div>`;
       } else {
         h += '<div class="status">Currently unemployed. Browse career tracks below — you\'ll start at the entry rank of whichever one you apply to.</div>';
@@ -10128,6 +10164,25 @@ const SFX = {
   sad:     t => { tone(NOTE(64), t, 0.45, 0.12, "sine", {attack:0.03, release:0.2}); tone(NOTE(60), t + 0.35, 0.8, 0.12, "sine", {attack:0.03, release:0.4}); },
   bad_big: t => { tone(NOTE(48), t, 0.55, 0.14, "sawtooth", {slideTo: NOTE(31), pluck:true}); noiseBurst(t, 0.25, 0.1, {freq:200, type:"lowpass"}); },
   inherit: t => { SFX.coins(t); [84, 88, 91].forEach((m, i) => tone(NOTE(m), t + 0.3 + i * 0.1, 0.9, 0.05, "sine", {pluck:true})); },
+  // interface
+  select:  t => { tone(NOTE(79), t, 0.06, 0.09, "sine", {pluck:true}); tone(NOTE(86), t + 0.05, 0.16, 0.08, "sine", {pluck:true}); },
+  tab:     t => { noiseBurst(t, 0.07, 0.035, {freq:4200, q:1.2}); tone(NOTE(88), t + 0.01, 0.08, 0.05, "sine", {pluck:true}); },
+  close:   t => { noiseBurst(t, 0.06, 0.03, {freq:2600, q:1.2}); tone(NOTE(81), t + 0.01, 0.08, 0.045, "sine", {pluck:true}); },
+  trade:   t => { tone(NOTE(96), t, 0.03, 0.06, "square", {pluck:true}); tone(NOTE(91), t + 0.04, 0.06, 0.05, "square", {pluck:true}); },
+  achieve: t => { [79, 83, 86, 91, 95].forEach((m, i) => { tone(NOTE(m), t + i * 0.06, 0.45, 0.06, "triangle", {pluck:true}); tone(NOTE(m + 12), t + i * 0.06, 0.35, 0.02, "sine", {pluck:true}); }); },
+  levelup: t => [72, 79, 84].forEach((m, i) => tone(NOTE(m), t + i * 0.08, 0.22, 0.08, "square", {pluck:true})),
+  // moments in a life
+  siren:   t => { for(let i = 0; i < 3; i++){ tone(740, t + i * 0.36, 0.18, 0.045, "triangle", {slideTo:980}); tone(980, t + i * 0.36 + 0.18, 0.18, 0.045, "triangle", {slideTo:740}); } },
+  gavel:   t => [0, 0.22].forEach(d => { noiseBurst(t + d, 0.09, 0.14, {freq:380, type:"lowpass"}); tone(NOTE(50), t + d, 0.12, 0.12, "triangle", {pluck:true}); }),
+  monitor: t => [0, 0.5].forEach(d => tone(988, t + d, 0.11, 0.05, "sine", {attack:0.005, release:0.04})),
+  crash:   t => { noiseBurst(t, 0.6, 0.16, {freq:900, sweepTo:180, q:0.5}); tone(NOTE(36), t, 0.4, 0.13, "sine", {slideTo:NOTE(28), pluck:true}); noiseBurst(t + 0.12, 0.35, 0.06, {freq:5000, q:2}); },
+  cheer:   t => { noiseBurst(t, 1.4, 0.07, {freq:1100, sweepTo:1600, q:0.6}); for(let i = 0; i < 9; i++) noiseBurst(t + 0.1 + i * 0.11 + Math.random() * 0.05, 0.04, 0.06, {freq:2400, q:1.5}); },
+  clang:   t => { [196, 431, 677, 1043].forEach((f, i) => tone(f, t, 1.1 - i * 0.2, 0.05 - i * 0.008, "sine", {pluck:true})); noiseBurst(t, 0.12, 0.07, {freq:3000, q:3}); },
+  whoosh:  t => noiseBurst(t, 0.75, 0.09, {freq:300, sweepTo:3200, q:0.7}),
+  pop:     t => { noiseBurst(t, 0.06, 0.15, {freq:1800, q:0.8}); [96, 100, 103, 108].forEach((m, i) => tone(NOTE(m), t + 0.08 + i * 0.05, 0.12, 0.04, "sine", {pluck:true})); },
+  bell:    t => { for(let i = 0; i < 6; i++) tone(NOTE(88), t + i * 0.07, 0.06, 0.045, "square", {pluck:true}); },
+  love:    t => { [76, 81, 85].forEach((m, i) => tone(NOTE(m), t + i * 0.12, 0.6, 0.07, "sine", {attack:0.02, release:0.4})); },
+  pet:     t => { tone(NOTE(86), t, 0.07, 0.07, "triangle", {slideTo:NOTE(91), pluck:true}); tone(NOTE(88), t + 0.12, 0.07, 0.07, "triangle", {slideTo:NOTE(93), pluck:true}); },
   somber:  t => { [45, 52, 57, 60].forEach(m => tone(NOTE(m), t, 3.2, 0.07, "sine", {attack:0.6, release:1.6})); tone(NOTE(33), t + 0.4, 2.8, 0.1, "sine", {attack:0.3, release:1.2}); },
 };
 function playSfx(name, t){ const f = SFX[name]; if(f && AUDIO.ctx) f(t !== undefined ? t : AUDIO.ctx.currentTime); }
@@ -10142,6 +10197,12 @@ const SFX_RULES = [
   [/is laid off/i, "sad", 7], [/passes away/i, "sad", 7], [/breaks up with|divorces|drift apart/i, "sad", 6],
   [/settles the estate|inherits|trust fund .* released/i, "inherit", 7], [/lands a job/i, "win", 7],
   [/year-end bonus|brand deal|dividend|pays out|negotiates a raise/i, "coins", 6],
+  [/is arrested|arrests|handcuff|police (catch|pull|raid|show up)|pulled over/i, "siren", 7], [/sentenced|found guilty|acquitted|verdict|goes to trial|in court/i, "gavel", 7],
+  [/released from (prison|jail)|walks out of prison|sent to (prison|jail)|behind bars/i, "clang", 7], [/crash|totals|car accident|wreck/i, "crash", 7],
+  [/diagnosed|rushed to (the )?hospital|surgery|in the ER|emergency room/i, "monitor", 6], [/championship|wins (an?|the) (award|game|race|medal|title)|standing ovation|sold-out/i, "cheer", 6],
+  [/falls in love|starts dating|first kiss|moves in with/i, "love", 6], [/adopts|brings home (a|their) (puppy|kitten|dog|cat)/i, "pet", 6],
+  [/flies to|takes a trip|vacation in|backpacks|travels to/i, "whoosh", 5], [/throws a party|birthday party|celebrates/i, "pop", 5],
+  [/starts (kindergarten|school|high school|college)|first day of/i, "bell", 5], [/reaches level|masters|becomes skilled|gets better at/i, "levelup", 4],
   [/decent year financially/i, "coin", 2], [/bills and living costs/i, "spend", 2],
 ];
 function entrySfx(text, delta){
@@ -10301,7 +10362,13 @@ function audioWire(){
   ["pointerdown", "touchstart", "keydown"].forEach(ev => document.addEventListener(ev, unlock, {passive:true}));
   document.addEventListener("click", e => {
     const b = e.target && e.target.closest ? e.target.closest("button") : null;
-    if(b) sfxNow(b.id === "ageBtn" ? "ageup" : "tap");
+    if(!b) return;
+    const oc = b.getAttribute("onclick") || "";
+    sfxNow(b.id === "ageBtn" ? "ageup"
+      : b.classList.contains("tab-btn") ? (typeof state !== "undefined" && state && state.panel === b.dataset.panel ? "tab" : "close")
+      : b.classList.contains("panel-close") ? "close"
+      : b.classList.contains("choice-btn") ? "select"
+      : /\b(buy|sell|trade|placeOrder|buyMix|sellEverything)\w*\(/.test(oc) ? "trade" : "tap");
   });
   document.addEventListener("visibilitychange", () => {
     if(!AUDIO.ctx) return;
@@ -10331,6 +10398,7 @@ function showGameOver(){
   showScreen("gameover");
   document.getElementById('goTitle').textContent = state.obit ? state.obit.title : state.name + "'s record closes";
   document.getElementById('goText').textContent = state.obit ? state.obit.text : legacyText();
+  const ga = document.getElementById('goArt'); if(ga) ga.innerHTML = SETTINGS.pictures ? `<div class="scene" style="--sa:#e2dfeb;--sb:#aaa5c0" aria-hidden="true"><span class="scene-side">🌹</span><span class="scene-main">🕯️</span><span class="scene-side2">🕊️</span></div>` : '';
   const gh = document.getElementById('goHighlights'); if(gh) try{ gh.innerHTML = achGameOverHtml(); } catch(e){ gh.innerHTML = ''; }
   showHeirs();
 }
@@ -12081,6 +12149,144 @@ function crossroadsHtml(){
 
 // ---------- Markets and banking: history, ratings, analytics, cash flow, credit and planning tools ----------
 // a tiny line chart for any series of numbers
+// ---------- Pictures: a scene for every decision, an icon for every log line ----------
+// Matched against the plain text in order, most specific first. [pattern, main, side, side2, colorA, colorB, sound]
+const SCENES = [
+  [/\b(pass(es|ed)? away|funerals?|graves?|terminal(ly)?|eulogy|mourn\w*|dies of|died)\b/i, '🕯️', '🌹', '🕊️', '#e2dfeb', '#aaa5c0', 'sad'],
+  [/\b(weddings?|propos\w*|marr(y|ies|ied|iage)|engag(ed|ement)|honeymoon|vows)\b/i, '💍', '💐', '🥂', '#fde6ef', '#f4bfd4', 'wedding'],
+  [/\b(bab(y|ies)|pregnan\w*|newborn|is born|welcome a new|godparent|fertility)\b/i, '👶', '🍼', '🧸', '#e3f1fb', '#bcdcf3', 'baby'],
+  [/\b(break(s)? up|broke up|divorc\w*|affair|cheat(s|ed|ing)? on (their|his|her) (partner|spouse|wife|husband|girlfriend|boyfriend))\b/i, '💔', '🥀', '🌧️', '#e6e6ec', '#b6b9c9', 'sad'],
+  [/\b(prisons?|jail|cell(mate)?s?|inmates?|parole|behind bars|probation|juvenile detention)\b/i, '⛓️', '🧱', '🔒', '#dcdee0', '#a4a9ae', 'clang'],
+  [/\b(court(room)?|goes to trial|on trial|the judge|a judge|lawsuits?|sues?|sued|lawyers?|attorneys?|jury|verdict|guilty|sentenc\w*|plea|appeals?)\b/i, '⚖️', '🏛️', '📜', '#f0e9da', '#d5c49c', 'gavel'],
+  [/\b(police|arrest\w*|cops?|patrol|suspects?|evidence|steal\w*|stole|stolen|shoplift\w*|crimes?|criminal|rob(s|bed|bery)?|theft|burglar\w*|vandal\w*|smuggl\w*|dealers?|drug deal\w*|drugs|gangs?|heist|fraud|warrant|sneak\w* out)\b/i, '🚓', '🚨', '🔦', '#dfe6f2', '#9caccc', 'siren'],
+  [/\b(crash\w*|accidents?|totaled|collision|speeding ticket|hit-and-run)\b/i, '🚗', '💥', '🚧', '#f1e3dc', '#d8ab97', 'crash'],
+  [/\b(dark mood|depress\w*|anxi\w*|lonel\w*|burn(ed|t)? out|grief|sad)\b/i, '☁️', '🫖', '🌧️', '#e4e8ef', '#b4bfd0', null],
+  [/\b(meditat\w*|retreat|sabbatical|spa|yoga|mindful\w*)\b/i, '🧘', '🍃', '🕯️', '#e6f3ec', '#b9dcc9', null],
+  [/\b(lab|labs|experiments?|research\w*|theory|scientists?|discover\w*)\b/i, '🔬', '🧪', '🔭', '#e6eef8', '#b9cbe6', null],
+  [/\b(hospitals?|surger(y|ies)|diagnos\w*|illness|sick|injur\w*|checkup|doctors?|therap\w*|medic\w*|cancer|flu|disease|ambulance|emergency room|broken bone|rehab|lump|screening|clinical|health)\b/i, '🏥', '💊', '🩺', '#e0f3f0', '#b0ded5', 'monitor'],
+  [/\b(military|army|navy|air force|marines|deploy\w*|soldiers?|enlist\w*|veterans?|drafted|boot camp|sergeant|service buddy)\b/i, '🎖️', '🪖', '🧭', '#e3e6d6', '#b6bf97', 'fanfare'],
+  [/\b(elections?|campaign\w*|vote|voters|mayor|senators?|governor|congress|politic\w*|ballot)\b/i, '🗳️', '🏛️', '📣', '#e6e9f5', '#b8c1e5', 'fanfare'],
+  [/\b(schools?|class(es|mates?)?|teachers?|students?|exams?|tests?|quiz|homework|grades?|gpa|report card|college|universit\w*|stud(y|ies|ying)|degree|semester|tuition|scholarship|graduat\w*|kindergarten|preschool|principal|detention|recess)\b/i, '🎓', '📚', '✏️', '#e8eefc', '#c0cff5', 'bell'],
+  [/\b(lotter\w*|jackpot|casino|gambl\w*|bets?|betting|poker|slot machine)\b/i, '🎰', '🍀', '💰', '#fbf3d6', '#ecd17c', 'coins'],
+  [/\b(stocks|stock market|a stock|invest\w*|portfolio|crypto|coin|bitcoin|shares|dividends?|ipo|trading)\b/i, '📈', '💹', '💼', '#e3f3ea', '#acd9bf', 'coin'],
+  [/\b(business(es)?|startup|company|customers?|investors?|franchise|employees|clients?|restaurant|supplier)\b/i, '🏪', '📦', '🤝', '#f6ecdc', '#e3c898', 'coin'],
+  [/\b(boss|jobs?|work(s|ing|place)?|office|promot\w*|coworkers?|careers?|interviews?|salary|raise|fired|laid off|hired?|shifts?|overtime|resign\w*|quit|recruiter|firm|pay cut|internship|employer|certification|side hustle)\b/i, '💼', '🏢', '📊', '#e5edef', '#b7cbd2', null],
+  [/\b(money|cash|debts?|loans?|bank|savings|tax(es)?|bills?|inherit\w*|wallet|budget|scam\w*|credit|mortgage|bankrupt\w*|paycheck|allowance|purchase|splurge|expensive|prices)\b/i, '💰', '💵', '🧾', '#e4f3e5', '#b3ddb8', 'coin'],
+  [/\{mypet\}|\b(dogs?|pupp(y|ies)|cats?|kittens?|pets?|vet|hamster|parrot|rabbit|goldfish|horses?)\b/i, '🐶', '🐱', '🦴', '#f7efd9', '#e7cf92', 'pet'],
+  [/\b(dat(e|es|ing)|crush|kiss\w*|romanc\w*|in love|valentine|flirt\w*|soulmate|partner|old flame|ex)\b/i, '❤️', '🌹', '💌', '#fde2e5', '#f6b3bd', 'love'],
+  [/\b(house|home|apartment|landlord|neighbou?rs?|roommates?|move(s|d)? (in|out|back|closer|cities)|relocat\w*|renovat\w*|garden|yard|propert(y|ies)|rentals?|tenants?|furnace|water heater|fence)\b/i, '🏠', '🔑', '🛋️', '#f5ebe0', '#dfc4a1', null],
+  [/\b(cars?|drive|driving|driver'?s license|vehicles?|motorcycle|traffic|truck)\b/i, '🚗', '🛣️', '⛽', '#e3ebf3', '#afc1d6', null],
+  [/\b(travel\w*|trips?|road-?trip|vacation|flights?|flies|plane|abroad|beach|holiday|cruise|passport|backpack\w*|tourists?|overseas|off the map|a week in|skydiv\w*|timeshare|resort)\b/i, '✈️', '🏝️', '🧳', '#dcf0f8', '#a3d7ec', 'whoosh'],
+  [/\b(part(y|ies)|birthday|celebrat\w*|concerts?|festival|nightclub|prom|danc\w*|sleepover|halloween|christmas|reunion)\b/i, '🎉', '🎈', '🎵', '#f5e4fb', '#dcb6ef', 'pop'],
+  [/\b(sports?|teams?|marathon|gym|coach\w*|tryouts?|try out|soccer|football|basketball|baseball|tennis|exercise|workout|olympic\w*|championship|athlet\w*)\b/i, '🏆', '⚽', '👟', '#e3f4e3', '#addcab', 'cheer'],
+  [/\b(famous|fame|fans?|viral|followers|influencer|celebrit\w*|paparazzi|talk show|social media|online|tiktok|instagram|streamer|youtube|tabloid|brand deal|talent scout|talent show|tv|cameo|commercial|autograph|red carpet|director|posts)\b/i, '📱', '⭐', '📸', '#fff1d6', '#f3d184', 'viral'],
+  [/\b(music|band|songs?|guitar|piano|singing|singer|sings|paint\w*|artist|drawing|novel|poem|poetry|film|movie|acting|actor|actress|audition|theat(er|re)|stand-up|open mic|speech|speak (in front|at)|crowd|hobby|competition)\b/i, '🎨', '🎸', '🎬', '#fbe9de', '#efbe9f', null],
+  [/\b(drink(s|ing)?|alcohol|smok\w*|vap(e|ing)|beer|wine|hangover|drunk|bar)\b/i, '🍺', '🚬', '🌙', '#ece4da', '#c9b496', null],
+  [/\b(storms?|floods?|wildfires?|fire|earthquake|hurricane|tornado|blizzard|power outage|collapse)\b/i, '🌪️', '🌧️', '⚡', '#e2e7ee', '#a4b2c4', 'crash'],
+  [/\b(phones?|smartphone|computer|laptop|internet|app|cod(e|ing)|video games?|gaming|console|hacker|robot|ai)\b/i, '💻', '🎮', '📱', '#e8e9f7', '#bfc3ec', null],
+  [/\b(retire\w*|pension|nursing home|assisted.living|memoirs?|grandchild(ren)?|grandkids?|life story)\b/i, '🌅', '🪑', '🌷', '#fdeedc', '#f3c592', 'retire'],
+  [/\b(volunteer\w*|charit\w*|donat\w*|fundrais\w*|community|mentor\w*|homeless|spare change|stranger)\b/i, '🤲', '💚', '🌱', '#e4f4e9', '#b0dcbf', 'good'],
+  [/\b(food|cook\w*|diet|eat(s|ing|en)?|meals?|chef|bak(e|ing)|recipe|vegan|food critic)\b/i, '🍲', '🥗', '🍰', '#fbeee0', '#edc89c', null],
+  [/\b(mom|dad|mother|father|parents?|sisters?|brothers?|siblings?|grandm\w*|grandp\w*|family|cousins?|aunt|uncle|sons?|daughters?|kids?|children|twins?|relatives?|teenager)\b/i, '👨‍👩‍👧', '🏡', '💛', '#fdf2dc', '#f2d592', null],
+  [/\b(friends?|bull(y|ies|ied)|gossip|group chat|hang(s)? out|rumou?rs?|popular|picking on)\b/i, '🧑‍🤝‍🧑', '💬', '☕', '#eaf1fb', '#c2d5f0', null],
+];
+const STAGE_SCENES = {INFANT:['🍼', '🧸', '⭐', '#eee4f3', '#d3c2e3'], TODDLER:['🧸', '🧩', '🎈', '#eee4f3', '#d3c2e3'], CHILD:['🎈', '🪁', '🌳', '#e6f3e2', '#bfe0b4'],
+  TEENAGER:['🎒', '🎧', '📱', '#e6ebf8', '#bfcbee'], 'YOUNG ADULT':['🏙️', '☕', '🎒', '#e8eef0', '#bccdd4'], ADULT:['🏙️', '☕', '📅', '#e8eef0', '#bccdd4'], 'MIDDLE AGE':['🏡', '☕', '📰', '#f2ece2', '#dacbb0'], SENIOR:['🌅', '🪑', '🌷', '#fdeedc', '#f3c592'], ELDER:['🌅', '🪑', '🌷', '#fdeedc', '#f3c592']};
+const plainText = h => String(h || '').replace(/<[^>]*>/g, ' ');
+function sceneFor(text){
+  const t = plainText(text);
+  for(const s of SCENES) if(s[0].test(t)) return {main:s[1], side:s[2], side2:s[3], a:s[4], b:s[5], sfx:s[6]};
+  const st = STAGE_SCENES[state ? stageFor(state.age) : 'ADULT'] || STAGE_SCENES.ADULT;
+  return {main:st[0], side:st[1], side2:st[2], a:st[3], b:st[4], sfx:null};
+}
+function sceneArt(text, cls){
+  if(!SETTINGS.pictures) return '';
+  const s = sceneFor(text);
+  return `<div class="scene${cls ? ' ' + cls : ''}" style="--sa:${s.a};--sb:${s.b}" aria-hidden="true"><span class="scene-side">${s.side}</span><span class="scene-main">${s.main}</span><span class="scene-side2">${s.side2}</span></div>`;
+}
+// lines that already open with a picture keep it
+const LEADING_EMOJI = /^\s*(<[^>]+>\s*)*[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+function entryIcon(text){
+  if(!SETTINGS.pictures || LEADING_EMOJI.test(text)) return '';
+  const t = plainText(text);
+  for(const s of SCENES) if(s[0].test(t)) return `<span class="ei" aria-hidden="true">${s[1]}</span>`;
+  return '';
+}
+const PANEL_ART = {me:['👤', '#e3ece6', '#bcd2c6'], act:['⚡', '#fbf0d9', '#efd193'], edu:['🎓', '#e8eefc', '#c0cff5'], job:['💼', '#e5edef', '#b7cbd2'], soc:['❤️', '#fde2e5', '#f6b3bd'],
+  bank:['🏦', '#e4f3e5', '#b3ddb8'], inv:['📈', '#e3f3ea', '#acd9bf'], ast:['🏠', '#f5ebe0', '#dfc4a1'], biz:['🏢', '#f6ecdc', '#e3c898'], media:['⭐', '#fff1d6', '#f3d184'],
+  health:['🩺', '#e0f3f0', '#b0ded5'], crime:['⚖️', '#f0e9da', '#d5c49c']};
+
+// ---------- Charts ----------
+const fmtShort = n => { const a = Math.abs(n), s = n < 0 ? '-' : ''; return s + (a >= 1e9 ? '$' + (a / 1e9).toFixed(1) + 'B' : a >= 1e6 ? '$' + (a / 1e6).toFixed(1) + 'M' : a >= 1e4 ? '$' + Math.round(a / 1e3) + 'k' : a >= 1e3 ? '$' + (a / 1e3).toFixed(1) + 'k' : '$' + Math.round(a)); };
+const fmtCount = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n));
+// A line chart over age: series [{name, color, vals}] (null = no data that year), drawn to scale with labelled axes.
+function lineChart(o){
+  const xs = o.xs, n = xs.length;
+  if(n < 2) return '';
+  const W = 320, H = o.h || 128, L = 40, R = 12, T = 10, B = 20, fy = o.fmtY || (v => String(Math.round(v)));
+  const all = o.series.flatMap(s => s.vals.filter(v => v != null && isFinite(v)));
+  if(all.length < 2) return '';
+  let lo = o.yMin != null ? o.yMin : Math.min(...all), hi = o.yMax != null ? o.yMax : Math.max(...all);
+  if(o.yMin == null && lo > 0) lo = 0;                     // amounts read best measured from zero
+  if(hi - lo < 1e-9) hi = lo + 1;
+  const X = i => L + (W - L - R) * (xs[i] - xs[0]) / Math.max(1, xs[n - 1] - xs[0]);
+  const Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const r1 = v => Math.round(v * 10) / 10;
+  let g = '';
+  [lo, (lo + hi) / 2, hi].forEach(v => { g += `<line x1="${L}" x2="${W - R}" y1="${r1(Y(v))}" y2="${r1(Y(v))}" stroke="var(--line)" stroke-width="1"/><text x="${L - 5}" y="${r1(Y(v) + 3.5)}" text-anchor="end" class="ct">${fy(v)}</text>`; });
+  if(lo < 0 && hi > 0) g += `<line x1="${L}" x2="${W - R}" y1="${r1(Y(0))}" y2="${r1(Y(0))}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  [0, Math.floor((n - 1) / 2), n - 1].filter((v, i, arr) => arr.indexOf(v) === i).forEach(i => { g += `<text x="${r1(X(i))}" y="${H - 5}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" class="ct">${i === 0 ? 'age ' : ''}${xs[i]}</text>`; });
+  o.series.forEach((s, si) => {
+    let d = '', on = false, first = -1, last = -1;
+    s.vals.forEach((v, i) => { if(v == null || !isFinite(v)){ on = false; return; } d += (on ? 'L' : 'M') + r1(X(i)) + ',' + r1(Y(v)); on = true; if(first < 0) first = i; last = i; });
+    if(!d) return;
+    const col = `var(--${s.color})`;
+    if(o.area && o.series.length === 1 && !s.vals.slice(first, last + 1).some(v => v == null)) g += `<path d="${d}L${r1(X(last))},${r1(Y(Math.max(lo, 0)))}L${r1(X(first))},${r1(Y(Math.max(lo, 0)))}Z" fill="${col}" opacity="0.13"/>`;
+    g += `<path d="${d}" fill="none" stroke="${col}" stroke-width="${o.series.length > 1 ? 1.8 : 2.2}" stroke-linejoin="round" stroke-linecap="round"/>`;
+    g += `<circle cx="${r1(X(last))}" cy="${r1(Y(s.vals[last]))}" r="3" fill="${col}"/>`;
+    if(n <= 70) s.vals.forEach((v, i) => { if(v != null && isFinite(v)) g += `<circle cx="${r1(X(i))}" cy="${r1(Y(v))}" r="5" fill="transparent"><title>${s.name ? s.name + ', ' : ''}age ${xs[i]}: ${fy(v)}</title></circle>`; });
+  });
+  const legend = o.series.length > 1 || o.note ? `<figcaption class="legend">${o.series.length > 1 ? o.series.map(s => { const lv = [...s.vals].reverse().find(v => v != null); return `<span><i style="background:var(--${s.color})"></i>${s.name}${lv != null ? ' <b>' + fy(lv) + '</b>' : ''}</span>`; }).join('') : ''}${o.note ? `<span class="lnote">${o.note}</span>` : ''}</figcaption>` : '';
+  return `<figure class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}">${g}</svg>${legend}</figure>`;
+}
+const LH = () => (state.lifeHist || []);
+function chartBox(title, chart){ return chart ? `<div class="plabel">${title}</div><div class="invrow">${chart}</div>` : ''; }
+function statsChartHtml(){
+  const hs = LH().slice(-80);
+  if(hs.length < 2) return '<div class="plabel">Your stats over the years</div><div class="invrow"><div class="owned">📈 A chart of your health, happiness, smarts and looks fills in as the years go by.</div></div>';
+  return chartBox('Your stats over the years', lineChart({xs:hs.map(x => x.age), yMin:0, yMax:100, label:'Health, happiness, smarts and looks by age', series:[
+    {name:'Health', color:'red', vals:hs.map(x => x.h)}, {name:'Happy', color:'gold', vals:hs.map(x => x.hp)}, {name:'Smarts', color:'blue', vals:hs.map(x => x.sm)}, {name:'Looks', color:'pink', vals:hs.map(x => x.lk)}]}));
+}
+function healthChartHtml(){
+  const hs = LH().slice(-80); if(hs.length < 2) return '';
+  const low = hs.reduce((m, x) => x.h < m.h ? x : m, hs[0]);
+  return chartBox('Health over the years', lineChart({xs:hs.map(x => x.age), yMin:0, yMax:100, area:true, label:'Health by age', series:[{name:'Health', color:'red', vals:hs.map(x => x.h)}], note:`Lowest: ${low.h} at age ${low.age}`}));
+}
+function salaryChartHtml(){
+  const hs = LH().filter(x => x.age >= 14); if(hs.filter(x => x.sal > 0).length < 2) return '';
+  return chartBox('Pay over the years', lineChart({xs:hs.map(x => x.age), area:false, fmtY:fmtShort, label:'Yearly pay by age, in today\'s money', series:[{name:'Pay', color:'green', vals:hs.map(x => x.sal > 0 ? x.sal : null)}], note:"In today's money; gaps are years without a job"}));
+}
+function gpaChartHtml(){
+  const hs = LH().filter(x => x.gpa != null).slice(-30); if(hs.length < 2) return '';
+  return chartBox('Grades over the years', lineChart({xs:hs.map(x => x.age), yMin:0, yMax:100, area:true, label:'Grades by age', series:[{name:'Grades', color:'blue', vals:hs.map(x => x.gpa)}]}));
+}
+function fameChartHtml(){
+  const hs = LH().filter(x => x.age >= 10); if(!hs.some(x => x.fame >= 5 || x.fol >= 100) || hs.length < 2) return '';
+  return chartBox('Fame over the years', lineChart({xs:hs.map(x => x.age), yMin:0, yMax:100, area:true, label:'Fame by age', series:[{name:'Fame', color:'gold', vals:hs.map(x => x.fame)}]})) +
+    (hs.some(x => x.fol >= 100) ? chartBox('Followers', lineChart({xs:hs.map(x => x.age), fmtY:fmtCount, area:true, label:'Social media followers by age', series:[{name:'Followers', color:'pink', vals:hs.map(x => x.fol)}]})) : '');
+}
+function portfolioChartHtml(){
+  const hs = LH().filter(x => x.age >= 16); if(hs.filter(x => x.port > 0).length < 2) return '';
+  return chartBox('Portfolio value over the years', lineChart({xs:hs.map(x => x.age), fmtY:fmtShort, area:true, label:'Investment portfolio value by age', series:[{name:'Portfolio', color:'green', vals:hs.map(x => x.port)}], note:"In today's money"}));
+}
+// spending as one bar split into parts, so the biggest costs stand out at a glance
+function spendBarHtml(parts){
+  const tot = parts.reduce((t, p) => t + Math.max(0, p[1]), 0); if(tot <= 0) return '';
+  const cols = ['blue', 'gold', 'pink', 'green', 'red', 'accent'];
+  return `<div class="spendbar" role="img" aria-label="Where the money went">${parts.map((p, i) => `<span style="width:${(Math.max(0, p[1]) / tot * 100).toFixed(1)}%;background:var(--${cols[i % cols.length]})" title="${p[0]}: ${fmt(p[1])}"></span>`).join('')}</div>` +
+    `<div class="legend">${parts.map((p, i) => `<span><i style="background:var(--${cols[i % cols.length]})"></i>${p[0]} <b>${Math.round(p[1] / tot * 100)}%</b></span>`).join('')}</div>`;
+}
+
 function sparkline(vals, w, h, color){
   vals = (vals || []).filter(v => isFinite(v));
   if(vals.length < 2) return '';
@@ -12167,6 +12373,12 @@ function mixesHtml(){
 function recordYearHistory(){
   state.nwHist = (state.nwHist || []).concat([{age: state.age, v: Math.round(netWorth() / state.econ.cumInflation)}]).slice(-120);
   state.csHist = (state.csHist || []).concat([state.creditScore]).slice(-60);
+  // one row a year for the charts; money is kept in today's dollars so decades compare fairly
+  const cum = state.econ.cumInflation || 1, st = state.stats, e = state.edu;
+  state.lifeHist = (state.lifeHist || []).concat([{age:state.age, h:st.health, hp:st.happy, sm:st.smarts, lk:st.looks,
+    sal: state.job && !state.crime.prison ? Math.round(state.job.salary / cum) : 0, fame: state.fame ? Math.round(state.fame.level) : 0,
+    fol: state.social && state.social.account ? state.social.followers : 0, port: Math.round(portfolioValue() / cum), gpa: (e.school || e.program) ? Math.round(e.gpa) : null}]).slice(-120);
+  state.relationships.forEach(r => { if(typeof r.closeness === 'number') r.bh = (r.bh || []).concat([Math.round(r.closeness)]).slice(-30); });
 }
 function cashFlowHtml(){
   const f = state.flow; if(!f || state.age < 16) return '';
@@ -12174,7 +12386,7 @@ function cashFlowHtml(){
   const out = [['Housing', f.housing], ['Food, transport and bills', f.living], ['Kids', f.kids], ['Insurance', f.insurance], ['Loan payments', f.loans]].filter(r => Math.round(r[1] || 0) > 0);
   const ti = inc.reduce((t, r) => t + r[1], 0), to = out.reduce((t, r) => t + r[1], 0);
   const row = (l, v, cls) => `<div class="itop"><span>${l}</span><span class="price ${cls || ''}">${fmt(v)}</span></div>`;
-  return '<div class="plabel">Last year\'s money</div><div class="invrow">' + inc.map(r => row(r[0], r[1], r[1] < 0 ? 'down' : '')).join('') +
+  return '<div class="plabel">Last year\'s money</div><div class="invrow">' + (out.length > 1 ? '<div class="owned" style="margin-bottom:4px">Where it went</div>' + spendBarHtml(out) : '') + inc.map(r => row(r[0], r[1], r[1] < 0 ? 'down' : '')).join('') +
     '<div class="owned" style="margin:2px 0 6px">Coming in: <b>' + fmt(ti) + '</b></div>' + out.map(r => row(r[0], -r[1], 'down')).join('') +
     `<div class="itop" style="border-top:1px solid var(--line);padding-top:6px"><span><b>${ti - to >= 0 ? 'Left over' : 'Shortfall'}</b></span><span class="price ${ti - to >= 0 ? 'up' : 'down'}"><b>${fmt(ti - to)}</b></span></div></div>`;
 }
@@ -12182,7 +12394,7 @@ function netWorthHistHtml(){
   const hs = (state.nwHist || []).filter(x => x.age >= 18);
   if(hs.length < 3) return '';
   const now = hs[hs.length - 1].v, peak = hs.reduce((m, x) => x.v > m.v ? x : m, hs[0]);
-  return '<div class="plabel">Net worth over time</div><div class="invrow"><div class="chart-wide">' + sparkline(hs.map(x => x.v), 300, 46) + '</div>' +
+  return '<div class="plabel">Net worth over time</div><div class="invrow">' + lineChart({xs:hs.map(x => x.age), fmtY:fmtShort, area:true, label:'Net worth by age, in today\'s money', series:[{name:'Net worth', color: now >= 0 ? 'green' : 'red', vals:hs.map(x => x.v)}]}) +
     `<div class="owned">In today's money: ${fmt(now)} now · peak ${fmt(peak.v)} at ${peak.age} · ${hs.length} years tracked</div></div>`;
 }
 function creditFactors(){
@@ -12409,7 +12621,7 @@ function unlockAch(x){
   saveAch();
   state.log.push({age: state.age, text: `🏆 Achievement unlocked: <b>${x.name}</b> — ${x.desc.charAt(0).toLowerCase() + x.desc.slice(1)}.`, dtext: ''});
   queueToast('🏆 Achievement unlocked: <b>' + x.name + '</b>', '');
-  sfxNow('fanfare');
+  sfxNow('achieve');
 }
 function addMilestone(icon, text, k){
   const a = lifeAch();
@@ -12525,7 +12737,7 @@ function render(){
     if(g && g.age === e.age) g.items.push(e); else groups.push({age:e.age, items:[e]});
   });
   log.innerHTML = groups.map(g => `<div class="log-year${g.age === state.age ? ' current' : ''}"><div class="log-age">${g.age === state.age ? 'This year · ' : ''}Age ${g.age}</div>` +
-    g.items.map(e => `<div class="entry">${e.text} ${SETTINGS.deltas ? e.dtext : ''}</div>`).join('') + '</div>').join('');
+    g.items.map(e => `<div class="entry">${entryIcon(e.text)}${e.text} ${SETTINGS.deltas ? e.dtext : ''}</div>`).join('') + '</div>').join('');
   audioAfterRender();
 }
 
