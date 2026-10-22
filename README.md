@@ -22,6 +22,7 @@ GitHub Actions redeploys automatically.
 - Write a post once, pick the accounts it goes to, and see each site's length limit as you type.
 - Schedule posts on a calendar; drafts, due-now and posted lists keep track of what's left.
 - **Post** copies the caption and opens the site (with the text filled in on X, Threads, Bluesky and LinkedIn). Tick each account off once it's up.
+- **Trending** shows what's popular right now: Wikipedia's most-read pages in 14 languages, trending hashtags and most-shared news from Mastodon, and Bluesky's trending topics, plus links to Google, TikTok, X, YouTube, Pinterest and Spotify trends by country. Any trend can be turned into a new post.
 - Log follower counts to track growth, save reusable hashtag sets, and export a backup.
 
 Everything is stored in your browser. It doesn't log in to or post from your accounts.

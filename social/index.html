@@ -231,6 +231,42 @@ textarea { resize: vertical; min-height: 140px; }
 .snip:first-child { border-top: 0; }
 .snip .t { flex: 1; white-space: pre-wrap; word-break: break-word; }
 
+/* Trending */
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.trend-list { list-style: none; margin: 0; padding: 0; }
+.trend { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
+.trend:first-child { border-top: 0; padding-top: 0; }
+.trend .rank { flex: none; width: 22px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.trend .thumb { flex: none; width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: var(--surface-2); }
+.trend .body { flex: 1; min-width: 0; }
+.trend .ttl { font-weight: 700; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.trend .ttl:hover { text-decoration: underline; }
+.trend .desc { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.trend .meta { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.trend .use { flex: none; }
+.trend .use .short { display: none; }
+@media (max-width: 520px) {
+  .trend .use .long { display: none; }
+  .trend .use .short { display: inline; }
+  .trend .thumb { width: 44px; height: 44px; }
+}
+.hot { color: var(--danger); font-weight: 700; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 12px; border-radius: 99px;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 14px;
+}
+.tag a { color: var(--text); text-decoration: none; font-weight: 600; }
+.tag .n { color: var(--muted); font-size: 12px; }
+.tag button { border: 0; border-radius: 99px; padding: 3px 9px; font-size: 12px; font-weight: 700; cursor: pointer; background: var(--accent); color: var(--accent-text); }
+.trend-card select { width: auto; padding: 5px 8px; font-size: 14px; }
+.loading { color: var(--muted); padding: 12px 0; }
+.loading::after { content: ""; display: inline-block; width: 12px; height: 12px; margin-left: 8px; vertical-align: -1px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 99px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.err { color: var(--danger); padding: 8px 0; }
+.sources { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.sources a { justify-content: flex-start; white-space: normal; text-align: left; }
+
 .banner {
   display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px;
   background: var(--warn-bg); color: var(--text); flex-wrap: wrap;
@@ -268,6 +304,7 @@ textarea { resize: vertical; min-height: 140px; }
       <button data-view="home" aria-current="page">Home</button>
       <button data-view="calendar">Calendar</button>
       <button data-view="posts">Posts</button>
+      <button data-view="trending">Trending</button>
       <button data-view="settings">Settings</button>
     </nav>
   </div>
@@ -277,6 +314,7 @@ textarea { resize: vertical; min-height: 140px; }
   <section class="view stack" id="view-home"></section>
   <section class="view" id="view-calendar" hidden></section>
   <section class="view stack" id="view-posts" hidden></section>
+  <section class="view stack" id="view-trending" hidden></section>
   <section class="view stack" id="view-settings" hidden></section>
 </main>
 
@@ -466,7 +504,8 @@ function render() {
     if (b.dataset.view === view) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
   });
   document.querySelectorAll(".view").forEach((v) => (v.hidden = v.id !== `view-${view}`));
-  ({ home: renderHome, calendar: renderCalendar, posts: renderPosts, settings: renderSettings })[view]();
+  ({ home: renderHome, calendar: renderCalendar, posts: renderPosts, trending: renderTrending, settings: renderSettings })[view]();
+  if (view === "trending") loadAllTrends(false);
 }
 
 function postCard(post) {
@@ -664,6 +703,176 @@ function renderSettings() {
     </div>
 
     <p class="small muted">Social Hub plans your posts and opens each site ready to post. It doesn't log in to your accounts or post for you, so nothing here can touch your accounts.</p>`;
+}
+
+/* ---------- Trending ---------- */
+// Free, no-key sources that let a web page read them directly
+const WIKI_LANGS = { en: "English", es: "Español", pt: "Português", fr: "Français", de: "Deutsch", it: "Italiano",
+  ru: "Русский", ja: "日本語", ko: "한국어", zh: "中文", hi: "हिन्दी", ar: "العربية", id: "Bahasa Indonesia", tr: "Türkçe" };
+const TREND_COUNTRIES = { US: "United States", GB: "United Kingdom", CA: "Canada", AU: "Australia", IN: "India", NG: "Nigeria",
+  ZA: "South Africa", BR: "Brazil", MX: "Mexico", FR: "France", DE: "Germany", ES: "Spain", IT: "Italy", JP: "Japan",
+  KR: "South Korea", PH: "Philippines", ID: "Indonesia", SA: "Saudi Arabia", TR: "Turkey" };
+const TREND_TTL = 20 * 60 * 1000;
+const TKEY = "socialhub.trends";
+let trendCache = (() => { try { return JSON.parse(localStorage.getItem(TKEY)) || {}; } catch (e) { return {}; } })();
+const trendState = {}; // key -> "loading" | "error"
+let wikiLang = S.wikiLang || (WIKI_LANGS[navigator.language?.slice(0, 2)] ? navigator.language.slice(0, 2) : "en");
+let trendCountry = S.trendCountry || "US";
+
+const safeUrl = (u) => (/^https:\/\//i.test(u || "") ? u : "");
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return ""; } };
+const utcPath = (d) => `${d.getUTCFullYear()}/${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCDate())}`;
+
+const TREND_SOURCES = {
+  wiki: async () => {
+    // Today's feed holds yesterday's most-read list; early in the UTC day it may not be out yet
+    for (const back of [0, 1, 2]) {
+      const r = await fetch(`https://${wikiLang}.wikipedia.org/api/rest_v1/feed/featured/${utcPath(new Date(Date.now() - back * 86400000))}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d.mostread?.articles?.length) return {
+        date: d.mostread.date,
+        items: d.mostread.articles.slice(0, 15).map((a) => ({
+          title: a.normalizedtitle || a.titles?.normalized, desc: a.description || "", views: a.views,
+          url: a.content_urls?.desktop?.page, img: a.thumbnail?.source,
+        })),
+      };
+    }
+    throw new Error("no data");
+  },
+  bsky: async () => {
+    const r = await fetch("https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrends?limit=15");
+    if (!r.ok) throw new Error(r.status);
+    return { items: (await r.json()).trends.map((t) => ({
+      title: t.displayName, desc: t.description || "", posts: t.postCount, hot: t.status === "hot",
+      category: t.category && t.category !== "other" ? t.category : "",
+      url: t.link?.startsWith("/") ? `https://bsky.app${t.link}` : "",
+    })) };
+  },
+  tags: async () => {
+    const r = await fetch("https://mastodon.social/api/v1/trends/tags?limit=20");
+    if (!r.ok) throw new Error(r.status);
+    return { items: (await r.json()).map((t) => ({
+      tag: t.name, url: t.url, uses: (t.history || []).slice(0, 2).reduce((n, h) => n + (+h.uses || 0), 0),
+    })) };
+  },
+  news: async () => {
+    const r = await fetch("https://mastodon.social/api/v1/trends/links?limit=12");
+    if (!r.ok) throw new Error(r.status);
+    return { items: (await r.json()).map((l) => ({
+      title: l.title, desc: l.description || "", url: l.url, img: l.image, source: l.provider_name || hostOf(l.url),
+      shares: (l.history || []).slice(0, 2).reduce((n, h) => n + (+h.uses || 0), 0),
+    })) };
+  },
+};
+const trendKey = (k) => (k === "wiki" ? `wiki.${wikiLang}` : k);
+
+async function loadTrend(k, force) {
+  const key = trendKey(k);
+  const hit = trendCache[key];
+  if (!force && hit && Date.now() - hit.t < TREND_TTL) return;
+  // A failed source waits for Refresh or Try again rather than retrying on every redraw
+  if (trendState[key] === "loading" || (!force && trendState[key] === "error")) return;
+  trendState[key] = "loading";
+  if (view === "trending") renderTrending();
+  try {
+    trendCache[key] = { t: Date.now(), data: await TREND_SOURCES[k]() };
+    delete trendState[key];
+    try { localStorage.setItem(TKEY, JSON.stringify(trendCache)); } catch (e) { /* cache is optional */ }
+  } catch (e) {
+    trendState[key] = "error";
+  }
+  if (view === "trending") renderTrending();
+}
+const loadAllTrends = (force) => Object.keys(TREND_SOURCES).forEach((k) => loadTrend(k, force));
+
+function ago(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`;
+}
+
+function trendBody(k, draw) {
+  const key = trendKey(k), hit = trendCache[key];
+  if (hit) return draw(hit.data) + (trendState[key] === "error" ? `<div class="err small">Couldn't refresh — showing results from ${ago(hit.t)}.</div>` : "");
+  if (trendState[key] === "error") return `<div class="err">Couldn't load this right now. <button class="btn sm" data-act="trend-retry" data-k="${k}">Try again</button></div>`;
+  return `<div class="loading">Loading</div>`;
+}
+
+const useBtn = (text) => `<button class="btn sm use" data-act="trend-use" data-text="${esc(text)}" title="Start a post about this"><span class="long">Use in post</span><span class="short">+ Post</span></button>`;
+
+function renderTrending() {
+  const el = $("#view-trending");
+  const stamps = Object.keys(TREND_SOURCES).map((k) => trendCache[trendKey(k)]?.t).filter(Boolean);
+  const oldest = stamps.length ? Math.min(...stamps) : 0;
+  const busy = Object.values(trendState).includes("loading");
+  const sel = (id, opts, cur) => `<select id="${id}">${Object.entries(opts).map(([k, v]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>`;
+
+  el.innerHTML = `
+    <div class="section-head" style="margin:0">
+      <h2 style="font-size:19px">What's trending</h2>
+      <span class="small muted">${oldest ? `Updated ${ago(oldest)}` : ""}</span>
+      <button class="btn sm" data-act="trend-refresh" ${busy ? "disabled" : ""}>${busy ? "Refreshing…" : "Refresh"}</button>
+    </div>
+    <div class="trend-grid">
+      <div class="card trend-card">
+        <div class="section-head"><h2>Most-read around the world</h2>${sel("wiki-lang", WIKI_LANGS, wikiLang)}</div>
+        <p class="small muted" style="margin:-6px 0 12px">The pages people read most on Wikipedia yesterday — a good gauge of what's in the news, films, sport and celebrity gossip. Switch languages to see other parts of the world.</p>
+        ${trendBody("wiki", (d) => `<ol class="trend-list">${d.items.map((a, i) => `<li class="trend">
+          <span class="rank">${i + 1}</span>
+          ${safeUrl(a.img) ? `<img class="thumb" src="${esc(a.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}
+          <div class="body">
+            <a class="ttl" href="${esc(safeUrl(a.url))}" target="_blank" rel="noopener">${esc(a.title)}</a>
+            ${a.desc ? `<div class="desc">${esc(a.desc)}</div>` : ""}
+            <div class="meta">${fmtNum(a.views)} views</div>
+          </div>${useBtn(a.title)}</li>`).join("")}</ol>`)}
+      </div>
+
+      <div class="stack">
+        <div class="card trend-card">
+          <div class="section-head"><h2>Trending hashtags</h2><span class="small muted">Mastodon</span></div>
+          ${trendBody("tags", (d) => `<div class="tags">${d.items.map((t) => `<span class="tag">
+            <a href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener">#${esc(t.tag)}</a>
+            <span class="n">${fmtNum(t.uses)}</span>
+            <button data-act="trend-use" data-text="#${esc(t.tag)} " title="Start a post with this hashtag">+ Post</button></span>`).join("")}</div>
+            <p class="small muted" style="margin:10px 0 0">Numbers are uses in the last two days.</p>`)}
+        </div>
+
+        <div class="card trend-card">
+          <div class="section-head"><h2>Talked about on Bluesky</h2></div>
+          ${trendBody("bsky", (d) => `<ol class="trend-list">${d.items.map((t, i) => `<li class="trend">
+            <span class="rank">${i + 1}</span>
+            <div class="body">
+              <a class="ttl" href="${esc(safeUrl(t.url))}" target="_blank" rel="noopener">${esc(t.title)}</a>
+              ${t.desc ? `<div class="desc">${esc(t.desc)}</div>` : ""}
+              <div class="meta">${t.hot ? '<span class="hot">🔥 Hot</span>' : ""}${t.category ? `<span>${esc(t.category[0].toUpperCase() + t.category.slice(1))}</span>` : ""}${t.posts ? `<span>${fmtNum(t.posts)} posts</span>` : ""}</div>
+            </div>${useBtn(t.title)}</li>`).join("")}</ol>`)}
+        </div>
+      </div>
+
+      <div class="card trend-card">
+        <div class="section-head"><h2>Most-shared news</h2><span class="small muted">Mastodon</span></div>
+        ${trendBody("news", (d) => `<ol class="trend-list">${d.items.map((l) => `<li class="trend">
+          ${safeUrl(l.img) ? `<img class="thumb" src="${esc(l.img)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}
+          <div class="body">
+            <a class="ttl" href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${esc(l.title)}</a>
+            <div class="meta"><span>${esc(l.source)}</span>${l.shares ? `<span>${fmtNum(l.shares)} shares</span>` : ""}</div>
+          </div>${useBtn(`${l.title}\n\n${l.url}`)}</li>`).join("")}</ol>`)}
+      </div>
+
+      <div class="card trend-card">
+        <div class="section-head"><h2>Trends on other platforms</h2>${sel("trend-country", TREND_COUNTRIES, trendCountry)}</div>
+        <p class="small muted" style="margin:-6px 0 12px">These sites don't let other pages show their trends, so these open them directly.</p>
+        <div class="sources">
+          <a class="btn" href="https://trends.google.com/trending?geo=${trendCountry}" target="_blank" rel="noopener">🔎 Google searches</a>
+          <a class="btn" href="https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en?region=${trendCountry}" target="_blank" rel="noopener">${picon("tiktok", true)} TikTok hashtags & songs</a>
+          <a class="btn" href="https://x.com/explore/tabs/trending" target="_blank" rel="noopener">${picon("x", true)} X trending</a>
+          <a class="btn" href="https://charts.youtube.com/charts/TopVideos/${trendCountry.toLowerCase()}/weekly" target="_blank" rel="noopener">${picon("youtube", true)} YouTube top videos</a>
+          <a class="btn" href="https://trends.pinterest.com/" target="_blank" rel="noopener">${picon("pinterest", true)} Pinterest Trends</a>
+          <a class="btn" href="https://charts.spotify.com/charts/view/regional-${trendCountry.toLowerCase()}-daily/latest" target="_blank" rel="noopener">🎵 Spotify top songs</a>
+        </div>
+        <p class="small muted" style="margin:12px 0 0">Tip: TikTok's Creative Center shows trending sounds — using one early is one of the easiest ways to get reach.</p>
+      </div>
+    </div>`;
 }
 
 /* ---------- Post editor ---------- */
@@ -891,6 +1100,9 @@ document.addEventListener("click", (e) => {
     case "followers": updateFollowers(acct); break;
     case "del-snip": S.snippets.splice(+b.dataset.i, 1); save(); renderSettings(); break;
     case "export": exportData(); break;
+    case "trend-use": openPost(null, { text: b.dataset.text }); break;
+    case "trend-refresh": loadAllTrends(true); break;
+    case "trend-retry": loadTrend(b.dataset.k, true); break;
     case "wipe":
       if (confirm("Delete all accounts, posts and snippets from this browser? Export a backup first if you might want them back.")) {
         S = blank(); save(); applyTheme(); render(); toast("Everything deleted");
@@ -922,6 +1134,8 @@ document.addEventListener("submit", (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.id === "wiki-lang") { wikiLang = S.wikiLang = e.target.value; save(); render(); return; }
+  if (e.target.id === "trend-country") { trendCountry = S.trendCountry = e.target.value; save(); renderTrending(); return; }
   if (e.target.id === "notify-toggle") {
     if (e.target.checked && Notification.permission !== "granted") {
       const perm = await Notification.requestPermission();
