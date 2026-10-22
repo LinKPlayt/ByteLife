@@ -1,0 +1,26 @@
+# Social Hub server. See SETUP.md: the GitHub Action fills in the two IDs below
+# when it deploys, so you don't need to edit this file.
+name = "social-hub-server"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+# Check for posts that are due once a minute
+[triggers]
+crons = ["* * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "social-hub"
+database_id = "__D1_ID__"
+
+[[kv_namespaces]]
+binding = "MEDIA"
+id = "__KV_ID__"
+
+[vars]
+# The site Social Hub is served from (comma-separate several)
+ALLOWED_ORIGIN = "https://linkplayt.github.io"
+GRAPH_VERSION = "v26.0"
+
+# Secrets (set by the GitHub Action, or with `npx wrangler secret put NAME`):
+#   IG_APP_ID, IG_APP_SECRET, ADMIN_PASSCODE

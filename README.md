@@ -25,4 +25,6 @@ GitHub Actions redeploys automatically.
 - **Trending** shows what's popular right now: Wikipedia's most-read pages in 14 languages, trending hashtags and most-shared news from Mastodon, and Bluesky's trending topics, plus links to Google, TikTok, X, YouTube, Pinterest and Spotify trends by country. Any trend can be turned into a new post.
 - Log follower counts to track growth, save reusable hashtag sets, and export a backup.
 
-Everything is stored in your browser. It doesn't log in to or post from your accounts.
+- **Instagram auto-posting** (optional): connect your Instagram Business or Creator account and photos, carousels and Reels publish automatically at the scheduled time, even with the page closed. This needs a free server of your own on Cloudflare, which a GitHub Action deploys for you. See [server/SETUP.md](server/SETUP.md).
+
+Your plans are stored in your browser. Apart from Instagram accounts you connect to your own server, Social Hub doesn't log in to or post from your accounts.

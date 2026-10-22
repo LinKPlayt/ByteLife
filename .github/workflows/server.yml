@@ -1,0 +1,75 @@
+name: Deploy Social Hub server
+
+# Deploys server/ to Cloudflare Workers. Does nothing until the secrets in
+# server/SETUP.md are added to the repository.
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", ".github/workflows/server.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: social-hub-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check setup
+        id: check
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Skipping: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets to deploy the server (see server/SETUP.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: .
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install
+        if: steps.check.outputs.ready == 'true'
+        run: npm ci
+      - name: Create database and storage
+        if: steps.check.outputs.ready == 'true'
+        run: node scripts/provision.mjs
+      - name: Deploy
+        if: steps.check.outputs.ready == 'true'
+        env:
+          IG_APP_ID: ${{ secrets.IG_APP_ID }}
+          IG_APP_SECRET: ${{ secrets.IG_APP_SECRET }}
+          ADMIN_PASSCODE: ${{ secrets.ADMIN_PASSCODE }}
+        run: |
+          node -e '
+            const s = {};
+            for (const k of ["IG_APP_ID", "IG_APP_SECRET", "ADMIN_PASSCODE"]) if (process.env[k]) s[k] = process.env[k];
+            require("fs").writeFileSync(process.env.RUNNER_TEMP + "/secrets.json", JSON.stringify(s));
+          '
+          npx wrangler deploy --secrets-file "$RUNNER_TEMP/secrets.json" | tee "$RUNNER_TEMP/deploy.log"
+          rm -f "$RUNNER_TEMP/secrets.json"
+          URL=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          {
+            echo "## Social Hub server is deployed"
+            echo ""
+            echo "**Server address:** \`$URL\`"
+            echo ""
+            echo "**Redirect URL for your Meta app:** \`$URL/auth/callback\`"
+            echo ""
+            echo "Paste the server address into Social Hub → Settings → Instagram auto-posting."
+          } >> "$GITHUB_STEP_SUMMARY"

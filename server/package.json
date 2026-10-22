@@ -1,0 +1,13 @@
+{
+  "name": "social-hub-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --test-scheduled",
+    "deploy": "wrangler deploy",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.3"
+  }
+}

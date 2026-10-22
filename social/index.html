@@ -157,7 +157,7 @@ main { max-width: 1100px; margin: 0 auto; padding: 16px; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .search { flex: 1; min-width: 160px; }
 
-input[type=text], input[type=url], input[type=number], input[type=datetime-local], input[type=search], textarea, select {
+input[type=text], input[type=url], input[type=password], input[type=number], input[type=datetime-local], input[type=search], textarea, select {
   width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
   background: var(--surface); outline: none;
 }
@@ -230,6 +230,29 @@ textarea { resize: vertical; min-height: 140px; }
 .snip { display: flex; gap: 8px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--border); }
 .snip:first-child { border-top: 0; }
 .snip .t { flex: 1; white-space: pre-wrap; word-break: break-word; }
+
+/* Instagram auto-posting */
+.ig-box { border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+.ig-box h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.media-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.mthumb { position: relative; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; font-size: 26px; }
+.mthumb img { width: 100%; height: 100%; object-fit: cover; }
+.mthumb .x { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 99px; border: 0; background: rgba(0,0,0,.6); color: #fff; cursor: pointer; font-size: 12px; line-height: 1; }
+.mthumb .kind { position: absolute; left: 4px; bottom: 3px; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.madd { width: 76px; height: 76px; border-radius: 10px; border: 1px dashed var(--border); display: grid; place-items: center; cursor: pointer; color: var(--muted); font-size: 12px; text-align: center; padding: 4px; }
+.madd:hover { border-color: var(--accent); color: var(--accent); }
+.form-err { background: var(--danger-bg); color: var(--danger); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.form-err[hidden] { display: none; }
+.target .auto { font-size: 12px; font-weight: 700; padding: 3px 10px 3px 2px; color: var(--accent); }
+.target.failed { background: var(--danger-bg); border-color: transparent; }
+.target.failed .auto { color: var(--danger); }
+.target a.plink { border-radius: 99px; padding: 3px 10px; font-size: 12px; font-weight: 700; color: var(--ok); text-decoration: none; }
+.autotag { font-size: 11px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
+.kv { display: grid; gap: 4px; }
+.kv code { background: var(--surface-2); padding: 6px 8px; border-radius: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.ok-line { color: var(--ok); font-weight: 600; }
+.err-line { color: var(--danger); font-weight: 600; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 
 /* Trending */
 .trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
@@ -362,7 +385,7 @@ const PLATFORMS = {
 
 /* ---------- State ---------- */
 const KEY = "socialhub.v1";
-const blank = () => ({ accounts: [], posts: [], snippets: [], theme: "auto", notify: false });
+const blank = () => ({ accounts: [], posts: [], snippets: [], theme: "auto", notify: false, server: { url: "", key: "" }, ig: { accounts: [] } });
 let S = load();
 
 function load() {
@@ -444,15 +467,21 @@ function problems(text, platform) {
 /* ---------- Post status ---------- */
 const liveTargets = (post) => post.targets.filter((id) => acctById(id));
 const isPosted = (post) => { const t = liveTargets(post); return t.length > 0 && t.every((id) => post.done[id]); };
+const jobOf = (post, acctId) => post.jobs?.[acctId];
+const autoPending = (post, acctId) => ["scheduled", "working"].includes(jobOf(post, acctId)?.state);
+// Accounts on a post that still need posting by hand (not done, not being auto-posted)
+const byHand = (post) => liveTargets(post).filter((id) => !post.done[id] && !autoPending(post, id));
+const anyFailed = (post) => liveTargets(post).some((id) => !post.done[id] && jobOf(post, id)?.state === "failed");
 function status(post) {
   if (isPosted(post)) return "posted";
+  if (anyFailed(post)) return "failed";
   if (!post.when) return "draft";
   const ms = new Date(post.when) - Date.now();
-  if (ms <= 0) return "overdue";
+  if (ms <= 0) return byHand(post).length ? "overdue" : "auto";
   if (ms < 24 * 3600 * 1000) return "soon";
   return "scheduled";
 }
-const STATUS_LABEL = { posted: "Posted", draft: "Draft", overdue: "Due now", soon: "Next 24h", scheduled: "Scheduled" };
+const STATUS_LABEL = { posted: "Posted", draft: "Draft", overdue: "Due now", soon: "Next 24h", scheduled: "Scheduled", failed: "Auto-post failed", auto: "Posting automatically" };
 const sortByWhen = (a, b) => (a.when || "9999").localeCompare(b.when || "9999") || a.created - b.created;
 
 /* ---------- Publishing ---------- */
@@ -510,9 +539,11 @@ function render() {
 
 function postCard(post) {
   const st = status(post);
-  const badgeCls = { overdue: "overdue", soon: "soon", posted: "done" }[st] || "";
+  const badgeCls = { overdue: "overdue", failed: "overdue", soon: "soon", auto: "soon", posted: "done" }[st] || "";
   const targets = post.targets.map(acctById).filter(Boolean).map((a) => {
     const done = !!post.done[a.id];
+    const job = jobOf(post, a.id);
+    if (job && (job.state !== "canceled")) return autoTarget(post, a, job, done);
     const issues = problems(post.text, a.platform);
     return `<span class="target${done ? " posted" : ""}">
       ${picon(a.platform, true)}<span class="h">${esc(a.handle)}</span>
@@ -538,6 +569,22 @@ function postCard(post) {
   </article>`;
 }
 
+function autoTarget(post, a, job, done) {
+  const head = `${picon(a.platform, true)}<span class="h">${esc(a.handle)}</span>`;
+  if (done || job.state === "published") {
+    return `<span class="target posted">${head}${safeUrl(job.permalink)
+      ? `<a class="plink" href="${esc(job.permalink)}" target="_blank" rel="noopener" title="Open on Instagram">✓ Posted ↗</a>`
+      : `<span class="auto" style="color:var(--ok)">✓ Posted</span>`}</span>`;
+  }
+  if (job.state === "failed") {
+    return `<span class="target failed" title="${esc(job.error || "")}">${head}<span class="auto">Failed</span>
+      <button data-act="ig-retry" data-post="${post.id}" data-acct="${a.id}" title="${esc(job.error || "Try again")}">Retry</button></span>`;
+  }
+  const label = job.state === "working" ? "Posting…" : "⚡ Auto";
+  const tip = job.state === "working" ? "Instagram is processing this post" : `Posts automatically ${fmtWhen(post.when)}${job.error ? ` (${job.error})` : ""}`;
+  return `<span class="target" title="${esc(tip)}">${head}<span class="auto">${label}</span></span>`;
+}
+
 function followerInfo(a) {
   const h = a.history || [];
   if (!h.length) return `<div class="followers"><span class="muted small">No follower count yet</span></div>`;
@@ -555,8 +602,8 @@ function followerInfo(a) {
 function renderHome() {
   const el = $("#view-home");
   const posts = S.posts.filter((p) => !isPosted(p));
-  const overdue = posts.filter((p) => status(p) === "overdue").sort(sortByWhen);
-  const soon = posts.filter((p) => status(p) === "soon").sort(sortByWhen);
+  const overdue = posts.filter((p) => ["overdue", "failed"].includes(status(p))).sort(sortByWhen);
+  const soon = posts.filter((p) => ["auto", "soon"].includes(status(p))).sort(sortByWhen);
   const weekEnd = Date.now() + 7 * 86400000;
   const thisWeek = posts.filter((p) => p.when && new Date(p.when) <= weekEnd && new Date(p.when) > Date.now()).length;
   const drafts = posts.filter((p) => !p.when).length;
@@ -586,6 +633,7 @@ function renderHome() {
         return `<div class="card acct">
           <div class="acct-top">${picon(a.platform)}
             <div class="acct-meta"><div class="acct-name">${esc(a.label || "@" + a.handle)}</div><div class="small muted">${esc(p.name)}${a.label ? " · @" + esc(a.handle) : ""}</div></div>
+            ${autoCapable(a) ? `<span class="autotag" title="Posts to this account are published automatically">⚡ Auto</span>` : ""}
             <button class="btn sm ghost" data-act="edit-acct" data-acct="${a.id}" aria-label="Edit account">Edit</button>
           </div>
           ${followerInfo(a)}
@@ -607,8 +655,8 @@ function renderPosts() {
   const q = postSearch.toLowerCase();
   const match = (p) => {
     const st = status(p);
-    const okFilter = postFilter === "all" || (postFilter === "upcoming" && ["soon", "scheduled", "overdue"].includes(st))
-      || (postFilter === "drafts" && st === "draft") || (postFilter === "posted" && st === "posted") || (postFilter === "overdue" && st === "overdue");
+    const okFilter = postFilter === "all" || (postFilter === "upcoming" && ["soon", "scheduled", "overdue", "auto", "failed"].includes(st))
+      || (postFilter === "drafts" && st === "draft") || (postFilter === "posted" && st === "posted") || (postFilter === "overdue" && ["overdue", "failed"].includes(st));
     if (!okFilter) return false;
     if (!q) return true;
     return [p.title, p.text, p.notes, ...p.targets.map((id) => acctById(id)?.handle)].join(" ").toLowerCase().includes(q);
@@ -667,7 +715,8 @@ function renderCalendar() {
 function renderSettings() {
   const el = $("#view-settings");
   const notifState = !("Notification" in window) ? "unsupported" : Notification.permission;
-  el.innerHTML = `
+  el.innerHTML = `${igSettingsCard()}
+
     <div class="card">
       <div class="section-head"><h2>Saved snippets</h2></div>
       <p class="small muted" style="margin-top:0">Hashtag sets, sign-offs or links you reuse. Tap one in the post editor to insert it.</p>
@@ -702,7 +751,52 @@ function renderSettings() {
       </div>
     </div>
 
-    <p class="small muted">Social Hub plans your posts and opens each site ready to post. It doesn't log in to your accounts or post for you, so nothing here can touch your accounts.</p>`;
+    <p class="small muted">Social Hub plans your posts and opens each site ready to post. Only Instagram accounts you connect to your own server above are posted to automatically; nothing else here can touch your accounts.</p>`;
+}
+
+function igSettingsCard() {
+  const connected = serverReady() && S.ig?.checked && !igCheck.error;
+  const accts = S.ig?.accounts || [];
+  let body;
+  if (!serverReady()) {
+    body = `
+      <p class="small muted" style="margin-top:0">Let Social Hub publish photos, carousels and Reels to Instagram at the time you pick — even when this page is closed. It needs a free server of your own (about 20 minutes to set up, no coding).</p>
+      <ol class="steps small">
+        <li>Follow the <a href="${SETUP_GUIDE}" target="_blank" rel="noopener">setup guide</a>. You'll need a passcode for it: <button type="button" class="btn sm" data-act="gen-pass">Generate passcode</button></li>
+        <li id="gen-pass-out" hidden></li>
+        <li>Paste your server address and passcode here.</li>
+      </ol>`;
+  } else if (igCheck.busy && !S.ig?.checked) {
+    body = `<div class="loading">Checking your server</div>`;
+  } else if (igCheck.error) {
+    body = `<p class="err-line" style="margin-top:0">${esc(igCheck.error)}</p><button class="btn sm" data-act="ig-check">Try again</button>`;
+  } else {
+    body = `<div class="stack">
+      <p class="ok-line" style="margin:0">✓ Connected to your server</p>
+      ${S.ig.appConfigured ? "" : `<p class="err-line small" style="margin:0">The server is missing IG_APP_ID or IG_APP_SECRET. Add them as GitHub secrets and re-run the deploy (see the guide).</p>`}
+      ${accts.length ? `<div>${accts.map((x) => `<div class="snip"><div class="t">${picon("instagram", true)} <b>@${esc(x.username)}</b>
+          <div class="small muted">Sign-in renews automatically · valid until ${new Date(x.tokenExpires).toLocaleDateString()}</div></div>
+          <button class="btn sm danger" data-act="ig-disconnect" data-ig="${esc(x.igId)}" data-name="${esc(x.username)}">Disconnect</button></div>`).join("")}</div>`
+        : `<p class="small muted" style="margin:0">No Instagram accounts connected yet.</p>`}
+      <div class="row"><button class="btn primary" data-act="ig-connect" ${S.ig.appConfigured ? "" : "disabled"}>+ Connect Instagram account</button></div>
+      <p class="small muted" style="margin:0">Only Business or Creator accounts can be posted to automatically — switching is free in the Instagram app. Your account must also be added as a tester in your Meta app (see the guide).</p>
+      <div class="kv small"><span class="muted">Redirect URL for your Meta app</span><code>${esc(S.ig.redirectUri || "")}</code></div></div>`;
+  }
+  return `<div class="card">
+    <div class="section-head"><h2>Instagram auto-posting</h2>${connected ? `<span class="autotag">⚡ On</span>` : ""}</div>
+    ${body}
+    <form id="server-form" class="stack" style="margin-top:14px">
+      <div class="two">
+        <label class="field">Server address<input type="url" name="url" placeholder="https://social-hub-server.you.workers.dev" value="${esc(S.server?.url || "")}" autocomplete="off"></label>
+        <label class="field">Passcode<input type="password" name="key" value="${esc(S.server?.key || "")}" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <button class="btn${serverReady() ? "" : " primary"}">${serverReady() ? "Save" : "Connect to server"}</button>
+        ${serverReady() ? `<button type="button" class="btn ghost" data-act="ig-check">Check again</button><span class="spacer"></span><button type="button" class="btn danger" data-act="ig-forget">Forget server</button>` : ""}
+        <a class="btn ghost" href="${SETUP_GUIDE}" target="_blank" rel="noopener">Setup guide ↗</a>
+      </div>
+    </form>
+  </div>`;
 }
 
 /* ---------- Trending ---------- */
@@ -875,10 +969,151 @@ function renderTrending() {
     </div>`;
 }
 
+/* ---------- Instagram auto-posting (talks to the Social Hub server in /server) ---------- */
+const SETUP_GUIDE = "https://github.com/LinKPlayt/ByteLife/blob/main/server/SETUP.md";
+const serverReady = () => !!(S.server?.url && S.server?.key);
+const autoCapable = (a) => !!(a && a.platform === "instagram" && a.igId && serverReady() && S.ig?.accounts?.some((x) => x.igId === a.igId));
+let igCheck = { busy: false, error: "" };
+
+async function srv(method, path, body, contentType) {
+  const init = { method, headers: { Authorization: `Bearer ${S.server.key}` } };
+  if (body instanceof Blob) { init.body = body; init.headers["Content-Type"] = contentType || body.type; }
+  else if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
+  let res;
+  try { res = await fetch(S.server.url.replace(/\/+$/, "") + path, init); }
+  catch (e) { throw new Error("Couldn't reach your Social Hub server. Check the address in Settings and your connection."); }
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) { const err = new Error(j.error || `Server error (${res.status})`); err.status = res.status; throw err; }
+  return j;
+}
+
+async function refreshServer() {
+  if (!serverReady()) return;
+  igCheck = { busy: true, error: "" };
+  if (view === "settings") renderSettings();
+  try {
+    const st = await srv("GET", "/api/status");
+    S.ig = { accounts: st.accounts, appConfigured: st.appConfigured, redirectUri: st.redirectUri, checked: Date.now() };
+    save();
+    igCheck = { busy: false, error: "" };
+  } catch (e) {
+    igCheck = { busy: false, error: e.message };
+  }
+  if (!document.querySelector("dialog[open]")) render();
+}
+
+// Pull the latest state of auto-posts that are still on their way
+let syncing = false;
+async function syncJobs() {
+  if (!serverReady() || syncing) return;
+  const open = [];
+  for (const p of S.posts) for (const [acct, j] of Object.entries(p.jobs || {})) if (["scheduled", "working"].includes(j.state)) open.push([p, acct, j]);
+  if (!open.length) return;
+  syncing = true;
+  try {
+    const { jobs } = await srv("GET", `/api/jobs?ids=${open.map(([, , j]) => j.id).join(",")}`);
+    const byId = Object.fromEntries(jobs.map((j) => [j.id, j]));
+    let changed = false;
+    for (const [p, acct, j] of open) {
+      const n = byId[j.id];
+      if (!n) continue;
+      if (n.state !== j.state || n.error !== j.error) {
+        Object.assign(j, { state: n.state, error: n.error, permalink: n.permalink });
+        changed = true;
+        if (n.state === "published") { p.done[acct] = Date.now(); toast(`Posted to Instagram ✓`); }
+        if (n.state === "failed") toast(`Instagram post failed: ${n.error}`);
+      }
+    }
+    if (changed) { save(); if (!document.querySelector("dialog[open]")) render(); }
+  } catch (e) { /* offline or server down: try again next minute */ }
+  syncing = false;
+}
+
+async function retryJob(postId, acctId) {
+  const post = S.posts.find((p) => p.id === postId), job = jobOf(post, acctId);
+  if (!job) return;
+  try {
+    const r = await srv("POST", `/api/jobs/${job.id}/retry`);
+    Object.assign(job, { state: r.job.state, error: null });
+    save(); render(); toast("Trying again — it'll post within a minute");
+  } catch (e) { toast(e.message); }
+}
+
+// Cancel scheduled auto-posts (best effort; used when a post or account is removed)
+async function cancelJobs(post, acctIds) {
+  for (const id of acctIds) {
+    const job = jobOf(post, id);
+    if (!job) continue;
+    if (["scheduled", "failed"].includes(job.state)) { try { await srv("DELETE", `/api/jobs/${job.id}`); } catch (e) { /* already gone */ } }
+    delete post.jobs[id];
+  }
+}
+
+/* Photos and videos: made to fit Instagram before uploading */
+const IG_MIN_RATIO = 0.8, IG_MAX_RATIO = 1.91, IG_MAX_W = 1440, MAX_UPLOAD = 25 * 1024 * 1024;
+
+function canvasBlob(canvas, quality) {
+  return new Promise((r) => canvas.toBlob(r, "image/jpeg", quality));
+}
+async function loadBitmap(file) {
+  try { return await createImageBitmap(file); } catch (e) { /* fall back to <img> (older Safari) */ }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return img;
+  } finally { URL.revokeObjectURL(url); }
+}
+async function prepareImage(file) {
+  let bmp;
+  try { bmp = await loadBitmap(file); } catch (e) { throw new Error(`Couldn't open ${file.name}. Use a JPEG or PNG photo.`); }
+  const w = bmp.width, h = bmp.height;
+  // Crop the middle to Instagram's allowed shapes (4:5 tall to 1.91:1 wide)
+  let sw = w, sh = h;
+  if (w / h > IG_MAX_RATIO) sw = Math.round(h * IG_MAX_RATIO);
+  if (w / h < IG_MIN_RATIO) sh = Math.round(w / IG_MIN_RATIO);
+  const scale = Math.min(1, IG_MAX_W / sw);
+  const c = document.createElement("canvas");
+  c.width = Math.round(sw * scale); c.height = Math.round(sh * scale);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); // transparent PNGs get a white background
+  ctx.drawImage(bmp, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, c.width, c.height);
+  let blob = await canvasBlob(c, 0.9);
+  if (blob.size > 8e6) blob = await canvasBlob(c, 0.75);
+  const t = document.createElement("canvas"), ts = 120 / Math.max(c.width, c.height);
+  t.width = Math.round(c.width * ts); t.height = Math.round(c.height * ts);
+  t.getContext("2d").drawImage(c, 0, 0, t.width, t.height);
+  return { type: "image", blob, thumb: t.toDataURL("image/jpeg", 0.7), cropped: sw !== w || sh !== h };
+}
+async function videoThumb(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+    await Promise.race([new Promise((r, x) => { v.onloadeddata = r; v.onerror = x; }), new Promise((_, x) => setTimeout(x, 4000))]);
+    v.currentTime = Math.min(0.5, (v.duration || 1) / 2);
+    await Promise.race([new Promise((r) => (v.onseeked = r)), new Promise((_, x) => setTimeout(x, 3000))]);
+    const c = document.createElement("canvas"), ts = 120 / Math.max(v.videoWidth, v.videoHeight);
+    c.width = Math.round(v.videoWidth * ts); c.height = Math.round(v.videoHeight * ts);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.7);
+  } catch (e) { return null; } finally { URL.revokeObjectURL(url); }
+}
+async function prepareVideo(file) {
+  const type = file.type || (/\.mov$/i.test(file.name) ? "video/quicktime" : /\.mp4$/i.test(file.name) ? "video/mp4" : "");
+  if (!["video/mp4", "video/quicktime"].includes(type)) throw new Error(`${file.name}: use an MP4 or MOV video.`);
+  if (file.size > MAX_UPLOAD) throw new Error(`${file.name} is ${(file.size / 1048576).toFixed(0)} MB. Videos can be up to 25 MB — export a shorter or smaller version.`);
+  return { type: "video", blob: new Blob([file], { type }), thumb: await videoThumb(file) };
+}
+
 /* ---------- Post editor ---------- */
 function openPost(id, preset = {}) {
   const editing = id ? S.posts.find((p) => p.id === id) : null;
   const post = editing ? structuredClone(editing) : { id: uid(), title: "", text: "", notes: "", link: "", when: "", targets: [], done: {}, created: Date.now(), ...preset };
+  post.jobs ||= {};
+  let media = (post.media || []).map((m) => ({ ...m }));
+  let busy = false;
   const dlg = $("#post-dlg");
   dlg.innerHTML = `<form class="dlg" method="dialog" id="post-form">
     <div class="dlg-head"><h2>${editing ? "Edit post" : "New post"}</h2><button type="button" class="btn sm ghost" data-close aria-label="Close">✕</button></div>
@@ -887,7 +1122,7 @@ function openPost(id, preset = {}) {
         <div class="field" style="font-weight:600;font-size:14px;margin-bottom:6px">Post to</div>
         ${S.accounts.length ? `<div class="choose">${S.accounts.map((a) => `<label>
             <input type="checkbox" name="targets" value="${a.id}" ${post.targets.includes(a.id) ? "checked" : ""}>
-            ${picon(a.platform, true)} ${esc(a.label || "@" + a.handle)}</label>`).join("")}</div>`
+            ${picon(a.platform, true)} ${esc(a.label || "@" + a.handle)}${autoCapable(a) ? " ⚡" : ""}</label>`).join("")}</div>`
           : `<div class="small muted">No accounts yet. <button type="button" class="btn sm" data-act="add-acct">+ Add account</button></div>`}
       </div>
       <label class="field">Caption
@@ -895,6 +1130,7 @@ function openPost(id, preset = {}) {
       </label>
       ${S.snippets.length ? `<div class="chips">${S.snippets.map((s, i) => `<button type="button" class="chip" data-snip="${i}" title="${esc(s)}">+ ${esc(s.length > 28 ? s.slice(0, 28) + "…" : s)}</button>`).join("")}</div>` : ""}
       <div class="limits" id="limits"></div>
+      <div id="ig-area"></div>
       <div class="two">
         <label class="field">When <span class="hint">Leave empty to keep it as a draft</span>
           <input type="datetime-local" name="when" value="${esc(post.when)}">
@@ -911,20 +1147,28 @@ function openPost(id, preset = {}) {
           <input type="text" name="notes" value="${esc(post.notes)}">
         </label>
       </div>
+      <div class="form-err" id="save-err" role="alert" hidden></div>
     </div>
     <div class="dlg-foot">
       ${editing ? `<button type="button" class="btn danger" data-act="del-post">Delete</button><button type="button" class="btn" data-act="dup-post">Duplicate</button>` : ""}
       <span class="spacer"></span>
       <button type="button" class="btn" data-close>Cancel</button>
-      <button class="btn primary">Save</button>
+      <button class="btn primary" id="save-btn">Save</button>
     </div>
   </form>`;
 
   const form = $("#post-form", dlg);
   const text = $("#post-text", dlg);
+  const errBox = $("#save-err", dlg);
+  const saveBtn = $("#save-btn", dlg);
+  const showErr = (msg) => { errBox.textContent = msg; errBox.hidden = !msg; if (msg) errBox.scrollIntoView({ block: "nearest" }); };
+  const setBusy = (on, label = "Save") => { busy = on; saveBtn.disabled = on; saveBtn.textContent = label; };
+  const chosenAccts = () => [...form.querySelectorAll("input[name=targets]:checked")].map((i) => acctById(i.value)).filter(Boolean);
+  const caption = () => text.value + (form.link.value.trim() && !text.value.includes(form.link.value.trim()) ? `\n\n${form.link.value.trim()}` : "");
+  const sent = (a) => post.done[a.id] || ["working", "published"].includes(jobOf(post, a.id)?.state);
+
   const updateLimits = () => {
-    const chosen = [...form.querySelectorAll('input[name=targets]:checked')].map((i) => acctById(i.value)).filter(Boolean);
-    const plats = [...new Set(chosen.map((a) => a.platform))];
+    const plats = [...new Set(chosenAccts().map((a) => a.platform))];
     const t = text.value;
     $("#limits", dlg).innerHTML = plats.map((pl) => {
       const p = PLATFORMS[pl], n = textLength(t, pl), r = n / p.limit;
@@ -935,13 +1179,57 @@ function openPost(id, preset = {}) {
         <span class="n">${fmtNum(n)} / ${fmtNum(p.limit)}${tagOver ? ` · ${tags} tags (max ${p.hashtags})` : ""}</span></div>`;
     }).join("") || (S.accounts.length ? `<div class="small muted">Pick accounts to see each site's length limit.</div>` : "");
   };
-  updateLimits();
-  form.addEventListener("input", updateLimits);
-  form.addEventListener("change", updateLimits);
 
-  dlg.onclick = (e) => {
+  const renderIg = () => {
+    const area = $("#ig-area", dlg);
+    const autos = chosenAccts().filter((a) => autoCapable(a) || jobOf(post, a.id));
+    if (!autos.length) { area.innerHTML = ""; return; }
+    const locked = autos.every(sent);
+    const when = form.when.value;
+    const tiles = media.map((m, i) => `<div class="mthumb">${m.thumb ? `<img src="${esc(m.thumb)}" alt="">` : "🎬"}
+        ${m.type === "video" ? `<span class="kind">▶ Video</span>` : ""}
+        ${locked ? "" : `<button type="button" class="x" data-mdel="${i}" aria-label="Remove">✕</button>`}</div>`).join("");
+    let note;
+    if (locked) note = "Already sent to Instagram — changes here won't affect the live post.";
+    else if (!media.length) note = "Add a photo or video and it posts automatically. Without one you'll get a reminder to post it yourself — Instagram doesn't allow text-only posts.";
+    else if (!when) note = "Pick a time below and it'll post automatically. Leave it empty to keep a draft.";
+    else note = `Posts automatically ${fmtWhen(when)}${new Date(when) <= Date.now() ? " (within a minute of saving)" : ""}. ${media.length > 1 ? `Carousel of ${media.length}.` : media[0].type === "video" ? "Posts as a Reel." : ""}`;
+    area.innerHTML = `<div class="ig-box">
+      <h3>⚡ Auto-post to Instagram <span class="small muted" style="font-weight:400">${autos.map((a) => "@" + esc(a.handle)).join(", ")}</span></h3>
+      <div class="media-grid">${tiles}
+        ${locked || media.length >= 20 ? "" : `<label class="madd" id="madd">+ Photo or video<input type="file" id="ig-files" accept="image/*,video/mp4,video/quicktime,.mov" multiple hidden></label>`}
+      </div>
+      <div class="small muted">${note}</div>
+      ${!locked && media.length === 1 && media[0].type === "image" ? `<label class="field">Alt text <span class="hint">Optional. Describes the photo for people using screen readers.</span>
+        <input type="text" name="alt" maxlength="1000" value="${esc(post.altText || "")}"></label>` : ""}
+      ${!locked && media.length ? `<div class="small muted">Photos are cropped to fit Instagram (4:5 tall to 1.91:1 wide). Several items make a carousel; one video makes a Reel (MP4/MOV, up to 25 MB).</div>` : ""}
+    </div>`;
+  };
+
+  const refresh = () => { updateLimits(); renderIg(); };
+  refresh();
+  form.addEventListener("input", (e) => { if (e.target.name === "alt") post.altText = e.target.value; else updateLimits(); if (e.target.name === "when") renderIg(); });
+  form.addEventListener("change", async (e) => {
+    if (e.target.name === "targets") return refresh();
+    if (e.target.id !== "ig-files") return;
+    const files = [...e.target.files];
+    if (media.length + files.length > 20) { showErr("Instagram carousels can have at most 20 photos and videos."); return; }
+    const add = $("#madd", dlg);
+    if (add) add.textContent = "Preparing…";
+    showErr("");
+    for (const f of files) {
+      try { media.push(await (f.type.startsWith("video/") || /\.(mov|mp4)$/i.test(f.name) ? prepareVideo(f) : prepareImage(f))); }
+      catch (err) { showErr(err.message); }
+    }
+    if (media.some((m) => m.cropped)) toast("Cropped to fit Instagram's shape");
+    renderIg();
+  });
+
+  dlg.onclick = async (e) => {
     const b = e.target.closest("button");
-    if (!b) { if (e.target === dlg) dlg.close(); return; }
+    if (!b) { if (e.target === dlg && !busy) dlg.close(); return; }
+    if (b.dataset.mdel != null) { media.splice(+b.dataset.mdel, 1); renderIg(); return; }
+    if (busy) return;
     if (b.hasAttribute("data-close")) dlg.close();
     else if (b.dataset.snip != null) {
       const s = S.snippets[+b.dataset.snip], st = text.selectionStart ?? text.value.length, en = text.selectionEnd ?? st;
@@ -950,7 +1238,10 @@ function openPost(id, preset = {}) {
       text.focus(); text.selectionStart = text.selectionEnd = st + sep.length + s.length;
       updateLimits();
     } else if (b.dataset.act === "del-post") {
-      if (!confirm("Delete this post?")) return;
+      const live = Object.values(editing.jobs || {}).some((j) => j.state === "working");
+      if (!confirm(live ? "Instagram is already posting this, so deleting it here won't stop that. Delete it from Social Hub anyway?" : "Delete this post?")) return;
+      setBusy(true, "Deleting…");
+      await cancelJobs(editing, Object.keys(editing.jobs || {}));
       S.posts = S.posts.filter((p) => p.id !== post.id); save(); dlg.close(); render(); toast("Post deleted");
     } else if (b.dataset.act === "dup-post") {
       dlg.close();
@@ -958,8 +1249,16 @@ function openPost(id, preset = {}) {
     } else if (b.dataset.act === "add-acct") { dlg.close(); openAccount(); }
   };
 
-  form.onsubmit = (e) => {
+  const commit = () => {
+    const i = S.posts.findIndex((p) => p.id === post.id);
+    if (i >= 0) S.posts[i] = post; else S.posts.push(post);
+    save(); render();
+  };
+
+  form.onsubmit = async (e) => {
     e.preventDefault();
+    if (busy) return;
+    showErr("");
     const fd = new FormData(form);
     const whenChanged = post.when !== fd.get("when");
     Object.assign(post, {
@@ -969,10 +1268,62 @@ function openPost(id, preset = {}) {
     // Keep "posted" ticks only for accounts still on the post
     post.done = Object.fromEntries(Object.entries(post.done).filter(([k]) => post.targets.includes(k)));
     if (whenChanged) delete post.notified;
-    const i = S.posts.findIndex((p) => p.id === post.id);
-    if (i >= 0) S.posts[i] = post; else S.posts.push(post);
-    save(); dlg.close(); render();
-    toast(post.when ? `Scheduled for ${fmtWhen(post.when)}` : "Saved as draft");
+
+    const autos = post.targets.map(acctById).filter((a) => autoCapable(a) && !sent(a));
+    const wantAuto = !!(post.when && media.length && autos.length);
+    const cap = caption();
+    if (wantAuto) {
+      const issues = problems(cap, "instagram");
+      if ((cap.match(/(^|\s)@[\w.]+/g) || []).length > 20) issues.push("more than 20 @mentions");
+      if (issues.length) { showErr(`Instagram won't accept this caption: ${issues.join(", ")}.`); return; }
+    }
+
+    try {
+      // Drop auto-posts that are no longer wanted (account unticked, no time, or no media)
+      for (const acct of Object.keys(post.jobs)) {
+        const still = wantAuto && autos.some((a) => a.id === acct);
+        if (!still && !["working", "published"].includes(post.jobs[acct].state)) { setBusy(true, "Saving…"); await cancelJobs(post, [acct]); }
+      }
+      // Upload new photos/videos (drafts too, so they survive a reload)
+      if (serverReady() && media.some((m) => m.blob)) {
+        for (let i = 0; i < media.length; i++) {
+          if (!media[i].blob) continue;
+          setBusy(true, `Uploading ${i + 1} of ${media.length}…`);
+          const r = await srv("POST", "/api/media", media[i].blob);
+          Object.assign(media[i], { id: r.id, url: r.url });
+          delete media[i].blob; delete media[i].cropped;
+        }
+      }
+      post.media = media.filter((m) => m.id).map(({ id, type, url, thumb }) => ({ id, type, url, thumb }));
+      if (wantAuto) {
+        setBusy(true, "Scheduling…");
+        const payload = {
+          caption: cap, runAt: new Date(post.when).getTime(),
+          media: post.media.map(({ id, type, url }) => ({ id, type, url })),
+          altText: post.media.length === 1 && post.media[0].type === "image" ? (post.altText || "") : "",
+        };
+        const keep = (j) => ({ id: j.id, state: j.state, error: j.error, permalink: j.permalink });
+        for (const a of autos) {
+          const job = post.jobs[a.id];
+          if (job?.state === "scheduled") {
+            try { post.jobs[a.id] = keep((await srv("PATCH", `/api/jobs/${job.id}`, payload)).job); continue; }
+            catch (err) { if (err.status === 409) continue; if (err.status !== 404) throw err; }
+          }
+          if (job?.state === "failed") await cancelJobs(post, [a.id]);
+          post.jobs[a.id] = keep((await srv("POST", "/api/jobs", { ...payload, igId: a.igId })).job);
+        }
+      }
+    } catch (err) {
+      // Keep whatever reached the server so nothing is left orphaned, and let them try again
+      commit();
+      setBusy(false);
+      showErr(err.message);
+      return;
+    }
+    commit();
+    dlg.close();
+    toast(wantAuto ? `Will post to Instagram automatically ${fmtWhen(post.when)}` : post.when ? `Scheduled for ${fmtWhen(post.when)}` : "Saved as draft");
+    if (wantAuto && new Date(post.when) <= Date.now()) setTimeout(syncJobs, 75000);
   };
   dlg.showModal();
   if (!editing) text.focus();
@@ -1017,7 +1368,10 @@ function openAccount(id) {
       const n = S.posts.filter((p) => p.targets.includes(a.id) && !isPosted(p)).length;
       if (!confirm(`Remove @${a.handle}?${n ? ` It will be taken off ${n} planned post${n > 1 ? "s" : ""}.` : ""}`)) return;
       S.accounts = S.accounts.filter((x) => x.id !== a.id);
-      for (const p of S.posts) { p.targets = p.targets.filter((t) => t !== a.id); delete p.done[a.id]; }
+      for (const p of S.posts) {
+        if (p.jobs?.[a.id]) cancelJobs(p, [a.id]);
+        p.targets = p.targets.filter((t) => t !== a.id); delete p.done[a.id];
+      }
       save(); dlg.close(); render(); toast("Account removed");
     }
   };
@@ -1101,6 +1455,23 @@ document.addEventListener("click", (e) => {
     case "del-snip": S.snippets.splice(+b.dataset.i, 1); save(); renderSettings(); break;
     case "export": exportData(); break;
     case "trend-use": openPost(null, { text: b.dataset.text }); break;
+    case "ig-retry": retryJob(post, acct); break;
+    case "ig-check": refreshServer(); break;
+    case "ig-connect": connectInstagram(b); break;
+    case "ig-disconnect": disconnectInstagram(b.dataset.ig, b.dataset.name); break;
+    case "ig-forget":
+      if (confirm("Forget this server? Posts already scheduled on it will still go out; Social Hub just won't show their progress.")) {
+        S.server = { url: "", key: "" }; S.ig = { accounts: [] }; igCheck = { busy: false, error: "" }; save(); renderSettings();
+      }
+      break;
+    case "gen-pass": {
+      const pass = [...crypto.getRandomValues(new Uint8Array(18))].map((x) => "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"[x % 55]).join("");
+      const out = $("#gen-pass-out");
+      out.hidden = false;
+      out.innerHTML = `Your passcode: <code style="user-select:all">${pass}</code> <button type="button" class="btn sm" data-act="copy-pass" data-pass="${pass}">Copy</button><br><span class="muted">Save it somewhere safe — you'll paste it into GitHub and here.</span>`;
+      break;
+    }
+    case "copy-pass": copyText(b.dataset.pass).then((ok) => toast(ok ? "Passcode copied" : "Select the passcode to copy it")); break;
     case "trend-refresh": loadAllTrends(true); break;
     case "trend-retry": loadTrend(b.dataset.k, true); break;
     case "wipe":
@@ -1126,6 +1497,17 @@ document.addEventListener("input", (e) => {
 });
 
 document.addEventListener("submit", (e) => {
+  if (e.target.id === "server-form") {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    let url = String(fd.get("url") || "").trim().replace(/\/+$/, "");
+    if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+    S.server = { url, key: String(fd.get("key") || "").trim() };
+    S.ig = { accounts: [] };
+    save();
+    if (serverReady()) refreshServer(); else { igCheck = { busy: false, error: "" }; renderSettings(); }
+    return;
+  }
   if (e.target.id !== "snip-form") return;
   e.preventDefault();
   const v = $("#snip-text").value.trim();
@@ -1150,7 +1532,7 @@ document.addEventListener("change", async (e) => {
       const data = JSON.parse(await file.text());
       if (!Array.isArray(data.accounts) || !Array.isArray(data.posts)) throw new Error("bad");
       if (!confirm(`Replace what's here with ${data.accounts.length} accounts and ${data.posts.length} posts from the backup?`)) return;
-      S = { ...blank(), ...data };
+      S = { ...blank(), ...data, server: data.server?.key ? data.server : S.server };
       S.posts.forEach((p) => { p.targets ||= []; p.done ||= {}; p.text ??= ""; });
       save(); applyTheme(); render(); toast("Backup imported");
     } catch (err) { toast("That file isn't a Social Hub backup"); }
@@ -1161,7 +1543,8 @@ document.addEventListener("change", async (e) => {
 $("#fab").addEventListener("click", () => openPost(null, view === "calendar" && calDay ? { when: `${calDay}T12:00` } : {}));
 
 function exportData() {
-  const blob = new Blob([JSON.stringify(S, null, 2)], { type: "application/json" });
+  // The server passcode stays out of backups in case a backup file gets shared
+  const blob = new Blob([JSON.stringify({ ...S, server: { url: S.server?.url || "", key: "" } }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `social-hub-backup-${dayKey(new Date())}.json`;
@@ -1179,6 +1562,40 @@ function toast(msg) {
 function applyTheme() {
   if (S.theme === "auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme", S.theme);
+}
+
+async function connectInstagram(btn) {
+  btn.disabled = true;
+  try {
+    const { url } = await srv("POST", "/api/connect", { returnTo: location.href.split("#")[0] });
+    location.href = url;
+  } catch (e) { toast(e.message); btn.disabled = false; }
+}
+
+async function disconnectInstagram(igId, name) {
+  if (!confirm(`Disconnect @${name}? Its scheduled auto-posts will be cancelled; you can still post to it by hand.`)) return;
+  try {
+    await srv("DELETE", `/api/accounts/${encodeURIComponent(igId)}`);
+    for (const a of S.accounts) if (a.igId === igId) delete a.igId;
+    for (const p of S.posts) for (const j of Object.values(p.jobs || {})) if (j.state === "scheduled") j.state = "canceled";
+    toast(`Disconnected @${name}`);
+  } catch (e) { toast(e.message); }
+  refreshServer();
+}
+
+// Coming back from Instagram's sign-in page
+function handleConnectReturn() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.has("ig-connected") && !h.has("ig-error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  view = "settings";
+  if (h.has("ig-error")) { toast(`Instagram didn't connect: ${h.get("ig-error")}`); return; }
+  const username = h.get("ig-connected"), igId = h.get("ig-id");
+  let a = S.accounts.find((x) => x.platform === "instagram" && x.handle.toLowerCase() === username.toLowerCase());
+  if (!a) { a = { id: uid(), platform: "instagram", handle: username, label: "", url: "", history: [] }; S.accounts.push(a); }
+  a.igId = igId;
+  save();
+  toast(`@${username} is connected — posts to it can now go out automatically`);
 }
 
 /* ---------- Reminders ---------- */
@@ -1200,8 +1617,12 @@ function checkDue() {
 
 /* ---------- Start ---------- */
 applyTheme();
+handleConnectReturn();
 render();
 checkDue();
+refreshServer().then(syncJobs);
+setInterval(syncJobs, 60000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncJobs(); });
 // Refresh "due now" badges each minute (not on Posts or Settings, where it would steal focus from typing)
 setInterval(() => { checkDue(); if (!document.querySelector("dialog[open]") && (view === "home" || view === "calendar")) render(); }, 60000);
 window.addEventListener("storage", (e) => { if (e.key === KEY) { S = load(); render(); } });
