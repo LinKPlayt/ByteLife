@@ -661,7 +661,7 @@ function freshState(name){
 // ---- the setup screen: gender and personality ----
 const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
   Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
-const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
+const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', build:'random', height:'random', talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
 function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
 const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
 const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
@@ -873,6 +873,9 @@ function setupDetails(gender){
   if(setup.facial !== 'random' && gender !== 'female') d.facial = setup.facial;
   if(setup.earrings !== 'random') d.earrings = setup.earrings;
   if(setup.glasses !== 'random') d.glasses = setup.glasses;
+  if(setup.build !== 'random') d.build = setup.build;
+  // a height in the chosen band, placed by the setup seed so it doesn't jump around while picking
+  if(setup.height !== 'random') d.height = heightBand(gender, setup.height, (setup.seed % 1000) / 1000);
   return d;
 }
 function setupPreview(){
@@ -901,7 +904,9 @@ function renderSetup(){
       (setup.gender === 'female' ? '' : '<span class="mini-label">Facial hair <span style="text-transform:none;letter-spacing:0">· from 17</span></span>' + opts('facial', [['random','Random'],['none','None'],['stubble','Stubble'],['beard','Beard'],['mustache','Mustache'],['goatee','Goatee']])) +
       '<span class="mini-label">Freckles</span>' + opts('freckles', [['random','Random'],['yes','Freckles'],['no','None']]) +
       '<span class="mini-label">Earrings <span style="text-transform:none;letter-spacing:0">· from 10</span></span>' + opts('earrings', [['random','Random'],['none','None'],['studs','Studs'],['hoops','Hoops']]) +
-      '<span class="mini-label">Glasses</span>' + opts('glasses', [['random','Random'],['on','Glasses'],['off','None']]);
+      '<span class="mini-label">Glasses</span>' + opts('glasses', [['random','Random'],['on','Glasses'],['off','None']]) +
+      '<span class="mini-label">Body type <span style="text-transform:none;letter-spacing:0">· changes with exercise and diet</span></span>' + opts('build', [['random','Random']].concat(Object.entries(BUILDS))) +
+      `<span class="mini-label">Height <span style="text-transform:none;letter-spacing:0">· ${setup.height === 'random' ? 'grown up' : 'about ' + fmtHeight(setupPreview().appearance.height) + ' grown up'}</span></span>` + opts('height', [['random','Random'],['short','Short'],['average','Average'],['tall','Tall']]);
   }
   const fb = document.getElementById('familyBox');
   if(fb){
@@ -1161,6 +1166,31 @@ function avatarSeed(st){
 }
 const EYE_COLORS = ['#4a2f1c', '#5e3b20', '#7a5a2e', '#4f6b3a', '#3f6f9a', '#6c7a86'];
 const EYE_NAMES = ['Dark brown', 'Brown', 'Hazel', 'Green', 'Blue', 'Grey'];
+const BUILDS = {slim:'Slim', average:'Average', athletic:'Athletic', heavy:'Heavyset'};
+// adult height bands in cm; non-binary sits between the two
+const HEIGHT_BANDS = {female:{short:[150, 158], average:[159, 168], tall:[169, 182]}, male:{short:[160, 170], average:[171, 182], tall:[183, 198]}};
+function heightBand(gender, band, roll){
+  const pickB = g => HEIGHT_BANDS[g][band], [lo, hi] = gender === 'female' || gender === 'male' ? pickB(gender) : pickB('female').map((v, i) => Math.round((v + pickB('male')[i]) / 2));
+  return Math.round(lo + (hi - lo) * roll);
+}
+// grown-up height: chosen at birth, or rolled from the person's seed (about ±10cm around the average)
+function adultHeight(st){
+  const ap = st.appearance || {};
+  if(ap.height) return ap.height;
+  const seed = avatarSeed(st), r = k => ((Math.imul(seed ^ (k * 2654435761), 2246822519) >>> 0) % 1000) / 1000;
+  const mid = st.gender === 'female' ? 164 : st.gender === 'male' ? 177 : 170;
+  return Math.round(mid + (r(11) + r(12) - 1) * 12);
+}
+// how tall they are now: children grow toward their adult height, and everyone shrinks a little after 65
+function heightNow(st){
+  const a = st.age || 0, girl = st.gender === 'female';
+  const pts = girl ? [[0, 0.31], [1, 0.45], [2, 0.52], [4, 0.62], [6, 0.7], [8, 0.78], [10, 0.85], [12, 0.93], [14, 0.98], [16, 1]]
+                   : [[0, 0.29], [1, 0.43], [2, 0.5], [4, 0.59], [6, 0.66], [8, 0.73], [10, 0.79], [12, 0.85], [14, 0.92], [16, 0.97], [18, 1]];
+  let frac = 1;
+  for(let i = 0; i < pts.length - 1; i++) if(a >= pts[i][0] && a < pts[i + 1][0]){ frac = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * (a - pts[i][0]) / (pts[i + 1][0] - pts[i][0]); break; }
+  return Math.round(adultHeight(st) * frac - Math.max(0, a - 65) * 0.15);
+}
+function fmtHeight(cm){ const inch = Math.round(cm / 2.54); return `${Math.floor(inch / 12)}′${inch % 12}″ (${cm} cm)`; }
 // 0 (darkest) to 255 (lightest); drives which looks are likely when left to chance
 function skinLum(hex){ const v = [1, 3, 5].map(i => parseInt(String(hex || '#c68a5c').slice(i, i + 2), 16)); return 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]; }
 // What the portrait wears: prison, then the job, then school, then a plain outfit for the age.
@@ -1205,7 +1235,8 @@ function avatarLooks(st){
   const freckles = age >= 4 && (ap.freckles != null ? ap.freckles : lum > 170 && r(8) < 0.35);
   // 'off' means contact lenses, even with a prescription
   const glasses = ap.glasses === 'on' ? age >= 6 : ap.glasses === 'off' ? false : (smarts > 74 && age >= 6) || (!young && !!(st.health && st.health.glasses));
-  return { eyeColor, balding, facial, earrings, hoops, freckles, glasses };
+  const bRoll = r(13), build = ap.build || (bRoll < 0.25 ? 'slim' : bRoll < 0.7 ? 'average' : bRoll < 0.85 ? 'athletic' : 'heavy');
+  return { eyeColor, balding, facial, earrings, hoops, freckles, glasses, build };
 }
 function drawAvatar(st){
   st = st || state;
@@ -1228,10 +1259,11 @@ function drawAvatar(st){
           : child ? {W:30.5, top:44, chin:34, hw:6.6, eh:3.8, sp:13.4, nose:18, mouth:27, brow:9.5, iris:1.12, ns:0.85}
           : teen ? {W:29.5, top:43, chin:38, hw:6.4, eh:3.5, sp:13.2, nose:20.5, mouth:30.5, brow:9.5, iris:1.08, ns:0.95}
           : {W: male ? 30 : 28.5, top:42, chin: male ? 42 : 40, hw:6.4, eh: age >= 65 ? 3 : 3.3, sp:13.2, nose:22, mouth:32.5, brow:9.5, iris:1.06, ns:1};
-  const W = G.W, eyeY = young ? 98 : kid ? 92 : 86;
+  const bodyK = young ? 0.3 : kid ? 0.6 : 1, buildOf = avatarLooks(st).build;
+  const W = G.W + ({slim:-1.6, athletic:0.4, heavy:3}[buildOf] || 0) * bodyK, eyeY = young ? 98 : kid ? 92 : 86;
   const topY = eyeY - G.top, chinY = eyeY + G.chin, noseY = eyeY + G.nose, mY = eyeY + G.mouth, browY = eyeY - G.brow;
   const hairY = eyeY - (young ? 31 : kid ? 29 : 31);
-  const J = W * (young ? 0.86 : male && adult ? 0.86 : female ? 0.77 : 0.8), cw = young ? 13 : male && adult ? 10.5 : 8.5;
+  const J = W * ((young ? 0.86 : male && adult ? 0.86 : female ? 0.77 : 0.8) + ({heavy:0.07, athletic:0.02, slim:-0.02}[buildOf] || 0) * bodyK), cw = young ? 13 : male && adult ? 10.5 : 8.5;
   const sy = chinY + (young ? 13 : 19);
 
   // Hair turns grey from about fifty, sooner when health is poor; dye covers it.
@@ -1239,7 +1271,7 @@ function drawAvatar(st){
   const hairColor = ap.dye || hexMix(hair, '#cfc9bb', greyT);
   const hairHi = hexMix(hairColor, '#ffffff', 0.3), hairLo = hexMix(hairColor, '#000000', 0.35);
   const browColor = hexMix(ap.dye ? hair : hexMix(hair, '#bdb6a8', greyT * 0.6), '#000000', 0.12);
-  const { eyeColor, balding, facial, earrings, hoops, freckles, glasses } = avatarLooks(st);
+  const { eyeColor, balding, facial, earrings, hoops, freckles, glasses, build } = avatarLooks(st);
   const tired = health < 35, sick = health < 25;
   const fame = st.fame ? st.fame.level : 0;
   const prison = !!(st.crime && st.crime.prison);
@@ -1256,7 +1288,9 @@ function drawAvatar(st){
   let backdrop = `<rect width="200" height="200" fill="url(#${id}bg)"/>`;
   if(prison){
     backdrop += [40, 80, 120, 160].map(y => `<line x1="0" y1="${y}" x2="200" y2="${y}" stroke="#000" stroke-opacity="0.08"/>`).join('') + [0, 1, 2, 3, 4].map(i => `<line x1="${(i * 50 + (i % 2) * 25) % 200}" y1="${i * 40}" x2="${(i * 50 + (i % 2) * 25) % 200}" y2="${i * 40 + 40}" stroke="#000" stroke-opacity="0.07"/>`).join('')
-      + [22, 58, 142, 178].map(x => `<rect x="${x - 4}" y="0" width="8" height="200" fill="url(#${id}bar)"/>`).join('') + `<rect x="0" y="14" width="200" height="7" fill="url(#${id}barh)"/>`;
+      + [22, 58, 142, 178].map(x => `<rect x="${x - 4}" y="0" width="8" height="200" fill="url(#${id}bar)"/>`).join('') + `<rect x="0" y="14" width="200" height="7" fill="url(#${id}barh)"/>`
+      // a booking-photo height chart, with their height marked level with the top of the head
+      + `<g font-family="monospace" fill="#2b3034">${[-2, -1, 0, 1, 2].map(i => `<line x1="0" y1="${topY + i * 14}" x2="200" y2="${topY + i * 14}" stroke="#2b3034" stroke-opacity="${i ? 0.18 : 0.5}" stroke-width="${i ? 0.8 : 1.2}"/>`).join('')}<text x="40" y="${topY - 2.5}" font-size="8" font-weight="700" text-anchor="middle" opacity="0.8">${fmtHeight(heightNow(st)).split(' ')[0]}</text></g>`;
   } else if(fame >= 20){
     backdrop += `<g filter="url(#${id}b)">` + Array.from({length:9}, (_, i) => `<circle cx="${f(10 + rng() * 180)}" cy="${f(8 + rng() * 90)}" r="${f(5 + rng() * 9)}" fill="${i % 3 ? '#fff6d8' : '#ffffff'}" opacity="${f((fame >= 45 ? 0.45 : 0.25) + rng() * 0.2)}"/>`).join('') + '</g>';
   }
@@ -1290,7 +1324,7 @@ function drawAvatar(st){
 
   // ---- body and clothes ----
   const of = avatarOutfit(st, stage, r);
-  const bw = young ? 44 : kid ? 54 : (male ? 66 : 60) + Math.min(6, fit * 2);
+  const bw = Math.min(80, (young ? 44 : kid ? 54 : (male ? 66 : 60) + Math.min(6, fit * 2)) + ({slim:-10, athletic:8, heavy:14}[build] || 0) * bodyK);
   const body = `M${100 - bw - 14},200 Q${100 - bw - 10},${sy + 10} ${100 - bw + 14},${sy + 2} Q${100 - 24},${sy - 6} 100,${sy - 6} Q${100 + 24},${sy - 6} ${100 + bw - 14},${sy + 2} Q${100 + bw + 10},${sy + 10} ${100 + bw + 14},200Z`;
   const cloth = of.color, clothLo = hexMix(cloth, '#000000', 0.22), clothHi = hexMix(cloth, '#ffffff', 0.25);
   const nx = 100, ny = sy - 4;
@@ -1323,10 +1357,11 @@ function drawAvatar(st){
     ? `<g opacity="0.6" stroke="#2c3a5a" fill="none" stroke-width="1.1"><path d="M${100 - bw + 8},${sy + 14} q6,-8 12,0 q-6,8 -12,0Z"/><path d="M${100 - bw + 14},${sy + 18} v8"/>${st.tattoos > 1 ? `<path d="M${100 + bw - 22},${sy + 16} l4,-6 l4,6 l-4,6Z"/>` : ''}</g>` : '';
 
   // ---- neck ----
-  const nw = young ? 11 : kid ? 11.5 : male ? 14 : 12;
+  const nw = (young ? 11 : kid ? 11.5 : male ? 14 : 12) + ({slim:-1.5, athletic:1.5, heavy:3}[build] || 0) * bodyK;
   const neckD = `M${100 - nw},${chinY - 14} C${100 - nw},${chinY + 6} ${100 - nw - 2},${sy - 4} ${100 - nw - 9},${sy + 2} L${100 + nw + 9},${sy + 2} C${100 + nw + 2},${sy - 4} ${100 + nw},${chinY + 6} ${100 + nw},${chinY - 14}Z`;
   const neck = `<path d="${neckD}" fill="${skin}"/><path d="${neckD}" fill="url(#${id}nk)"/><path d="M${100 + nw - 3},${chinY} q1,10 5,${sy - chinY - 2}" stroke="${deep}" stroke-width="3" opacity="0.25" fill="none" filter="url(#${id}s)"/>`
-    + (male && adult ? `<path d="M98,${chinY + 9} q2,3.5 4,0" stroke="${shade}" stroke-width="1.2" fill="none" opacity="0.5" filter="url(#${id}h)"/>` : '');
+    + (male && adult ? `<path d="M98,${chinY + 9} q2,3.5 4,0" stroke="${shade}" stroke-width="1.2" fill="none" opacity="0.5" filter="url(#${id}h)"/>` : '')
+    + (build === 'heavy' && !young ? `<path d="M${100 - nw + 2},${chinY + 3} Q100,${chinY + 9} ${100 + nw - 2},${chinY + 3}" stroke="${shade}" stroke-width="2.2" fill="none" opacity="0.35" filter="url(#${id}s)"/>` : '');
 
   // ---- ears ----
   const ear = s => { const x = 100 + s * (W - 1.5), y0 = eyeY - 7, y1 = noseY + 1;
@@ -2007,8 +2042,8 @@ const CHOICE_EVENTS = [
     {label:'Hang up and call the bank directly', delta:{happy:-1,smarts:1}},
     {label:'Give the caller the details they ask for', risk:0.15, win:{happy:1}, lose:{money:-3000,happy:-6}, winText:'It really was the bank.', loseText:'It was the scammers.'}],
   [30,70,n=>`A doctor tells ${n} they need to lose weight or face serious problems.`,
-    {label:'Overhaul diet and exercise', delta:{health:8,happy:-2,looks:2}},
-    {label:'Try some pills from the internet', risk:0.3, win:{health:3,looks:2}, lose:{health:-6,money:-500}, winText:'They actually help a bit.', loseText:'They are useless and make them sick.'},null,1],
+    {label:'Overhaul diet and exercise', delta:{health:8,happy:-2,looks:2}, effect:()=>{ if(Math.random() < 0.5) state.appearance.build = 'average'; }},
+    {label:'Try some pills from the internet', risk:0.3, win:{health:3,looks:2}, lose:{health:-6,money:-500}, winText:'They actually help a bit.', loseText:'They are useless and make them sick.'},'heavy',1],
   [40,80,n=>`${n} is told they need knee surgery.`,
     {label:'Have the surgery ($6,000)', delta:{money:-6000,health:6,happy:-2}},
     {label:'Live with the pain', delta:{health:-4,happy:-4}},null,0.8],
@@ -2225,7 +2260,7 @@ const COND = {
   social:()=>state.social.account && state.social.followers >= 50,
   hobby:()=>Object.keys(state.hobbies).some(k => state.hobbies[k].level >= 20),
   retired:()=>!!state.retired,
-  healthy:()=>state.stats.health >= 70, unwell:()=>state.stats.health <= 40,
+  healthy:()=>state.stats.health >= 70, unwell:()=>state.stats.health <= 40, heavy:()=>avatarLooks(state).build === 'heavy',
   lonely:()=>state.stats.happy <= 35, thriving:()=>state.stats.happy >= 75,
   celeb:()=>!!state.fame && state.fame.level >= 20, famous:()=>!!state.fame && state.fame.level >= 45, nepo:()=>!!state.fame && state.fame.inherited >= 15,
   goodlooking:()=>state.stats.looks >= 72, unknown:()=>!state.fame || state.fame.level < 10,
@@ -6128,6 +6163,7 @@ function healthYear(a, canPrompt){
       if(canPrompt && treatmentPrompt(c)) canPrompt = false;
     }
   }
+  bodyYear(a, hb, ex);
   if(!condOf('addiction') && a >= 14 && Math.random() < (hb.drink === 2 ? 0.08 : hb.drink === 1 ? 0.01 : 0) + (state.crime.record.some(r => r.crime === 'drug dealing') ? 0.03 : 0)){
     const c = addCondition('addiction', a); pushEntry(a, `${n}'s drinking has turned into an addiction.`, {happy:-4});
     if(canPrompt && treatmentPrompt(c)) canPrompt = false;
@@ -6197,6 +6233,25 @@ function healthYear(a, canPrompt){
     pushEntry(a, `${n} cracks a neglected tooth and needs a root canal.`, {money:-medCost(1500), health:-1, happy:-3});
   }
   return could && !canPrompt;
+}
+// Body type drifts with how they live: training builds muscle, junk food and no exercise add weight, and muscle fades without upkeep.
+function bodyYear(a, hb, ex){
+  if(a < 16) return;
+  const cur = avatarLooks(state).build, junk = hb.diet === 'junk', healthy = hb.diet === 'healthy', n = state.name;
+  let to = null;
+  if(cur === 'heavy' && Math.random() < (ex === 2 ? 0.25 : ex === 1 ? 0.12 : 0) + (healthy ? 0.1 : 0)) to = 'average';
+  else if((cur === 'average' || cur === 'slim') && ex === 2 && Math.random() < 0.2) to = 'athletic';
+  else if(cur === 'athletic' && !ex && Math.random() < 0.2) to = 'average';
+  else if(cur === 'slim' && !ex && junk && Math.random() < 0.12) to = 'average';
+  else if(cur === 'average' && !ex && Math.random() < (junk ? 0.12 : 0) + (a >= 45 ? 0.04 : 0)) to = 'heavy';
+  if(!to) return;
+  state.appearance.build = to;
+  const text = to === 'athletic' ? `All that training shows: ${n} is in the best shape of their life.`
+    : cur === 'athletic' ? `Without the training, ${n} loses the muscle they built.`
+    : to === 'heavy' ? `${n} has put on weight over the past few years.`
+    : cur === 'heavy' ? `${n} has slimmed down, and feels better for it.`
+    : `${n} has filled out a little.`;
+  pushEntry(a, text, to === 'athletic' ? {happy:2, looks:1} : cur === 'heavy' ? {happy:2} : {});
 }
 // ---- habits ----
 function setDiet(d){ H().habits.diet = d; renderPanel(); }
@@ -8866,6 +8921,7 @@ function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
   let h = '<div class="status"><b>' + state.name + "</b>, " + state.age + (state.gender && state.gender !== 'nonbinary' ? " · " + state.gender : state.gender ? " · non-binary" : "") + (state.generation > 1 ? " · generation " + state.generation : "") +
+    "<br>" + fmtHeight(heightNow(state)) + " · " + BUILDS[avatarLooks(state).build].toLowerCase() + " build" +
     (traits ? "<br>Personality: " + traits : "") +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 16 ? "Not working" : "Too young to work") + "</div>";
