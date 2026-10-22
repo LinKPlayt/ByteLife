@@ -618,7 +618,7 @@ function stageFor(age){
 }
 
 function freshState(name){
-  const SKINS = ['#f1c8a0','#e0ab7d','#c68a5c','#9c6a41','#6e4a2c'];
+  const SKINS = ['#f1c8a0','#e0ab7d','#c68a5c','#9c6a41','#6e4a2c'];   // a newborn's random look; the setup screen offers more
   const HAIRS = ['#1b1410','#3d2a1a','#6b4423','#9c7a3c','#c9a227','#7a7a7a','#2b2b2b'];
   return {
     name, age:0,
@@ -661,7 +661,7 @@ function freshState(name){
 // ---- the setup screen: gender and personality ----
 const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
   Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
-const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
+const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
 function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
 const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
 const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
@@ -825,7 +825,7 @@ function renderCheats(){
 }
 
 // ---------- The new-life screen: looks, gifts, personality and family ----------
-const SKIN_TONES = ['#f1c8a0', '#e0ab7d', '#c68a5c', '#9c6a41', '#6e4a2c'];
+const SKIN_TONES = ['#f6d9bf', '#f1c8a0', '#e0ab7d', '#d39b68', '#c68a5c', '#9c6a41', '#7f5434', '#6e4a2c', '#4e3220'];
 const HAIR_COLORS = ['#1b1410', '#3d2a1a', '#6b4423', '#9c7a3c', '#c9a227', '#7a7a7a', '#2b2b2b'];
 const TALENTS = {none:['Balanced', null], brains:['Brains', {smarts:15}], beauty:['Looks', {looks:15}], body:['Strong body', {health:15}], sunny:['Sunny nature', {happy:15}]};
 const WEALTH = {poor:['Poor', 5000, 30000], working:['Working class', 30000, 110000], middle:['Middle class', 110000, 420000], wealthy:['Wealthy', 550000, 2200000], rich:['Rich', 3000000, 12000000]};
@@ -865,10 +865,20 @@ function famField(who, field, v){
 function addSibling(){ const f = setupFam(); if(f.siblings.length >= 5) return; const g = rollGender(); f.siblings.push({name:setupName(g, [f.mother.name, f.father.name].concat(f.siblings.map(s => s.name))), gender:g, age:rint(0, 4)}); setup.famOpen = true; renderSetup(); }
 function removeSibling(i){ setupFam().siblings.splice(i, 1); renderSetup(); }
 function rerollFamily(){ setup.family = genSetupFamily(false); renderSetup(); }
+// the optional details picked on the setup screen; anything left on Random stays unset so the portrait rolls it
+function setupDetails(gender){
+  const d = {};
+  if(setup.eyes) d.eyes = setup.eyes;
+  if(setup.freckles !== 'random') d.freckles = setup.freckles === 'yes';
+  if(setup.facial !== 'random' && gender !== 'female') d.facial = setup.facial;
+  if(setup.earrings !== 'random') d.earrings = setup.earrings;
+  if(setup.glasses !== 'random') d.glasses = setup.glasses;
+  return d;
+}
 function setupPreview(){
   const g = setup.gender === 'random' ? 'nonbinary' : setup.gender;
   if(setup.hairStyle == null) setup.hairStyle = hairFor(g);
-  return {age:24, gender:g, appearance:{skin:setup.skin || SKIN_TONES[1], hair:setup.hair || HAIR_COLORS[2], hairStyle:setup.hairStyle, seed:setup.seed}, stats:{happy:80, health:80, looks:60, smarts:50}};
+  return {age:24, gender:g, appearance:Object.assign({skin:setup.skin || SKIN_TONES[1], hair:setup.hair || HAIR_COLORS[2], hairStyle:setup.hairStyle, seed:setup.seed}, setupDetails(g)), stats:{happy:80, health:80, looks:60, smarts:50}};
 }
 function renderSetup(){
   const g = document.getElementById('genderRow'), t = document.getElementById('traitGrid'); if(!g || !t) return;
@@ -884,8 +894,14 @@ function renderSetup(){
   const lb = document.getElementById('looksBox');
   if(lb){
     const sw = (list, key) => `<button class="swatch rnd${setup[key] ? '' : ' on'}" onclick="setupSet('${key}',null)" aria-label="Random" title="Random">?</button>` + list.map(c => `<button class="swatch${setup[key] === c ? ' on' : ''}" style="background:${c}" onclick="setupSet('${key}','${c}')" aria-label="Color ${c}"></button>`).join('');
-    lb.innerHTML = `<div class="looks"><div class="photo-frame">${drawAvatar(setupPreview())}</div><div class="looks-ctl"><span class="mini-label">Skin</span><div class="swatches">${sw(SKIN_TONES, 'skin')}</div><span class="mini-label">Hair</span><div class="swatches">${sw(HAIR_COLORS, 'hair')}</div></div></div>` +
-      '<div class="sortrow" style="margin:0">' + HAIR_STYLES.slice(0, 3).map((s, i) => pill(setup.hairStyle === i, `setupSet('hairStyle',${i})`, s)).join('') + '</div>';
+    const opts = (key, list) => '<div class="sortrow" style="margin:0">' + list.map(([k, l]) => pill(setup[key] === k, `setupSet('${key}','${k}')`, l)).join('') + '</div>';
+    const eyeSw = `<button class="swatch rnd${setup.eyes ? '' : ' on'}" onclick="setupSet('eyes',null)" aria-label="Random" title="Random">?</button>` + EYE_COLORS.map((c, i) => `<button class="swatch${setup.eyes === c ? ' on' : ''}" style="background:${c}" onclick="setupSet('eyes','${c}')" aria-label="${EYE_NAMES[i]} eyes" title="${EYE_NAMES[i]}"></button>`).join('');
+    lb.innerHTML = `<div class="looks"><div class="photo-frame">${drawAvatar(setupPreview())}</div><div class="looks-ctl"><span class="mini-label">Skin</span><div class="swatches">${sw(SKIN_TONES, 'skin')}</div><span class="mini-label">Hair</span><div class="swatches">${sw(HAIR_COLORS, 'hair')}</div><span class="mini-label">Eyes</span><div class="swatches">${eyeSw}</div></div></div>` +
+      '<span class="mini-label">Hairstyle</span><div class="sortrow" style="margin:0">' + HAIR_STYLES.map((s, i) => pill(setup.hairStyle === i, `setupSet('hairStyle',${i})`, s)).join('') + '</div>' +
+      (setup.gender === 'female' ? '' : '<span class="mini-label">Facial hair <span style="text-transform:none;letter-spacing:0">· from 17</span></span>' + opts('facial', [['random','Random'],['none','None'],['stubble','Stubble'],['beard','Beard'],['mustache','Mustache'],['goatee','Goatee']])) +
+      '<span class="mini-label">Freckles</span>' + opts('freckles', [['random','Random'],['yes','Freckles'],['no','None']]) +
+      '<span class="mini-label">Earrings <span style="text-transform:none;letter-spacing:0">· from 10</span></span>' + opts('earrings', [['random','Random'],['none','None'],['studs','Studs'],['hoops','Hoops']]) +
+      '<span class="mini-label">Glasses</span>' + opts('glasses', [['random','Random'],['on','Glasses'],['off','None']]);
   }
   const fb = document.getElementById('familyBox');
   if(fb){
@@ -912,7 +928,7 @@ function renderSetup(){
 // what the player picked, with anything left open settled now
 function setupChoice(){
   const gender = setup.gender === 'random' ? rollGender() : setup.gender;
-  return {gender, traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairPicked || (setup.hairStyle != null && setup.gender !== 'random') ? setup.hairStyle : hairFor(gender),
+  return {gender, details:setupDetails(gender), traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairPicked || (setup.hairStyle != null && setup.gender !== 'random') ? setup.hairStyle : hairFor(gender),
     talent:setup.talent, stats:null, wealth:setup.wealth, family:JSON.parse(JSON.stringify(setupFam())), pet:setup.pet === 'random' ? (Math.random() < 0.35 ? pick(['dog', 'cat']) : 'none') : setup.pet};
 }
 // a random life: every part of the person is rolled, including the extremes
@@ -936,6 +952,7 @@ function startLife(heir, randomNow){
     if(!rnd) state.appearance.seed = setup.seed;
     if(c.skin) state.appearance.skin = c.skin;
     if(c.hair) state.appearance.hair = c.hair;
+    if(c.details) Object.assign(state.appearance, c.details);
     if(c.stats) Object.assign(state.stats, c.stats);
     state.traits = c.traits.slice();
     state.traits.forEach(t => { const d = TRAIT_START[t]; if(d) for(const k in d) state.stats[k] = clamp(state.stats[k] + d[k]); });
@@ -1143,6 +1160,9 @@ function avatarSeed(st){
   return h >>> 0;
 }
 const EYE_COLORS = ['#4a2f1c', '#5e3b20', '#7a5a2e', '#4f6b3a', '#3f6f9a', '#6c7a86'];
+const EYE_NAMES = ['Dark brown', 'Brown', 'Hazel', 'Green', 'Blue', 'Grey'];
+// 0 (darkest) to 255 (lightest); drives which looks are likely when left to chance
+function skinLum(hex){ const v = [1, 3, 5].map(i => parseInt(String(hex || '#c68a5c').slice(i, i + 2), 16)); return 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]; }
 // What the portrait wears: prison, then the job, then school, then a plain outfit for the age.
 function avatarOutfit(st, stage, r){
   const tees = ['#2C4A42', '#3e6a8a', '#8a4b5c', '#5b6b3a', '#6b5a8a', '#a0643a'];
@@ -1170,6 +1190,23 @@ function avatarOutfit(st, stage, r){
 let avatarSeq = 0;
 // A small seeded generator, so strands, stubble and freckles land in the same place every render.
 function avatarRng(seed){ let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+// The looks that are either chosen or rolled from the person's seed, shared by the portrait and the Me tab.
+function avatarLooks(st){
+  const ap = st.appearance, hairStyle = ap.hairStyle, age = st.age || 0, young = ['INFANT','TODDLER'].includes(stageFor(age));
+  const male = st.gender === 'male', female = st.gender === 'female', smarts = st.stats.smarts;
+  const seed = avatarSeed(st), r = k => ((Math.imul(seed ^ (k * 2654435761), 2246822519) >>> 0) % 1000) / 1000;
+  const lum = skinLum(ap.skin);
+  const eyeColor = ap.eyes || EYE_COLORS[lum < 130 ? Math.floor(r(3) * 2) : Math.floor(r(3) * EYE_COLORS.length)];
+  const balding = male && age >= 50 && r(4) < 0.4 && hairStyle !== 4;
+  const fhRoll = r(5), facial = age < 17 ? null : ap.facial ? (ap.facial === 'none' ? null : ap.facial) : male ? (fhRoll < 0.4 ? null : fhRoll < 0.6 ? 'stubble' : fhRoll < 0.8 ? 'beard' : fhRoll < 0.9 ? 'mustache' : 'goatee') : null;
+  // chosen earrings always show; random ones hide under long hair
+  const earrings = ap.earrings ? ap.earrings !== 'none' && age >= 10 : ((female && age >= 10 && r(6) < 0.65) || (!female && age >= 16 && r(6) < 0.12)) && !(age >= 2 && [1, 2].includes(hairStyle) && !balding);
+  const hoops = ap.earrings ? ap.earrings === 'hoops' : r(7) < 0.4;
+  const freckles = age >= 4 && (ap.freckles != null ? ap.freckles : lum > 170 && r(8) < 0.35);
+  // 'off' means contact lenses, even with a prescription
+  const glasses = ap.glasses === 'on' ? age >= 6 : ap.glasses === 'off' ? false : (smarts > 74 && age >= 6) || (!young && !!(st.health && st.health.glasses));
+  return { eyeColor, balding, facial, earrings, hoops, freckles, glasses };
+}
 function drawAvatar(st){
   st = st || state;
   const ap = st.appearance, { hair, hairStyle } = ap;
@@ -1182,7 +1219,6 @@ function drawAvatar(st){
   const rng = avatarRng(seed);
   const id = 'av' + (++avatarSeq);
   const f = n => Math.round(n * 10) / 10;
-  const skinIdx = SKIN_TONES.indexOf(ap.skin);
   // Skin loses a little warmth in old age.
   const skin = age >= 60 ? hexMix(ap.skin, '#a09a94', Math.min(0.14, (age - 60) / 180)) : ap.skin;
   const shade = hexMix(skin, '#3a1c0e', 0.3), deep = hexMix(skin, '#24100a', 0.52), light = hexMix(skin, '#fff6ee', 0.4);
@@ -1203,14 +1239,8 @@ function drawAvatar(st){
   const hairColor = ap.dye || hexMix(hair, '#cfc9bb', greyT);
   const hairHi = hexMix(hairColor, '#ffffff', 0.3), hairLo = hexMix(hairColor, '#000000', 0.35);
   const browColor = hexMix(ap.dye ? hair : hexMix(hair, '#bdb6a8', greyT * 0.6), '#000000', 0.12);
-  const eyeColor = EYE_COLORS[skinIdx >= 3 ? Math.floor(r(3) * 2) : Math.floor(r(3) * EYE_COLORS.length)];
-  const balding = male && age >= 50 && r(4) < 0.4 && hairStyle !== 4;
-  const fhRoll = r(5), facial = male && age >= 17 ? (fhRoll < 0.4 ? null : fhRoll < 0.6 ? 'stubble' : fhRoll < 0.8 ? 'beard' : fhRoll < 0.9 ? 'mustache' : 'goatee') : null;
-  const earrings = ((female && age >= 10 && r(6) < 0.65) || (!female && age >= 16 && r(6) < 0.12)) && !(age >= 2 && [1, 2].includes(hairStyle) && !(male && age >= 50 && r(4) < 0.4));
-  const hoops = r(7) < 0.4;
-  const freckles = skinIdx >= 0 && skinIdx <= 1 && r(8) < 0.35 && age >= 4;
+  const { eyeColor, balding, facial, earrings, hoops, freckles, glasses } = avatarLooks(st);
   const tired = health < 35, sick = health < 25;
-  const glasses = (smarts > 74 && age >= 6) || (!young && !!(st.health && st.health.glasses));
   const fame = st.fame ? st.fame.level : 0;
   const prison = !!(st.crime && st.crime.prison);
   const fit = (st.health && st.health.habits && st.health.habits.exercise) || 0;
@@ -9590,6 +9620,39 @@ function dyeHair(name){
   pushEntry(state.age, name === 'Natural' ? `${state.name} lets their hair go back to its natural color.` : `${state.name} dyes their hair ${name.toLowerCase()}.`, name === 'Natural' ? {} : {money:-dyeCost(), happy:2});
   render();
 }
+const FACIAL_HAIR = {none:'Clean-shaven', stubble:'Stubble', beard:'Beard', mustache:'Mustache', goatee:'Goatee'};
+const EARRINGS = {none:'None', studs:'Studs', hoops:'Hoops'};
+const earringCost = () => inflR(60, 5);
+// what the portrait currently shows, whether it was chosen or left to chance
+function currentLooks(){
+  const L = avatarLooks(state);
+  return {facial:L.facial || 'none', earrings:L.earrings ? (L.hoops ? 'hoops' : 'studs') : 'none', glasses:L.glasses};
+}
+function setFacial(k){
+  const cur = currentLooks().facial;
+  if(!FACIAL_HAIR[k] || state.age < 17 || state.done.me_facial || state.crime.prison || cur === k) return;
+  state.done.me_facial = true; state.appearance.facial = k;
+  const n = state.name;
+  pushEntry(state.age, k === 'none' ? `${n} shaves off their ${FACIAL_HAIR[cur].toLowerCase()}.` : k === 'stubble' ? `${n} lets some stubble grow in.` : `${n} grows ${k === 'beard' ? 'a full beard' : 'a ' + k}.`, {happy:1});
+  render();
+}
+function setEarrings(k){
+  const cur = currentLooks().earrings;
+  if(!EARRINGS[k] || state.age < 10 || state.done.me_ears || state.crime.prison || cur === k) return;
+  if(k !== 'none' && !ensureCash(earringCost())) return;
+  state.done.me_ears = true; state.appearance.earrings = k;
+  const n = state.name;
+  pushEntry(state.age, k === 'none' ? `${n} takes out their earrings for good.` : cur === 'none' ? `${n} gets their ears pierced and picks out a pair of ${k}.` : `${n} swaps their earrings for a pair of ${k}.`, k === 'none' ? {} : {money:-earringCost(), happy:2});
+  render();
+}
+function setGlasses(on){
+  const cur = currentLooks().glasses, rx = !!(state.health && state.health.glasses);
+  if(state.age < 10 || state.done.me_glasses || state.crime.prison || cur === on) return;
+  state.done.me_glasses = true; state.appearance.glasses = on ? 'on' : 'off';
+  const n = state.name;
+  pushEntry(state.age, on ? (rx ? `${n} goes back to wearing glasses.` : `${n} starts wearing a pair of glasses they like the look of.`) : (rx ? `${n} switches to contact lenses.` : `${n} stops wearing glasses.`), {happy:1});
+  render();
+}
 function getTattoo(){
   if(state.age < 18 || state.done.me_tattoo || state.crime.prison || !ensureCash(tattooCost())) return;
   state.done.me_tattoo = true; state.tattoos = (state.tattoos || 0) + 1;
@@ -9605,6 +9668,12 @@ function styleHtml(){
     HAIR_STYLES.map((s, i) => `<button class="sortbtn${ap.hairStyle === i ? ' active' : ''}" onclick="restyle(${i})" ${state.done.me_hair || prison || ap.hairStyle === i || !canPay(cutCost()) ? 'disabled' : ''}>${s}</button>`).join('') + '</div>';
   if(state.age >= 13) h += '<div class="owned">Hair color · ' + (state.done.me_dye ? 'changed this year ✓' : 'dyeing costs ' + fmt(dyeCost())) + '</div><div class="sortrow">' +
     Object.keys(HAIR_DYES).map(k => `<button class="sortbtn${k === dye ? ' active' : ''}" onclick="dyeHair('${k}')" ${state.done.me_dye || prison || k === dye || (k !== 'Natural' && !canPay(dyeCost())) ? 'disabled' : ''}>${HAIR_DYES[k] ? '<span style="color:' + HAIR_DYES[k] + '">●</span> ' : ''}${k}</button>`).join('') + '</div>';
+  const L = currentLooks(), row = (label, items, cur, fn, done, cost) => `<div class="owned">${label} · ${done ? 'changed this year ✓' : cost}</div><div class="sortrow">` +
+    Object.keys(items).map(k => `<button class="sortbtn${k === cur ? ' active' : ''}" onclick="${fn}('${k}')" ${done || prison || k === cur ? 'disabled' : ''}>${items[k]}</button>`).join('') + '</div>';
+  if(state.age >= 17) h += row('Facial hair', FACIAL_HAIR, L.facial, 'setFacial', state.done.me_facial, 'free');
+  h += row('Earrings', EARRINGS, L.earrings, 'setEarrings', state.done.me_ears, 'a new pair costs ' + fmt(earringCost()));
+  h += `<div class="owned">Glasses · ${state.done.me_glasses ? 'changed this year ✓' : state.health && state.health.glasses ? 'you need them to see; contacts work too' : 'just for the look'}</div><div class="sortrow">` +
+    [[true, 'Glasses'], [false, state.health && state.health.glasses ? 'Contacts' : 'No glasses']].map(([v, l]) => `<button class="sortbtn${L.glasses === v ? ' active' : ''}" onclick="setGlasses(${v})" ${state.done.me_glasses || prison || L.glasses === v ? 'disabled' : ''}>${l}</button>`).join('') + '</div>';
   if(state.age >= 18) h += `<div class="owned">${state.tattoos ? state.tattoos + ' tattoo' + (state.tattoos > 1 ? 's' : '') : 'No tattoos yet'}</div><div class="assetbuy"><button onclick="getTattoo()" ${state.done.me_tattoo || prison || !canPay(tattooCost()) ? 'disabled' : ''}>${state.done.me_tattoo ? 'Inked this year ✓' : 'Get a tattoo (' + fmt(tattooCost()) + ')'}</button></div>`;
   return h + '</div>';
 }
