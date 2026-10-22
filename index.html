@@ -661,7 +661,7 @@ function freshState(name){
 // ---- the setup screen: gender and personality ----
 const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
   Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
-const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', build:'random', height:'random', talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
+const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', build:'random', height:'random', style:'random', clothColor:null, talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
 function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
 const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
 const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
@@ -874,6 +874,8 @@ function setupDetails(gender){
   if(setup.earrings !== 'random') d.earrings = setup.earrings;
   if(setup.glasses !== 'random') d.glasses = setup.glasses;
   if(setup.build !== 'random') d.build = setup.build;
+  if(setup.style !== 'random') d.style = setup.style;
+  if(setup.clothColor) d.clothColor = setup.clothColor;
   // a height in the chosen band, placed by the setup seed so it doesn't jump around while picking
   if(setup.height !== 'random') d.height = heightBand(gender, setup.height, (setup.seed % 1000) / 1000);
   return d;
@@ -906,7 +908,10 @@ function renderSetup(){
       '<span class="mini-label">Earrings <span style="text-transform:none;letter-spacing:0">· from 10</span></span>' + opts('earrings', [['random','Random'],['none','None'],['studs','Studs'],['hoops','Hoops']]) +
       '<span class="mini-label">Glasses</span>' + opts('glasses', [['random','Random'],['on','Glasses'],['off','None']]) +
       '<span class="mini-label">Body type <span style="text-transform:none;letter-spacing:0">· changes with exercise and diet</span></span>' + opts('build', [['random','Random']].concat(Object.entries(BUILDS))) +
-      `<span class="mini-label">Height <span style="text-transform:none;letter-spacing:0">· ${setup.height === 'random' ? 'grown up' : 'about ' + fmtHeight(setupPreview().appearance.height) + ' grown up'}</span></span>` + opts('height', [['random','Random'],['short','Short'],['average','Average'],['tall','Tall']]);
+      `<span class="mini-label">Height <span style="text-transform:none;letter-spacing:0">· ${setup.height === 'random' ? 'grown up' : 'about ' + fmtHeight(setupPreview().appearance.height) + ' grown up'}</span></span>` + opts('height', [['random','Random'],['short','Short'],['average','Average'],['tall','Tall']]) +
+      '<span class="mini-label">Clothing style <span style="text-transform:none;letter-spacing:0">· uniforms still apply at work</span></span>' + opts('style', [['random','Random']].concat(Object.entries(CLOTH_STYLES))) +
+      '<span class="mini-label">Favorite color</span><div class="swatches">' + `<button class="swatch rnd${setup.clothColor ? '' : ' on'}" onclick="setupSet('clothColor',null)" aria-label="Random" title="Random">?</button>` +
+      Object.entries(CLOTH_COLORS).map(([c, n]) => `<button class="swatch${setup.clothColor === c ? ' on' : ''}" style="background:${c}" onclick="setupSet('clothColor','${c}')" aria-label="${n}" title="${n}"></button>`).join('') + '</div>';
   }
   const fb = document.getElementById('familyBox');
   if(fb){
@@ -1193,10 +1198,23 @@ function heightNow(st){
 function fmtHeight(cm){ const inch = Math.round(cm / 2.54); return `${Math.floor(inch / 12)}′${inch % 12}″ (${cm} cm)`; }
 // 0 (darkest) to 255 (lightest); drives which looks are likely when left to chance
 function skinLum(hex){ const v = [1, 3, 5].map(i => parseInt(String(hex || '#c68a5c').slice(i, i + 2), 16)); return 0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]; }
-// What the portrait wears: prison, then the job, then school, then a plain outfit for the age.
+const CLOTH_STYLES = {casual:'Casual', sporty:'Sporty', preppy:'Preppy', smart:'Smart', edgy:'Edgy', cozy:'Cozy'};
+const CLOTH_COLORS = {'#2C4A42':'Forest', '#3e6a8a':'Denim', '#1f2a3d':'Navy', '#8a4b5c':'Plum', '#b03030':'Red', '#a0643a':'Rust', '#d9b45a':'Mustard', '#5b6b3a':'Olive', '#6b5a8a':'Lavender', '#e6e1d6':'Cream', '#7a7f86':'Grey', '#1c1c1c':'Black'};
+// jobs without a real uniform, where people wear their own style
+const OWN_STYLE_JOBS = ['Odd Jobs', 'Technology', 'Music', 'Acting', 'Education'];
+// a personal style turned into something the portrait can draw; little kids get a simpler version
+function styleOutfit(style, color, stage, r){
+  const kid = ['CHILD'].includes(stage), pal = Object.keys(CLOTH_COLORS), any = pal[Math.floor(r(1) * 9)];
+  const c = color || {edgy:'#1c1c1c', smart:'#1f2a3d', preppy:'#3e6a8a', cozy:'#a0643a'}[style] || any;
+  if(kid && (style === 'smart' || style === 'edgy')) return {kind:'polo', color:c, noTag:true};
+  return ({casual:{kind:'tee', color:c}, sporty:{kind:'track', color:c}, preppy:{kind:'polo', color:c, noTag:true},
+    smart:{kind:'jacket', color:c}, edgy:{kind:'leather', color:c}, cozy:{kind:'sweater', color:c}})[style] || {kind:'tee', color:c};
+}
+// What the portrait wears: prison, then a uniform, then their own style, then school, then a plain outfit for the age.
 function avatarOutfit(st, stage, r){
+  const ap = st.appearance || {};
   const tees = ['#2C4A42', '#3e6a8a', '#8a4b5c', '#5b6b3a', '#6b5a8a', '#a0643a'];
-  const tee = tees[Math.floor(r(1) * tees.length)];
+  const tee = ap.clothColor || tees[Math.floor(r(1) * tees.length)];
   if(st.crime && st.crime.prison) return {kind:'prison', color:'#e07a2e'};
   if(['INFANT','TODDLER'].includes(stage)) return {kind:'onesie', color:['#9cc3d8', '#e9b8c8', '#f2d98a', '#b9d9a8'][Math.floor(r(2) * 4)]};
   const t = st.job && st.job.track;
@@ -1211,8 +1229,9 @@ function avatarOutfit(st, stage, r){
     Sports:{kind:'jersey', color:'#c0392b'}, Music:{kind:'jacket', color:'#262626'}, Acting:{kind:'jacket', color:'#5a2a4a'},
     Retail:{kind:'polo', color:'#2f6db0'}, 'Odd Jobs':{kind:'tee', color:tee}
   };
-  if(t && map[t]) return map[t];
-  if(st.retired) return {kind:'cardigan', color:'#8a7a5a'};
+  if(t && map[t] && !(ap.style && OWN_STYLE_JOBS.includes(t))) return map[t];
+  if(ap.style) return styleOutfit(ap.style, ap.clothColor, stage, r);
+  if(st.retired) return {kind:'cardigan', color:ap.clothColor || '#8a7a5a'};
   if(st.edu && st.edu.program) return {kind:'hoodie', color:'#7a2e3a', letter:true};
   if(stage === 'TEENAGER') return {kind:'hoodie', color:tee};
   return {kind:'tee', color:tee};
@@ -1348,12 +1367,20 @@ function drawAvatar(st){
     case 'cardigan': clothes += `<path d="M${nx - 13},${ny} L${nx},${ny + 18} L${nx + 13},${ny}Z" fill="#efe6d2"/><path d="M${nx - 13},${ny} L${nx - 2},200" stroke="${clothLo}" stroke-width="3"/><path d="M${nx + 13},${ny} L${nx + 2},200" stroke="${clothLo}" stroke-width="3"/>` + [0, 1, 2].map(i => `<circle cx="${nx + 6}" cy="${sy + 22 + i * 10}" r="2" fill="${clothHi}"/>`).join(''); break;
     case 'jersey': clothes += vneck + `<path d="M${nx - 13},${ny} L${nx},${ny + 20} L${nx + 13},${ny}" stroke="#fff" stroke-width="3" fill="none"/><text x="${nx}" y="${sy + 48}" font-size="20" font-weight="800" text-anchor="middle" font-family="Arial,sans-serif" fill="#fff">${seed % 99 + 1}</text>`; break;
     case 'jacket': clothes += `<path d="M${nx - 13},${ny} L${nx},${ny + 30} L${nx + 13},${ny}Z" fill="${hexMix(of.color, '#ffffff', 0.55)}"/><path d="M${nx - 14},${ny - 1} L${nx - 3},200 L${nx - 30},${ny + 20}Z" fill="${clothLo}"/><path d="M${nx + 14},${ny - 1} L${nx + 3},200 L${nx + 30},${ny + 20}Z" fill="${clothLo}"/><line x1="${nx - 2}" y1="${ny + 30}" x2="${nx - 2}" y2="200" stroke="#bbb" stroke-width="1.2"/>`; break;
-    case 'polo': clothes += `<path d="M${nx - 14},${ny - 1} L${nx - 4},${ny + 10} L${nx - 18},${ny + 8}Z" fill="${clothHi}"/><path d="M${nx + 14},${ny - 1} L${nx + 4},${ny + 10} L${nx + 18},${ny + 8}Z" fill="${clothHi}"/><line x1="${nx}" y1="${ny + 6}" x2="${nx}" y2="${ny + 24}" stroke="${clothLo}" stroke-width="2"/><circle cx="${nx}" cy="${ny + 12}" r="1.4" fill="#fff"/><circle cx="${nx}" cy="${ny + 19}" r="1.4" fill="#fff"/><rect x="${nx + 20}" y="${sy + 18}" width="18" height="8" rx="2" fill="#fff"/>`; break;
+    case 'track': clothes += `<path d="M${nx - 14},${ny - 1} Q${nx},${ny + 7} ${nx + 14},${ny - 1}" stroke="${clothLo}" stroke-width="5" fill="none" stroke-linecap="round"/><line x1="${nx}" y1="${ny + 3}" x2="${nx}" y2="200" stroke="#d8dadc" stroke-width="1.4"/><rect x="${nx - 1.6}" y="${ny + 3}" width="3.2" height="5" rx="1" fill="#c9ccd0"/>`
+      + [-1, 1].map(s => `<path d="M${f(100 + s * (bw - 6))},${sy + 6} Q${f(100 + s * (bw + 0))},${sy + 50} ${f(100 + s * (bw + 4))},200" stroke="#fff" stroke-width="2.6" fill="none" opacity="0.85"/><path d="M${f(100 + s * (bw - 11))},${sy + 8} Q${f(100 + s * (bw - 5))},${sy + 52} ${f(100 + s * (bw - 1))},200" stroke="#fff" stroke-width="2.6" fill="none" opacity="0.85"/>`).join(''); break;
+    case 'sweater': clothes += `<path d="M${nx - 15},${ny - 1} Q${nx},${ny + 11} ${nx + 15},${ny - 1}" stroke="${clothLo}" stroke-width="6.5" fill="none" stroke-linecap="round"/>`
+      + Array.from({length:Math.floor((bw * 2 - 16) / 5)}, (_, i) => `<line x1="${f(100 - bw + 8 + i * 5)}" y1="${sy + 12}" x2="${f(100 - bw + 8 + i * 5)}" y2="200" stroke="${clothLo}" stroke-opacity="0.35" stroke-width="1.3"/>`).join('')
+      + `<path d="M${nx - 6},${sy + 16} q6,7 0,14 q-6,7 0,14 q6,7 0,14 M${nx + 6},${sy + 16} q-6,7 0,14 q6,7 0,14 q-6,7 0,14" stroke="${clothHi}" stroke-width="2" fill="none" opacity="0.6"/>`; break;
+    case 'leather': clothes += `<path d="M${nx - 13},${ny} L${nx},${ny + 26} L${nx + 13},${ny}Z" fill="#3a3a3c"/><path d="M${nx - 14},${ny - 1} L${nx - 5},${ny + 32} L${nx - 32},${ny + 18}Z" fill="${clothHi}"/><path d="M${nx + 14},${ny - 1} L${nx + 9},${ny + 30} L${nx + 34},${ny + 14}Z" fill="${clothHi}"/>`
+      + `<line x1="${nx + 9}" y1="${ny + 30}" x2="${nx + 5}" y2="200" stroke="#c9ccd0" stroke-width="1.6"/><line x1="${100 - bw + 14}" y1="${sy + 34}" x2="${nx - 14}" y2="${sy + 40}" stroke="#c9ccd0" stroke-width="1.2"/>`
+      + [[-24, 12], [-18, 22], [26, 10], [21, 20]].map(([x, y]) => `<circle cx="${nx + x}" cy="${ny + y}" r="1.1" fill="#d8dadc"/>`).join(''); break;
+    case 'polo': clothes += `<path d="M${nx - 14},${ny - 1} L${nx - 4},${ny + 10} L${nx - 18},${ny + 8}Z" fill="${clothHi}"/><path d="M${nx + 14},${ny - 1} L${nx + 4},${ny + 10} L${nx + 18},${ny + 8}Z" fill="${clothHi}"/><line x1="${nx}" y1="${ny + 6}" x2="${nx}" y2="${ny + 24}" stroke="${clothLo}" stroke-width="2"/><circle cx="${nx}" cy="${ny + 12}" r="1.4" fill="#fff"/><circle cx="${nx}" cy="${ny + 19}" r="1.4" fill="#fff"/>` + (of.noTag ? '' : `<rect x="${nx + 20}" y="${sy + 18}" width="18" height="8" rx="2" fill="#fff"/>`); break;
     default: clothes += crew + (r(9) < 0.4 ? `<path d="M${100 - bw + 4},${sy + 30} H${100 + bw - 4} M${100 - bw + 2},${sy + 38} H${100 + bw - 2}" stroke="${clothHi}" stroke-width="3" opacity="0.7"/>` : '');
   }
   // Fabric shading: light from the upper left, folds where the arms meet the chest.
   clothes += `<path d="${body}" fill="url(#${id}cl)"/><g filter="url(#${id}b)" fill="none" stroke="#000" stroke-linecap="round"><path d="M${100 - bw + 8},${sy + 10} q-5,30 -2,70" stroke-opacity="0.22" stroke-width="3"/><path d="M${100 + bw - 8},${sy + 10} q5,30 2,70" stroke-opacity="0.3" stroke-width="3"/><path d="M${100 - bw * 0.45},${sy + 26} q6,14 4,40" stroke-opacity="0.1" stroke-width="2.5"/><path d="M${100 + bw * 0.5},${sy + 22} q-5,16 -3,44" stroke-opacity="0.12" stroke-width="2.5"/></g>`;
-  const tattoo = !young && (st.tattoos || 0) > 0 && !['suit','pilot','labcoat','chef','jacket'].includes(of.kind)
+  const tattoo = !young && (st.tattoos || 0) > 0 && !['suit','pilot','labcoat','chef','jacket','leather','sweater','track'].includes(of.kind)
     ? `<g opacity="0.6" stroke="#2c3a5a" fill="none" stroke-width="1.1"><path d="M${100 - bw + 8},${sy + 14} q6,-8 12,0 q-6,8 -12,0Z"/><path d="M${100 - bw + 14},${sy + 18} v8"/>${st.tattoos > 1 ? `<path d="M${100 + bw - 22},${sy + 16} l4,-6 l4,6 l-4,6Z"/>` : ''}</g>` : '';
 
   // ---- neck ----
@@ -9709,6 +9736,22 @@ function setGlasses(on){
   pushEntry(state.age, on ? (rx ? `${n} goes back to wearing glasses.` : `${n} starts wearing a pair of glasses they like the look of.`) : (rx ? `${n} switches to contact lenses.` : `${n} stops wearing glasses.`), {happy:1});
   render();
 }
+const wardrobeCost = () => inflR(400, 10);
+function setStyle(k){
+  const ap = state.appearance;
+  if(!CLOTH_STYLES[k] || state.age < 13 || state.done.me_style || state.crime.prison || ap.style === k || !ensureCash(wardrobeCost())) return;
+  state.done.me_style = true; ap.style = k;
+  const n = state.name, line = {casual:'keeps it casual: jeans and comfortable tees', sporty:'goes sporty: track jackets and trainers', preppy:'goes preppy: polos and neat chinos', smart:'smartens up with blazers and pressed shirts', edgy:'goes edgy, with a leather jacket and boots', cozy:'fills their wardrobe with soft knit sweaters'}[k];
+  pushEntry(state.age, `${n} ${line}.`, {money:-wardrobeCost(), happy:3, looks:1});
+  render();
+}
+function setClothColor(c){
+  const ap = state.appearance;
+  if(!CLOTH_COLORS[c] || state.age < 13 || state.done.me_color || state.crime.prison || ap.clothColor === c) return;
+  state.done.me_color = true; ap.clothColor = c;
+  pushEntry(state.age, `${state.name} starts wearing a lot more ${CLOTH_COLORS[c].toLowerCase()}.`, {happy:1});
+  render();
+}
 function getTattoo(){
   if(state.age < 18 || state.done.me_tattoo || state.crime.prison || !ensureCash(tattooCost())) return;
   state.done.me_tattoo = true; state.tattoos = (state.tattoos || 0) + 1;
@@ -9730,6 +9773,13 @@ function styleHtml(){
   h += row('Earrings', EARRINGS, L.earrings, 'setEarrings', state.done.me_ears, 'a new pair costs ' + fmt(earringCost()));
   h += `<div class="owned">Glasses · ${state.done.me_glasses ? 'changed this year ✓' : state.health && state.health.glasses ? 'you need them to see; contacts work too' : 'just for the look'}</div><div class="sortrow">` +
     [[true, 'Glasses'], [false, state.health && state.health.glasses ? 'Contacts' : 'No glasses']].map(([v, l]) => `<button class="sortbtn${L.glasses === v ? ' active' : ''}" onclick="setGlasses(${v})" ${state.done.me_glasses || prison || L.glasses === v ? 'disabled' : ''}>${l}</button>`).join('') + '</div>';
+  if(state.age >= 13){
+    const uniform = state.job && !OWN_STYLE_JOBS.includes(state.job.track) ? ' · work clothes still apply on the job' : '';
+    h += `<div class="owned">Clothing style · ${state.done.me_style ? 'new wardrobe this year ✓' : 'a new wardrobe costs ' + fmt(wardrobeCost())}${uniform}</div><div class="sortrow">` +
+      Object.keys(CLOTH_STYLES).map(k => `<button class="sortbtn${ap.style === k ? ' active' : ''}" onclick="setStyle('${k}')" ${state.done.me_style || prison || ap.style === k || !canPay(wardrobeCost()) ? 'disabled' : ''}>${CLOTH_STYLES[k]}</button>`).join('') + '</div>';
+    h += `<div class="owned">Favorite color · ${state.done.me_color ? 'changed this year ✓' : 'free'}</div><div class="swatches">` +
+      Object.entries(CLOTH_COLORS).map(([c, n]) => `<button class="swatch${ap.clothColor === c ? ' on' : ''}" style="background:${c}" onclick="setClothColor('${c}')" aria-label="${n}" title="${n}" ${state.done.me_color || prison || ap.clothColor === c ? 'disabled' : ''}></button>`).join('') + '</div>';
+  }
   if(state.age >= 18) h += `<div class="owned">${state.tattoos ? state.tattoos + ' tattoo' + (state.tattoos > 1 ? 's' : '') : 'No tattoos yet'}</div><div class="assetbuy"><button onclick="getTattoo()" ${state.done.me_tattoo || prison || !canPay(tattooCost()) ? 'disabled' : ''}>${state.done.me_tattoo ? 'Inked this year ✓' : 'Get a tattoo (' + fmt(tattooCost()) + ')'}</button></div>`;
   return h + '</div>';
 }
