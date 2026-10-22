@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<!-- Security: the game only ever loads its own files and its fonts, and never sends data anywhere. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Ledger — A Life</title>
 <meta name="theme-color" content="#EEF0E8">
@@ -688,6 +691,8 @@
 </div>
 
 <script>
+// Ledger is only played on its own page: if another site tries to frame it, break out (or hide it).
+if(window.top !== window.self){ try{ window.top.location.replace(window.location.href); } catch(e){ document.documentElement.style.display = 'none'; } }
 let state = null;
 
 const STAGES = [
@@ -3774,7 +3779,7 @@ function ticketSet(field, val){
   renderPanel();
 }
 function ticketInput(field, val){
-  state.ticket[field] = val;
+  state.ticket[field] = String(val).replace(/[^0-9.,]/g, '').slice(0, 16);   // only numbers go back into the page
   if(field === "amount") state.ticket.all = false;
   updateTicketPreview();
 }
@@ -7382,7 +7387,7 @@ function checkGoal(a){
   }
 }
 function setXferDir(d){ const x = state.xfer; x.dir = d; x.amount = ""; x.all = false; renderPanel(); }
-function xferInput(v){ state.xfer.amount = v; state.xfer.all = false; updateXferPreview(); }
+function xferInput(v){ state.xfer.amount = String(v).replace(/[^0-9.,]/g, '').slice(0, 16); state.xfer.all = false; updateXferPreview(); }
 function xferChip(mode, v){
   const x = state.xfer, src = Math.max(0, x.dir === "in" ? state.money : state.savings);
   const amt = Math.max(0, Math.min(mode === "pct" ? src * v : v, src));
