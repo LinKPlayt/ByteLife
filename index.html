@@ -218,6 +218,28 @@
   #panel > [hidden]{ display:none !important; }
   .subnav{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 12px; padding:2px 0 4px; }
   .subnav .sortbtn{ flex:none; font-size:13px; padding:8px 14px; }
+  .quiz-card{ position:relative; max-width:420px; text-align:left; }
+  .quiz-quit{ position:absolute; top:10px; right:10px; width:32px; height:32px; padding:0; border-radius:50%; background:var(--surface-2); }
+  .quiz-head{ font-weight:700; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:flex; justify-content:space-between; gap:8px; padding-right:40px; margin-bottom:8px; }
+  .quiz-head span{ font-weight:600; text-transform:none; letter-spacing:0; }
+  .quiz-track{ height:5px; border-radius:9px; background:var(--surface-2); overflow:hidden; margin-bottom:12px; }
+  .quiz-track div{ height:100%; background:var(--accent); }
+  .quiz-q{ font-size:16.5px; font-weight:600; line-height:1.4; margin:0 0 12px; }
+  .quiz-opt{ display:block; width:100%; text-align:left; margin:0 0 8px; padding:11px 13px; border-radius:12px; background:var(--surface-2); border:1.5px solid var(--line); color:var(--ink); font-size:15px; line-height:1.35; }
+  .quiz-opt.good{ border-color:var(--green); background:color-mix(in srgb, var(--green) 14%, var(--surface)); }
+  .quiz-opt.bad{ border-color:var(--red); background:color-mix(in srgb, var(--red) 12%, var(--surface)); }
+  .quiz-opt.meh{ border-color:#c99a2e; background:color-mix(in srgb, #c99a2e 14%, var(--surface)); }
+  .quiz-opt:disabled{ opacity:1; }
+  .quiz-fb{ font-size:14.5px; margin:4px 0 12px; }
+  .quiz-result{ font-family:'Fraunces',serif; font-size:30px; font-weight:700; margin:6px 0; }
+  .lic-card{ border-radius:14px; padding:10px 12px; margin:2px 0 8px; background:linear-gradient(135deg, #e6eef7, #c9d9ea); color:#1f2b3a; box-shadow:inset 0 0 0 1px rgba(0,0,0,.08); max-width:330px; }
+  .lic-card.sus{ background:linear-gradient(135deg, #f3e1e1, #e2bdbd); }
+  .lic-top{ display:flex; justify-content:space-between; font-size:11px; font-weight:800; letter-spacing:.08em; margin-bottom:8px; }
+  .lic-body{ display:flex; gap:12px; align-items:center; }
+  .lic-photo{ width:64px; height:64px; border-radius:8px; overflow:hidden; flex:none; }
+  .lic-photo svg{ width:100%; height:100%; display:block; }
+  .lic-info{ display:flex; flex-direction:column; font-size:12.5px; line-height:1.45; min-width:0; }
+  .lic-info b{ font-size:15px; }
   .name-row{ display:flex; gap:8px; }
   .name-row .amt-input{ flex:1; min-width:0; }
   .name-row button{ flex:none; width:46px; }
@@ -545,6 +567,10 @@
     <div class="modal-btns"><button id="nameNo" onclick="closeNameModal(false)">Cancel</button><button onclick="closeNameModal(true)" style="background:var(--accent);color:#fff;">Save name</button></div>
   </div>
 </div>
+<div class="modal" id="quizModal" hidden>
+  <div class="modal-card quiz-card" role="dialog" aria-modal="true" aria-label="Driving test"><div id="quizBody"></div>
+    <button class="quiz-quit" onclick="closeQuiz()" aria-label="Leave the test">✕</button></div>
+</div>
 <div class="modal" id="achModal" hidden onclick="if(event.target === this) closeAchievements()">
   <div class="modal-card" role="dialog" aria-modal="true" aria-label="Achievements">
     <h3>🏆 Achievements</h3>
@@ -708,7 +734,7 @@ function freshState(name){
     ipos:[], retirement:{balance:0, pct:0, contributed:0}, autoInvest:0, cardAutopay:false, obit:null,
     crime:{skill:0, heat:0, record:[], probation:0, prison:null, earned:0, arrests:0, wanted:false, wantedYears:0, lastConviction:null, case:null, open:[], appeal:null, pendingArrest:null},
     health:{conditions:[], history:[], lastCheckup:null, lastDentist:null, fluShot:null, therapy:null, glasses:false, habits:{smoke:false, smokeSince:null, drink:0, diet:'normal', exercise:0}},
-    goals:[], goalPick:false, sub:{}, nameQueue:[], meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
+    goals:[], goalPick:false, sub:{}, nameQueue:[], license:{status:'none'}, meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
@@ -842,6 +868,7 @@ function cheat(key, arg){
       if(EDU_RANK[ED().level] < EDU_RANK.Bachelor){ degrees().push({degree:"Bachelor's", major:'Business', tier:'state', schoolName:'State University', tracks:[], age:state.age, gpa:90}); setLevel('Bachelor'); note(`Cheat: ${n} holds a bachelor's degree.`); }
       else if(!['MD', 'JD', 'PhD'].some(hasDegree)){ degrees().push({degree:'PhD', major:(degrees().slice(-1)[0] || {}).major || 'Undecided', tracks:['Science', 'Education'], age:state.age, gpa:95}); setLevel('Doctorate'); note(`Cheat: ${n} holds a PhD.`); }
       else done = false; } break;
+    case 'license': { if(state.age < 16){ done = false; break; } const L = lic(); L.status = 'licensed'; L.issuedAge = L.issuedAge || state.age; L.number = L.number || ('D' + String(Math.floor(Math.random() * 9e7) + 1e7)); L.suspendedUntil = 0; note("Cheat: a driver's license."); } break;
     case 'gpa': ED().gpa = 100; note('Cheat: a perfect GPA.'); break;
     case 'smartskills': Object.keys(state.hobbies).concat(HOBBY_LIST.filter(h => state.age >= h.minAge).map(h => h.key)).forEach(k => bumpHobby(k, 100)); note('Cheat: a master of every hobby.'); break;
     case 'langs': LANGUAGES.forEach(l => langs()[l] = 100); note('Cheat: fluent in every language.'); break;
@@ -875,7 +902,7 @@ function renderCheats(){
     b('love', 'Everyone loves you', !state.relationships.length) + b('partner', 'Find a partner', state.age < 14 || hasRel('Partner', 'Spouse')) + b('marry', 'Marry your partner', state.age < 18 || !hasRel('Partner')) +
     b('baby', 'Have a baby', state.age < 18) + b('refresh', "Redo this year's actions") + '</div></div>';
   h += '<div class="set-group"><div class="set-title">Career and school</div><div class="cheat-grid">' + b('promote', 'Get promoted', noJob || top) + b('top', 'Jump to the top', noJob || top) +
-    b('degree', ED().program ? 'Graduate right now' : EDU_RANK[ED().level] < EDU_RANK.Bachelor ? "Instant bachelor's" : 'Instant PhD', state.age < 18 || (!ED().program && ['MD', 'JD', 'PhD'].some(hasDegree))) + b('gpa', 'Perfect GPA', ED().gpa >= 100) +
+    b('degree', ED().program ? 'Graduate right now' : EDU_RANK[ED().level] < EDU_RANK.Bachelor ? "Instant bachelor's" : 'Instant PhD', state.age < 18 || (!ED().program && ['MD', 'JD', 'PhD'].some(hasDegree))) + b('license', "Instant driver's license", state.age < 16 || canDrive()) + b('gpa', 'Perfect GPA', ED().gpa >= 100) +
     b('smartskills', 'Master every hobby') + b('langs', 'Fluent in every language', state.age < 6) + '</div></div>';
   h += '<div class="set-group"><div class="set-title">Fame, business and the law</div><div class="cheat-grid">' + b('fame', 'Become famous', state.fame.level >= 80) + b('biz', 'Boost your business', !state.business) +
     b('record', 'Clean criminal record', !CR().record.length && !CR().heat && !(CR().open || []).length) + b('free', 'Get out of prison', !CR().prison) +
@@ -1076,7 +1103,11 @@ function upgradeSave(saved){
     base[k] = (b && v && typeof b === "object" && !Array.isArray(b) && typeof v === "object" && !Array.isArray(v)) ? Object.assign(b, v) : v;
   }
   for(const k in saved) if(!(k in base)) base[k] = saved[k];      // fields set during play (lifestyle, gender, cheats...) that a fresh life doesn't start with
-  base.recent = [];
+  base.recent = (saved.recent || []).filter(k => typeof k === 'string');
+  // Saves from before the driving test: adults are taken to have passed it already.
+  if(!saved.license) base.license = saved.noLicense ? {status:'surrendered'} : saved.age >= 17 ? {status:'licensed', issuedAge:16, number:'D' + String(Math.floor(Math.random() * 9e7) + 1e7)} : saved.age >= 16 ? {status:'permit', permitAge:15} : {status:'none'};
+  if(saved.licenseBack) base.license.suspendedUntil = saved.licenseBack;
+  delete base.noLicense; delete base.licenseBack;
   return base;
 }
 function showScreen(id){
@@ -1711,9 +1742,9 @@ const CHOICE_EVENTS = [
   [14,17,n=>`${n} is scrolling social media late into the night again.`,
     {label:'Keep scrolling', delta:{happy:2,health:-3,smarts:-2}},
     {label:'Put the phone down and sleep', delta:{health:3}}],
-  [15,17,n=>`${n} is nervous about taking the driving test.`,
-    {label:'Take it as soon as possible', delta:{happy:4}},
-    {label:'Put it off a while longer', delta:{happy:-1}}],
+  [15,17,n=>`${n} is nervous about learning to drive.`,
+    {label:'Practice every chance they get', delta:{happy:2}, effect:()=>{ if(lic().status === 'permit') lic().practiced = true; }},
+    {label:'Put it off a while longer', delta:{happy:-1}},'learner'],
   [14,17,n=>`${n} is asked out by someone from school.`,
     {label:'Say yes', delta:{happy:6,looks:1}},
     {label:'Say no — not feeling it right now', delta:{smarts:1}}],
@@ -2142,7 +2173,7 @@ const CHOICE_EVENTS = [
     {label:'Buy it ($80,000)', delta:{money:-80000,happy:8}, effect:()=>{ state.assetSeq++; state.assets.push({id:'a' + state.assetSeq, key:'cabin', name:'Vacation Cabin', category:'Homes', value:infl(85000), boughtPrice:infl(80000), boughtAge:state.age, cond:75}); }},
     {label:'Keep renting vacations', delta:{}},'wealthy',0.8],
   [60,95,n=>`${n} is asked to give up their driver's license after a near-miss.`,
-    {label:'Hand over the keys', delta:{happy:-5,health:2}, effect:()=>{ state.noLicense = true; }},
+    {label:'Hand over the keys', delta:{happy:-5,health:2}, effect:()=>{ lic().status = 'surrendered'; }},
     {label:'Keep driving', risk:0.8, win:{happy:2}, lose:{health:-15,happy:-6,money:-3000}, winText:'Nothing bad happens.', loseText:'They have an accident.'},'car',1.2],
   [65,100,n=>`${n} is offered a spot in a clinical trial for a new longevity drug.`,
     {label:'Join the trial', risk:0.6, win:{health:8,happy:4}, lose:{health:-6}, winText:'They feel ten years younger.', loseText:'The side effects are rough.'},
@@ -2341,7 +2372,7 @@ const COND = {
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
   kids:()=>hasRel('Child'), minorKid:()=>state.relationships.some(r => r.type === 'Child' && r.age < 18), golden:()=>state.relationships.some(r => r.type === 'Spouse' && r.marriedAge != null && state.age - r.marriedAge >= 50), youngKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 5 && r.age <= 17), teenKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 15 && r.age <= 19), adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
   friends:()=>hasRel('Friend'),
-  home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>drives(), nocar:()=>!drives(), athome:()=>!state.seniorHome, inhome:()=>!!state.seniorHome, traveler:()=>!!state.travel && state.travel.trips >= 3,
+  home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>drives(), nocar:()=>!drives(), learner:()=>['none', 'permit'].includes(lic().status), athome:()=>!state.seniorHome, inhome:()=>!!state.seniorHome, traveler:()=>!!state.travel && state.travel.trips >= 3,
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
   renter:()=>state.age >= 20 && !state.assets.some(x => x.category === 'Homes'),
   biz:()=>!!state.business, invested:()=>portfolioValue() > 500,
@@ -2724,7 +2755,6 @@ const BANK = [
   E(8,13,"{n} breaks a neighbor's window with a ball",[['and owns up to it right away',{smarts:2,family:2}],['and hides behind the shed',{happy:-2,family:-3}]]),
   E(12,16,'{n} gets their first phone',[['and is never seen without it',{happy:4,smarts:-1}],['and uses it to teach themselves to code',{smarts:3}]]),
   E(13,17,'{n} has a first crush',[['and it is returned',{happy:6}],['and it goes absolutely nowhere',{happy:-3}]]),
-  E(16,17,'{n} passes the driving test',[['on the first try',{happy:5}],['on the third try',{happy:2}]]),
   E(14,17,'{n} makes the honor roll',[['and the family is beaming',{happy:4,family:3,gpa:2}]],'school'),
   E(18,25,'{n} learns to cook a real meal',[['and it becomes a weekly tradition',{health:2,happy:3}],['and sets off the smoke alarm',{happy:1}]]),
   E(18,30,'{n} gets food poisoning from a sketchy food truck',[['and swears off it forever',{health:-4,happy:-2}]]),
@@ -2793,7 +2823,6 @@ const BANK = [
   E(12,16,'{n} gets braces',[['and hates every photo for two years',{happy:-3,looks:2}]]),
   E(13,17,'{n} gets a part-time job at a {food} stand',[['and smells like it all summer',{money:900,happy:1}]]),
   E(14,17,'{n} stays up all night finishing a project',[['and it gets the best grade in class',{smarts:3,health:-2}],['and falls asleep in the presentation',{happy:-3}]],'school'),
-  E(15,18,'{n} fails a driving test',[['by rolling through a stop sign',{happy:-4}],['and passes the second time with flying colors',{happy:3}]]),
   E(16,19,'{n} goes to prom',[['and dances until the lights come on',{happy:7,looks:1}],['and the date is a disaster',{happy:-3}]]),
   E(18,24,'{n} moves into a tiny apartment with three roommates',[['and they become lifelong friends',{happy:5,friends:4}],['and nobody ever washes a dish',{happy:-3}]]),
   E(18,30,'{n} adopts a houseplant and keeps it alive',[['against all odds',{happy:3}]]),
@@ -3228,6 +3257,7 @@ function ageUpYear(){
   const pets = petsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted));
   if(pets.cost && state.movedOut) pushEntry(a, `${state.name} spends ${fmt(pets.cost)} on food and care for ${myPets().length > 1 ? 'the pets' : myPets().length ? myPets()[0].name : 'their pet'}.`, {money:-pets.cost});
   hobbiesYear(a);
+  licenseYear(a);
   goalsYear(a);
   const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
   const netPrompted = networkYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted));
@@ -4756,23 +4786,183 @@ const ROAD_KINDS = ['car', 'bike', 'rv'];
 const vehOf = x => findCatalog(x.key) || {};
 const vehKind = x => vehOf(x).kind || 'car';
 const roadVehicles = () => state.assets.filter(x => x.category === 'Cars' && ROAD_KINDS.includes(vehKind(x)));
-// A license given up stays gone until a test is passed again; a drunk-driving stop suspends it for a while.
-const canDrive = () => !!state && !state.noLicense && !(state.licenseBack > state.age);
-const drives = () => canDrive() && roadVehicles().length > 0;
-const testCost = () => inflR(100, 10);
-function licenseHtml(){
-  if(state.age < 16 || canDrive()) return '';
-  if(!state.noLicense) return `<div class="plabel">Driver's license</div><div class="invrow"><div class="owned">Suspended after a drunk-driving stop. It comes back at age ${state.licenseBack}. Until then the cars stay parked.</div></div>`;
-  const why = state.done.drivetest ? 'tried this year' : state.crime.prison ? 'not from prison' : state.stats.health < 40 ? 'health too poor to pass' : '';
-  return `<div class="plabel">Driver's license</div><div class="invrow"><div class="owned">${state.name} gave up their license. The cars stay parked, and there are no more crashes or crash lawsuits.</div><div class="assetbuy"><button onclick="retakeTest()" ${why || !canPay(testCost()) ? 'disabled' : ''}>${why ? 'Retake the driving test · ' + why : 'Retake the driving test (' + fmt(testCost()) + ')'}</button></div></div>`;
+// ---------- Driver's license: a written test for a learner's permit, then a road test ----------
+// The player answers the questions; the license is only granted by passing them.
+function lic(){
+  if(!state.license) state.license = {status:'none'};
+  const L = state.license;
+  if(state.noLicense){ L.status = 'surrendered'; delete state.noLicense; }                    // older saves
+  if(state.licenseBack){ L.suspendedUntil = state.licenseBack; delete state.licenseBack; }
+  return L;
 }
-function retakeTest(){
-  if(!state.noLicense || state.done.drivetest || state.crime.prison || state.stats.health < 40 || !ensureCash(testCost())) return;
-  state.done.drivetest = true; state.money -= testCost();
-  const pass = Math.random() < Math.max(0.15, Math.min(0.9, (state.stats.health - 20) / 70 - Math.max(0, state.age - 75) / 40));
-  if(pass) state.noLicense = false;
-  pushEntry(state.age, pass ? `${state.name} retakes the driving test and passes. The keys are back.` : `${state.name} retakes the driving test and fails. Maybe next year.`, {happy: pass ? 6 : -3});
+const canDrive = () => !!state && lic().status === 'licensed' && !(lic().suspendedUntil > state.age);
+const drives = () => canDrive() && roadVehicles().length > 0;
+const parentsPayTest = () => !state.movedOut && state.age < 18 && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father');
+const licFee = kind => parentsPayTest() ? 0 : inflR(kind === 'written' ? 35 : 50, 5);
+const LIC_TRIES = 3;                                                     // attempts at each test per year
+const WRITTEN_QS = [
+  ['A solid yellow line on your side of the center line means:', ['No passing', 'Passing is allowed', 'The lane is ending', 'Slow down to 25 mph']],
+  ['Two cars reach a four-way stop at the same time. Who goes first?', ['The car on the right', 'The car on the left', 'The bigger vehicle', 'Whoever is going straight']],
+  ['A flashing red light means:', ['Stop completely, then go when it is safe', 'Slow down and continue', 'Yield only to buses', 'The light is broken, so ignore it']],
+  ['A school bus stops with red lights flashing and its stop arm out. You should:', ['Stop and wait until the lights stop flashing', 'Pass slowly on the left', 'Honk and pass', 'Pass if no children are in sight']],
+  ['In good conditions, a safe following distance is at least:', ['3 seconds behind the car ahead', '1 second', 'Half a car length', '10 feet']],
+  ['An emergency vehicle with its siren on comes up behind you. You should:', ['Pull over to the right and stop', 'Speed up to get out of its way', 'Stop right where you are in your lane', 'Keep driving at the same speed']],
+  ['A yellow, diamond-shaped sign is a:', ['Warning sign', 'Stop sign', 'Speed limit sign', 'Parking sign']],
+  ['Your left arm held straight out the window means:', ['Turning left', 'Turning right', 'Stopping', 'Let the car behind pass']],
+  ['Before changing lanes you should:', ['Check your mirrors, signal and look over your shoulder', 'Just turn on your signal', 'Honk to warn other drivers', 'Speed up and move over']],
+  ['For drivers 21 and over, the usual legal blood alcohol limit is:', ['0.08%', '0.15%', '0.20%', 'There is no limit']],
+  ['Where it is allowed, you may turn right on a red light:', ['After a full stop, yielding to traffic and pedestrians', 'Without stopping if the road looks clear', 'Only at night', 'Only if the car behind you honks']],
+  ['Your car starts hydroplaning on a wet road. You should:', ['Ease off the gas and steer straight', 'Brake hard', 'Turn the wheel sharply', 'Speed up to get through it']],
+  ['Headlights must be on:', ['From dusk to dawn and whenever it is hard to see', 'Only on highways', 'Only after midnight', 'Only when it snows']],
+  ['A triangle-shaped sign pointing down means:', ['Yield', 'Stop', 'School zone', 'Railroad crossing']],
+  ['A pedestrian is in a crosswalk ahead. You should:', ['Stop and let them cross', 'Honk so they hurry', 'Drive around them', 'Keep going; cars have the right of way']],
+  ['The lights at a railroad crossing are flashing. You should:', ['Stop and wait until the lights stop and the way is clear', 'Cross quickly before the train comes', 'Slow to 15 mph and cross', 'Follow the car in front across']],
+  ['Using a phone while driving is:', ['Not allowed, except hands-free where the law permits it', 'Fine at red lights', 'Fine under 30 mph', 'Fine for a quick text']],
+  ['Your brakes fail. You should:', ['Pump the brakes, shift to a lower gear and use the parking brake gently', 'Turn off the engine', 'Steer straight into a ditch', 'Open the door and drag a foot']],
+  ['Broken white lines between lanes mean:', ['You may change lanes when it is safe', 'Lane changes are not allowed', 'Traffic goes both ways', 'It is a bike lane']],
+  ['Parking uphill next to a curb, you turn your front wheels:', ['Away from the curb', 'Toward the curb', 'Straight ahead', 'It does not matter']],
+  ['The traffic lights at an intersection are out. Treat it as:', ['An all-way stop', 'A green light for everyone', 'A yield for the side street only', 'A place to speed through']],
+  ['The best way to check your blind spot is to:', ['Turn your head and look', 'Use only the rearview mirror', 'Flash your headlights', 'Tap the brakes']],
+  ['With children present, the speed limit in a school zone is usually:', ['About 15 to 25 mph', '40 mph', '55 mph', 'The same as the normal limit']],
+  ['When merging onto a highway you should:', ['Match the speed of traffic and merge into a gap', 'Stop at the end of the ramp', 'Merge at 20 mph and let others adjust', 'Expect cars on the highway to make room']],
+];
+// Road test: each answer is fine, a minor fault, or an automatic fail.
+const ROAD_QS = [
+  ['You reach a stop sign. No other cars are around.', [['Come to a full stop behind the line, then go', 'ok'], ['Stop with the front of the car past the line', 'minor', 'Stop behind the line.'], ['Roll through slowly since nobody is coming', 'fail', 'A rolling stop is an automatic fail.']]],
+  ['The examiner asks you to move into the left lane.', [['Check the mirror, signal, look over your shoulder, then move', 'ok'], ['Check the mirror and move over without signaling', 'minor', 'Always signal.'], ['Signal and move over without looking', 'fail', 'Skipping the blind-spot check is dangerous.']]],
+  ['The light turns yellow while you are still well back from the intersection.', [['Slow down smoothly and stop', 'ok'], ['Slam on the brakes', 'minor', 'Brake smoothly.'], ['Speed up to make it through', 'fail', 'Racing a yellow light fails the test.']]],
+  ['A pedestrian steps into the crosswalk ahead.', [['Stop and wait until they have crossed', 'ok'], ['Creep forward to hurry them along', 'minor', 'Wait until they are clear.'], ['Swerve around them', 'fail', 'Pedestrians in a crosswalk always have the right of way.']]],
+  ['Time to parallel park behind a parked car.', [['Signal, pull alongside, then reverse slowly while checking around you', 'ok'], ['Get in, but bump the curb twice', 'minor', 'Touching the curb costs points.'], ['Clip the car in front while backing in', 'fail', 'Hitting anything is an automatic fail.']]],
+  ['You enter a school zone with children on the sidewalk. The limit is 20 mph.', [['Slow to 20 before entering the zone', 'ok'], ['Brake hard right at the sign', 'minor', 'Slow down before the zone, smoothly.'], ['Keep going 35 since you are in a hurry', 'fail', 'Speeding in a school zone fails the test.']]],
+  ['You are turning left on a green light, and cars are coming the other way.', [['Wait, yield to oncoming traffic and turn when it is clear', 'ok'], ['Wait so long that you miss a clear gap', 'minor', 'Be decisive when the gap is safe.'], ['Turn quickly in front of an oncoming car', 'fail', 'Failing to yield fails the test.']]],
+  ['An ambulance with its siren on comes up behind you.', [['Pull over to the right and stop', 'ok'], ['Stop right where you are in your lane', 'minor', 'Pull to the right so it can pass.'], ['Keep driving and ignore it', 'fail', 'You must yield to emergency vehicles.']]],
+  ['You need to back out of a parking space.', [['Look over your shoulder and back out slowly', 'ok'], ['Back out using only the mirrors', 'minor', 'Turn and look behind you.'], ['Back out quickly without looking', 'fail', 'That nearly hits a passing car.']]],
+  ['You are merging onto the highway from an on-ramp.', [['Speed up to match traffic and merge into a gap', 'ok'], ['Merge a little slower than the traffic', 'minor', 'Match the speed of traffic.'], ['Stop at the end of the ramp to wait', 'fail', 'Stopping on a ramp is dangerous.']]],
+  ['Your phone buzzes in the cup holder.', [['Ignore it and keep your eyes on the road', 'ok'], ['Glance at it at a red light', 'minor', 'Leave the phone alone while driving.'], ['Pick it up and read the message', 'fail', 'Using a phone fails the test.']]],
+  ['The examiner asks for a three-point turn on a quiet street.', [['Signal, check traffic, and turn in three smooth moves', 'ok'], ['Take five moves to get turned around', 'minor', 'Too many moves.'], ['Mount the curb on the second move', 'fail', 'Hitting the curb hard fails the test.']]],
+  ['It starts to rain heavily.', [['Turn on headlights and wipers, and leave more room', 'ok'], ['Turn on the wipers but keep the same speed and distance', 'minor', 'Slow down and leave more room in the rain.'], ['Switch on the hazard lights and speed up to get home', 'fail', 'Speeding in heavy rain fails the test.']]],
+  ['You come to a railroad crossing. The lights are not flashing.', [['Slow down, look both ways and listen, then cross', 'ok'], ['Cross without looking, since the lights are off', 'minor', 'Always look both ways at a crossing.'], ['Stop on the tracks while waiting for traffic ahead', 'fail', 'Never stop on railroad tracks.']]],
+];
+let quiz = null;
+function shuffled(a){ const b = a.slice(); for(let i = b.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+function licWhy(kind){
+  const L = lic(), a = state.age, tries = state.done['lic_' + kind] || 0;
+  if(state.crime.prison) return 'not from prison';
+  if(tries >= LIC_TRIES) return 'no more tries this year';
+  if(kind === 'written'){
+    if(a < 15) return 'from age 15';
+    if(L.status !== 'none') return 'already passed';
+  } else {
+    if(a < 16) return 'from age 16';
+    if(L.status === 'none') return 'pass the written test first';
+    if(L.status === 'licensed') return 'already licensed';
+    if(L.status === 'surrendered' && state.stats.health < 40) return 'health too poor to pass';
+  }
+  if(!canPay(licFee(kind))) return 'cannot afford the fee';
+  return '';
+}
+function startLicenseTest(kind){
+  if(licWhy(kind)) return;
+  const fee = licFee(kind);
+  if(fee){ if(!ensureCash(fee)) return; state.money -= fee; }
+  state.done['lic_' + kind] = (state.done['lic_' + kind] || 0) + 1;
+  quiz = kind === 'written'
+    ? {kind, qs: shuffled(WRITTEN_QS).slice(0, 6).map(([q, opts]) => ({q, opts: shuffled(opts.map((o, i) => ({t:o, r: i === 0 ? 'ok' : 'fail'})))})), i:0, right:0, minors:0, failed:null, picked:null}
+    : {kind, qs: shuffled(ROAD_QS).slice(0, 6).map(([q, opts]) => ({q, opts: shuffled(opts.map(([t, r, why]) => ({t, r, why})))})), i:0, right:0, minors:0, failed:null, picked:null};
+  renderQuiz();
+  document.getElementById('quizModal').hidden = false;
+}
+const PASS_WRITTEN = 5;                                                   // of 6
+const roadMinorsAllowed = () => 2 + (lic().practiced ? 1 : 0);
+function renderQuiz(){
+  const Q = quiz, box = document.getElementById('quizBody'); if(!Q || !box) return;
+  const total = Q.qs.length, title = Q.kind === 'written' ? "Learner's permit · written test" : 'Road test';
+  if(Q.done){
+    const pass = Q.pass;
+    box.innerHTML = `<div class="quiz-head">${title}</div><div class="quiz-result ${pass ? 'up' : 'down'}">${pass ? 'Passed' : 'Not passed'}</div>` +
+      `<p>${Q.kind === 'written' ? `${Q.right} of ${total} correct. You needed ${PASS_WRITTEN}.` : Q.failed ? 'Automatic fail: ' + Q.failed : `${Q.minors} minor fault${Q.minors === 1 ? '' : 's'}. Up to ${roadMinorsAllowed()} are allowed.`}</p>` +
+      `<p>${pass ? (Q.kind === 'written' ? `${state.name} gets a learner's permit${state.age < 16 ? ' and can take the road test from age 16' : ' and can take the road test now'}.` : `${state.name} is now a licensed driver.`) : `You can try again${(state.done['lic_' + Q.kind] || 0) < LIC_TRIES ? ' now, or' : ''} next year.`}</p>` +
+      `<div class="modal-btns"><button onclick="closeQuiz()" style="background:var(--accent);color:#fff;">Done</button></div>`;
+    return;
+  }
+  const q = Q.qs[Q.i];
+  let h = `<div class="quiz-head">${title}<span>Question ${Q.i + 1} of ${total}</span></div><div class="quiz-track"><div style="width:${Math.round(Q.i / total * 100)}%"></div></div><p class="quiz-q">${q.q}</p>`;
+  h += q.opts.map((o, j) => {
+    const cls = Q.picked === null ? '' : o.r === 'ok' ? ' good' : j === Q.picked ? (o.r === 'minor' ? ' meh' : ' bad') : '';
+    return `<button class="quiz-opt${cls}" onclick="answerQuiz(${j})" ${Q.picked !== null ? 'disabled' : ''}>${o.t}</button>`;
+  }).join('');
+  if(Q.picked !== null){
+    const o = q.opts[Q.picked];
+    h += `<div class="quiz-fb ${o.r === 'ok' ? 'up' : 'down'}">${o.r === 'ok' ? 'Correct.' : o.r === 'minor' ? 'Minor fault. ' + (o.why || '') : Q.kind === 'written' ? 'Wrong. The answer is highlighted.' : 'Dangerous. ' + (o.why || '')}</div>`;
+    h += `<div class="modal-btns"><button onclick="nextQuiz()" style="background:var(--accent);color:#fff;">${Q.i + 1 < total && !Q.failed ? 'Next' : 'See result'}</button></div>`;
+  }
+  box.innerHTML = h;
+}
+function answerQuiz(j){
+  const Q = quiz; if(!Q || Q.picked !== null || Q.done) return;
+  const o = Q.qs[Q.i].opts[j]; Q.picked = j;
+  if(o.r === 'ok') Q.right++;
+  else if(o.r === 'minor') Q.minors++;
+  else if(Q.kind === 'road') Q.failed = o.why || 'a dangerous mistake';
+  renderQuiz();
+}
+function nextQuiz(){
+  const Q = quiz; if(!Q) return;
+  if(Q.i + 1 < Q.qs.length && !Q.failed){ Q.i++; Q.picked = null; renderQuiz(); return; }
+  finishQuiz();
+}
+function finishQuiz(){
+  const Q = quiz, L = lic(), n = state.name, a = state.age;
+  Q.done = true;
+  if(Q.kind === 'written'){
+    Q.pass = Q.right >= PASS_WRITTEN;
+    if(Q.pass){ L.status = 'permit'; L.permitAge = a; }
+    pushEntry(a, Q.pass ? `${n} passes the written driving test (${Q.right}/${Q.qs.length}) and gets a learner's permit.` : `${n} fails the written driving test with ${Q.right} of ${Q.qs.length} right.`, {happy: Q.pass ? 4 : -2});
+  } else {
+    Q.pass = !Q.failed && Q.minors <= roadMinorsAllowed();
+    const back = L.status === 'surrendered';
+    if(Q.pass){ L.status = 'licensed'; L.issuedAge = a; L.number = L.number || ('D' + String(Math.floor(Math.random() * 9e7) + 1e7)); }
+    pushEntry(a, Q.pass ? (back ? `${n} retakes the road test and passes. The keys are back.` : `${n} passes the road test and gets a driver's license!`) : `${n} fails the road test${Q.failed ? '' : ' with too many faults'}.`, {happy: Q.pass ? 8 : -3});
+  }
+  renderQuiz();
+}
+function closeQuiz(){
+  if(quiz && !quiz.done){
+    // Walking out counts as a fail; the fee and the attempt are already spent.
+    quiz.failed = quiz.failed || 'left the test early'; finishQuiz();
+  }
+  quiz = null; document.getElementById('quizModal').hidden = true;
   render();
+}
+function licenseCardHtml(){
+  const L = lic(), sus = L.suspendedUntil > state.age;
+  return `<div class="lic-card${sus ? ' sus' : ''}"><div class="lic-top"><span>DRIVER LICENSE</span><span>${sus ? 'SUSPENDED' : 'CLASS C'}</span></div>` +
+    `<div class="lic-body"><div class="lic-photo">${drawAvatar()}</div><div class="lic-info"><b>${state.name}</b><span>No. ${L.number || 'D00000000'}</span><span>Issued at age ${L.issuedAge}</span><span>${sus ? 'Suspended until age ' + L.suspendedUntil : 'Valid'}</span></div></div></div>`;
+}
+function licenseHtml(){
+  const L = lic(), a = state.age;
+  if(a < 14) return '';
+  const btn = (kind, label) => { const why = licWhy(kind), fee = licFee(kind); return `<button onclick="startLicenseTest('${kind}')" ${why ? 'disabled' : ''}>${label}${why ? ' · ' + why : fee ? ' (' + fmt(fee) + ')' : ' (parents pay)'}</button>`; };
+  let h = `<div class="plabel">Driver's license</div><div class="invrow">`;
+  if(L.status === 'licensed') h += licenseCardHtml() + `<div class="owned">${L.suspendedUntil > a ? 'Suspended after a drunk-driving stop. The cars stay parked until age ' + L.suspendedUntil + '.' : roadVehicles().length ? 'Licensed and on the road.' : 'Licensed. Buy a vehicle in the Shop to start driving.'}</div>`;
+  else if(L.status === 'surrendered') h += `<div class="owned">${state.name} gave up their license. The cars stay parked until the road test is passed again.</div><div class="assetbuy">${btn('road', 'Retake the road test')}</div>`;
+  else if(L.status === 'permit') h += `<div class="owned">Learner's permit since age ${L.permitAge}. ${a < 16 ? 'The road test opens at 16.' : 'Pass the road test to drive on your own: six real situations, no dangerous mistakes and at most ' + roadMinorsAllowed() + ' minor faults.'}${L.practiced ? ' Extra practice behind the wheel allows one more minor fault.' : ''}</div><div class="assetbuy">${btn('road', 'Take the road test')}${!L.practiced && a >= 15 ? `<button onclick="practiceDriving()" ${state.done.lic_practice || state.crime.prison || (!parentsPayTest() && !canPay(inflR(300, 10))) ? 'disabled' : ''}>${parentsPayTest() ? 'Practice with a parent' : 'Take driving lessons (' + fmt(inflR(300, 10)) + ')'}</button>` : ''}</div>`;
+  else h += `<div class="owned">${a < 15 ? 'At 15 you can take the written test for a learner\'s permit.' : 'No license yet. First pass the written test on the rules of the road (6 questions, 5 right to pass) for a learner\'s permit, then the road test from 16.'} Without a license, a car stays parked.</div>` + (a >= 15 ? `<div class="assetbuy">${btn('written', 'Take the written test')}</div>` : '');
+  return h + `</div>`;
+}
+function practiceDriving(){
+  const L = lic(); if(L.status !== 'permit' || L.practiced || state.done.lic_practice || state.crime.prison) return;
+  const parent = parentsPayTest(), c = parent ? 0 : inflR(300, 10);
+  if(c){ if(!ensureCash(c)) return; state.money -= c; }
+  state.done.lic_practice = true; L.practiced = true;
+  pushEntry(state.age, parent ? `${state.name} practices driving with a parent every weekend, with only a little shouting.` : `${state.name} takes a course of driving lessons.`, {happy:2});
+  render();
+}
+// Each year: a nudge when a test becomes possible.
+function licenseYear(a){
+  const L = lic();
+  if(a === 15 && L.status === 'none') pushEntry(a, `${state.name} is old enough for a learner's permit. The written test is in the Assets tab, under License.`, {});
+  if(a === 16 && L.status === 'permit') pushEntry(a, `${state.name} can take the road test now. It is in the Assets tab, under License.`, {});
 }
 const serviceCost = x => Math.round((vehOf(x).upkeepFlat || 1000) * state.econ.cumInflation * 0.6 / 10) * 10;
 const customCost = x => Math.max(inflR(800, 50), Math.round(x.value * 0.08 / 50) * 50);
@@ -4830,8 +5020,8 @@ function vehiclesYear(a, canPrompt){
   if(!road.length || state.crime.prison || !canDrive()) return false;
   const hb = state.health.habits;
   if(canPrompt && hb.drink === 2 && Math.random() < 0.05){
-    state.licenseBack = a + (state.crime.record.some(r => r.crime === 'drunk driving') ? 3 : 1);
-    pushEntry(a, `${n} is pulled over after drinking and fails a breath test. Their license is suspended until age ${state.licenseBack}.`, {happy:-6});
+    lic().suspendedUntil = a + (state.crime.record.some(r => r.crime === 'drunk driving') ? 3 : 1);
+    pushEntry(a, `${n} is pulled over after drinking and fails a breath test. Their license is suspended until age ${lic().suspendedUntil}.`, {happy:-6});
     const c = Object.assign({}, DUI, {felony: state.crime.record.some(r => r.crime === 'drunk driving' && !r.expunged)});
     arrest(c, 0);
     return true;
@@ -10005,7 +10195,7 @@ const SUBMENUS = {
   soc:    [['social', 'Socialize', null], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
   inv:    [['mine', 'My portfolio', /^the market|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
-  ast:    [['home', 'Property', null], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
+  ast:    [['home', 'Property', null], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
   biz:    [['run', 'Overview', null], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
   media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
   health: [['overview', 'Overview', null], ['care', 'Care', /care and wellness|conditions/i], ['habits', 'Habits', /^habits/i]],
