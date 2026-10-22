@@ -14,3 +14,14 @@ Once installed it works offline. Your game saves automatically on the device and
 ## Updating the game
 Edit `index.html`, bump `CACHE` in `sw.js` (e.g. `ledger-v2`), and push to `main`.
 GitHub Actions redeploys automatically.
+
+## Social Hub
+`social/` is a separate page for planning social media posts: https://linkplayt.github.io/ByteLife/social/
+
+- Add your Instagram, Facebook, TikTok, X, YouTube, LinkedIn, Threads, Bluesky and Pinterest accounts, with quick links to each profile and inbox.
+- Write a post once, pick the accounts it goes to, and see each site's length limit as you type.
+- Schedule posts on a calendar; drafts, due-now and posted lists keep track of what's left.
+- **Post** copies the caption and opens the site (with the text filled in on X, Threads, Bluesky and LinkedIn). Tick each account off once it's up.
+- Log follower counts to track growth, save reusable hashtag sets, and export a backup.
+
+Everything is stored in your browser. It doesn't log in to or post from your accounts.
