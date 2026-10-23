@@ -243,6 +243,8 @@
   .lic-photo svg{ width:100%; height:100%; display:block; }
   .lic-info{ display:flex; flex-direction:column; font-size:12.5px; line-height:1.45; min-width:0; }
   .lic-info b{ font-size:15px; }
+  .veh-select{ width:100%; margin:6px 0 4px; padding:9px 10px; font-size:16px; font-family:inherit; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
+  .veh-specs{ font-size:12.5px; color:var(--muted); margin:2px 0 6px; }
   .name-row{ display:flex; gap:8px; }
   .name-row .amt-input{ flex:1; min-width:0; }
   .name-row button{ flex:none; width:46px; }
@@ -4105,7 +4107,7 @@ function housingYear(a){
 function makeListings(){
   const cum = state.econ.cumInflation, types = ASSET_CATALOG['Real Estate'];
   state.listingSeq = state.listingSeq || 0;
-  state.listings = [];
+  state.listings = []; state.listingsAge = state.age;
   for(let i = 0, n = rint(4, 6); i < n; i++){
     const t = Math.random() < 0.55 ? pick(types.filter(x => x.price <= 450000)) : pick(types), loc = pick(LOCATIONS);
     const cond = Math.random() < 0.25 ? rint(22, 50) : rint(60, 95);
@@ -4292,9 +4294,10 @@ function realEstateHtml(){
   let h = `<div class="plabel">Real estate</div><div class="status">Housing market: <b>${housingLabel()}</b>${rs.length ? `<br>${rs.length} rental${rs.length > 1 ? 's' : ''} · ${rs.reduce((s, x) => s + x.rental.occupied, 0)} of ${rs.reduce((s, x) => s + x.rental.units, 0)} units let${state.lastRentalNet !== undefined ? ' · last year net ' + fmt(state.lastRentalNet) : ''}` : '<br>Buy properties to rent out: rent comes in every year, and value rises with the market.'}</div>`;
   rs.forEach(x => h += rentalCardHtml(x));
   if(a >= 18){
-    if(!state.listings || !state.listings.length) makeListings();
+    if(!state.listings || state.listingsAge == null) makeListings();       // new listings come on the market once a year, in housingYear
     h += '<div class="plabel">For sale this year</div>';
     state.listings.forEach(l => h += listingHtml(l));
+    if(!state.listings.length) h += '<div class="owned">You bought everything on the market this year. New properties are listed next year.</div>';
     if(state.creditScore < 620) h += '<div class="owned">Investment mortgages need a credit score of 620.</div>';
   } else h += '<div class="owned">Property investing is available from age 18.</div>';
   return h;
@@ -4340,8 +4343,8 @@ function assetCatalogRow(t, cat){
   const down = Math.round(price * 0.2);
   const canFinance = financeable && state.money >= down && state.creditScore >= 580 && !state.bankrupt;
   return `<div class="invrow">
-    <div class="itop"><span><b>${t.name}</b>${models ? ' <span class="tick">' + vehModel(t.key)[0].toUpperCase() + ' ' + vehModel(t.key)[1].toUpperCase() + '</span>' : ''}</span><span class="price">${fmt(price)}</span></div>
-    ${models ? '<div class="sortrow">' + models.map((m, i) => `<button class="sortbtn${i === vehPick(t.key) ? ' active' : ''}" onclick="pickModel('${t.key}',${i})">${m[3] ? m[3] + ' ' : ''}${m[0]} ${m[1]}</button>`).join('') + '</div>' : ''}
+    <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
+    ${models ? `<select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
     <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
       <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Buy · ${fromAge(minA)}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
@@ -4981,37 +4984,40 @@ function licenseYear(a){
 }
 const serviceCost = x => Math.round((vehOf(x).upkeepFlat || 1000) * state.econ.cumInflation * 0.6 / 10) * 10;
 const customCost = x => Math.max(inflR(800, 50), Math.round(x.value * 0.08 / 50) * 50);
-// Every vehicle comes in a few makes and models (made-up brands), each priced a little differently.
+// Every vehicle type comes in real makes and models, each with its own price (in today's dollars) and specs:
+// [make, model, price, horsepower, economy, seats, 0-60 mph in seconds, model year for classics]
 const VEH_MODELS = {
-  ebike:[['Voltra', 'Glide', 1], ['Pedalux', 'City E', 0.85], ['Zipp', 'Cargo Cruiser', 1.25]],
-  scooter:[['Vespina', 'Primo 50', 1], ['Kaito', 'Zoomer', 0.9], ['Rova', 'Citi 125', 1.2]],
-  used:[['Kaito', 'Meridian', 1], ['Ardent', 'Fairway', 0.95], ['Brisa', 'Corsa', 0.85]],
-  motorcycle:[['Kaito', 'Raijin 600', 1], ['Ardent', 'Highwayman', 1.2], ['Solari', 'Furia', 1.35]],
-  newsed:[['Kaito', 'Meridian', 1], ['Ardent', 'Fairway', 0.95], ['Brisa', 'Corsa', 0.85], ['Norrland', 'Fjord', 1.15]],
-  minivan:[['Kaito', 'Harbor', 1], ['Ardent', 'Homestead', 0.95], ['Brisa', 'Familia', 0.88]],
-  suv:[['Kaito', 'Summit', 1], ['Ardent', 'Trailmaster', 1.05], ['Norrland', 'Glacier', 1.15], ['Vellmar', 'GX7', 1.4]],
-  ev:[['Pacer', 'Model One', 1], ['Halcyon', 'Drift', 1.25], ['Kaito', 'e-Meridian', 0.85]],
-  pickup:[['Granite', 'G-150', 1], ['Ardent', 'Ranchhand', 1.05], ['Kaito', 'Hauler', 0.92]],
-  classic:[['Ardent', 'Sunliner', 1, 1965], ['Solari', 'Spider', 1.2, 1962], ['Vellmar', 'Roadster', 1.35, 1969]],
-  sports:[['Solari', 'Veloce', 1], ['Vellmar', 'RS 4', 1.1], ['Kaito', 'Z-Spirit', 0.8]],
-  luxcar:[['Vellmar', '9 Series', 1], ['Halcyon', 'Prestige', 1.1], ['Norrland', 'Regent', 0.85]],
-  rv:[['Wanderlust', '32', 1], ['Ardent', 'Nomad', 0.85], ['Trailhome', 'Vista', 1.3]],
-  supercar:[['Solari', 'Tempesta', 1], ['Vellmar', 'Hyperion', 1.15], ['Fulmine', 'GT', 1.4]],
-  sailboat:[['Seawind', '30', 1], ['Nordvik', '34', 1.3], ['Breeze', '28', 0.8]],
-  speedboat:[['Marlin', 'X24', 1], ['Wake', 'Fury 23', 0.85], ['Riviera', 'Sport 28', 1.3]],
-  yacht:[['Azure', '120', 1], ['Seraphine', '140', 1.4], ['Oceanstar', '100', 0.75]],
-  jet:[['Aeris', '650', 1], ['Skylance', 'X', 1.3], ['Aeris', '450', 0.7]],
+  ebike:[['Aventon', 'Level.2', 1800, 0, '60 mi range · 28 mph', 1, 0], ['Rad Power Bikes', 'RadCity 5 Plus', 2000, 0, '50 mi range · 20 mph', 1, 0], ['Specialized', 'Turbo Vado 4.0', 3900, 0, '90 mi range · 28 mph', 1, 0], ['Trek', 'Allant+ 7', 4300, 0, '75 mi range · 28 mph', 1, 0]],
+  scooter:[['Yamaha', 'Zuma 50F', 2500, 3, '120 mpg · 30 mph', 2, 0], ['Honda', 'Ruckus', 2900, 4, '114 mpg · 30 mph', 1, 0], ['Genuine', 'Buddy 125', 3300, 9, '80 mpg · 55 mph', 2, 0], ['Vespa', 'Primavera 50', 4200, 3, '110 mpg · 30 mph', 2, 0]],
+  used:[['Toyota', 'Corolla', 8000, 139, '33 mpg', 5, 9.5], ['Honda', 'Civic', 8500, 158, '34 mpg', 5, 8.2], ['Ford', 'Focus', 6500, 160, '31 mpg', 5, 8.5]],
+  motorcycle:[['Honda', 'Rebel 500', 6900, 46, '68 mpg', 2, 6.2], ['Kawasaki', 'Ninja 650', 8700, 67, '50 mpg', 2, 4.2], ['Ducati', 'Monster', 12800, 111, '42 mpg', 2, 3.6], ['Harley-Davidson', 'Street Bob 114', 16900, 93, '43 mpg', 2, 4.0], ['BMW', 'R 1300 GS', 20000, 145, '45 mpg', 2, 3.4]],
+  newsed:[['Hyundai', 'Elantra', 22100, 147, '36 mpg', 5, 8.6], ['Toyota', 'Corolla', 22500, 169, '35 mpg', 5, 8.4], ['Mazda', 'Mazda3', 24200, 191, '31 mpg', 5, 7.4], ['Honda', 'Civic', 24600, 150, '36 mpg', 5, 8.0], ['Nissan', 'Altima', 27000, 188, '32 mpg', 5, 7.6], ['Honda', 'Accord', 28300, 192, '32 mpg', 5, 7.2], ['Toyota', 'Camry', 28700, 225, '47 mpg', 5, 7.4]],
+  minivan:[['Kia', 'Carnival', 37000, 287, '21 mpg', 8, 7.0], ['Toyota', 'Sienna', 39000, 245, '36 mpg', 8, 7.6], ['Honda', 'Odyssey', 41000, 280, '22 mpg', 8, 6.9], ['Chrysler', 'Pacifica', 41000, 287, '22 mpg', 7, 7.2]],
+  suv:[['Toyota', 'RAV4', 30000, 203, '30 mpg', 5, 8.0], ['Honda', 'CR-V', 30900, 190, '30 mpg', 5, 7.9], ['Jeep', 'Grand Cherokee', 38000, 293, '22 mpg', 5, 6.9], ['Ford', 'Explorer', 40000, 300, '24 mpg', 7, 6.6], ['Chevrolet', 'Tahoe', 58000, 355, '18 mpg', 8, 7.0], ['BMW', 'X5', 66000, 375, '25 mpg', 5, 5.3]],
+  ev:[['Chevrolet', 'Equinox EV', 35000, 213, '319 mi range', 5, 7.3], ['Ford', 'Mustang Mach-E', 40000, 264, '260 mi range', 5, 5.8], ['Tesla', 'Model 3', 42500, 271, '363 mi range', 5, 4.9], ['Hyundai', 'Ioniq 5', 43000, 225, '303 mi range', 5, 6.9], ['Tesla', 'Model Y', 45000, 299, '337 mi range', 5, 5.1], ['Rivian', 'R1S', 76000, 533, '410 mi range', 7, 4.5]],
+  pickup:[['Toyota', 'Tacoma', 32000, 278, '23 mpg', 5, 7.1], ['Chevrolet', 'Silverado 1500', 38000, 355, '20 mpg', 6, 6.4], ['Ford', 'F-150', 39000, 400, '22 mpg', 6, 5.9], ['Ram', '1500', 41000, 395, '22 mpg', 6, 5.5], ['GMC', 'Sierra Denali', 67000, 420, '17 mpg', 5, 5.6]],
+  classic:[['Cadillac', 'Eldorado Biarritz', 52000, 325, '11 mpg', 6, 10.5, 1963], ['Ford', 'Mustang Convertible', 65000, 271, '14 mpg', 4, 7.4, 1965], ['Chevrolet', 'Bel Air Convertible', 78000, 283, '13 mpg', 6, 9.0, 1957], ['Mercedes-Benz', '280 SL Pagoda', 98000, 170, '17 mpg', 2, 9.3, 1970], ['Chevrolet', 'Corvette Sting Ray Convertible', 105000, 350, '12 mpg', 2, 6.3, 1967]],
+  sports:[['Nissan', 'Z', 43000, 400, '22 mpg', 2, 4.3], ['Ford', 'Mustang GT', 46000, 480, '18 mpg', 4, 4.2], ['Chevrolet', 'Corvette Stingray', 68000, 490, '19 mpg', 2, 2.9], ['BMW', 'M4', 80000, 473, '19 mpg', 4, 3.8], ['Porsche', '911 Carrera', 120000, 388, '21 mpg', 4, 3.9]],
+  luxcar:[['Lexus', 'LS 500', 80000, 416, '22 mpg', 5, 4.6], ['Genesis', 'G90', 90000, 375, '20 mpg', 5, 5.1], ['Audi', 'A8', 90000, 335, '22 mpg', 5, 5.6], ['BMW', '7 Series', 97000, 375, '24 mpg', 5, 5.1], ['Mercedes-Benz', 'S-Class', 118000, 429, '22 mpg', 5, 4.9]],
+  rv:[['Thor', 'Four Winds 31', 110000, 350, '9 mpg', 6, 0], ['Jayco', 'Greyhawk 30', 130000, 350, '9 mpg', 6, 0], ['Winnebago', 'View 24', 180000, 208, '15 mpg', 4, 0], ['Airstream', 'Atlas', 250000, 208, '15 mpg', 2, 0]],
+  supercar:[['Lamborghini', 'Huracán Tecnica', 250000, 631, '15 mpg', 2, 3.0], ['Ferrari', '296 GTB', 320000, 819, '16 mpg', 2, 2.9], ['McLaren', '750S', 330000, 740, '15 mpg', 2, 2.7], ['Lamborghini', 'Revuelto', 600000, 1001, '13 mpg', 2, 2.5], ['Bugatti', 'Chiron', 3000000, 1479, '11 mpg', 2, 2.4]],
+  sailboat:[['Hobie', 'Getaway', 12000, 0, 'sail · beachable', 6, 0], ['J/Boats', 'J/70', 55000, 0, 'sail · racing', 5, 0], ['Beneteau', 'First 24', 65000, 0, 'sail · 2 berths', 6, 0], ['Catalina', '275 Sport', 80000, 0, 'sail · 4 berths', 8, 0]],
+  speedboat:[['Bayliner', 'VR5', 40000, 200, '40 mph top speed', 9, 0], ['Sea Ray', 'SPX 210', 60000, 250, '45 mph top speed', 10, 0], ['MasterCraft', 'XT22', 150000, 450, 'wake boat · 43 mph', 16, 0], ['Chris-Craft', 'Launch 25 GT', 200000, 430, '50 mph top speed', 12, 0]],
+  yacht:[['Ferretti', '500', 1800000, 1600, '30 knots', 8, 0], ['Azimut', '60 Fly', 3000000, 2000, '31 knots', 10, 0], ['Sunseeker', 'Predator 65', 4000000, 2400, '38 knots', 8, 0], ['Princess', 'Y72', 5000000, 3800, '35 knots', 10, 0]],
+  jet:[['HondaJet', 'Elite II', 7000000, 0, '1,550 mi range', 7, 0], ['Embraer', 'Phenom 300E', 10000000, 0, '2,300 mi range', 10, 0], ['Cessna', 'Citation CJ4 Gen2', 11000000, 0, '2,500 mi range', 10, 0], ['Pilatus', 'PC-24', 11000000, 0, '2,300 mi range', 10, 0], ['Gulfstream', 'G650ER', 75000000, 0, '8,600 mi range', 19, 0]],
 };
 const curYear = () => (state.world && state.world.year) || 2026;
 const vehPick = key => Math.min(((state.vehPick || {})[key] || 0), (VEH_MODELS[key] || [0]).length - 1);
 const vehModel = key => (VEH_MODELS[key] || [])[vehPick(key)] || null;
-const vehPrice = t => inflR(t.price * ((vehModel(t.key) || [0, 0, 1])[2]), 100);
+const vehPrice = t => { const m = vehModel(t.key); return inflR(m ? m[2] : t.price, 100); };
+const vehSpecs = m => !m ? '' : [m[3] ? m[3].toLocaleString() + ' hp' : '', m[4], m[5] ? m[5] + ' seat' + (m[5] > 1 ? 's' : '') : '', m[6] ? '0–60 mph in ' + m[6] + ' s' : ''].filter(Boolean).join(' · ');
+const ownedModel = x => x.make ? (VEH_MODELS[x.key] || []).find(m => m[0] === x.make && m[1] === x.model) : null;
 const vName = x => x.model ? x.name : x.name.toLowerCase();
-function pickModel(key, i){ (state.vehPick = state.vehPick || {})[key] = i; renderPanel(); }
+function pickModel(key, i){ (state.vehPick = state.vehPick || {})[key] = Math.max(0, Math.min((VEH_MODELS[key] || [0]).length - 1, +i || 0)); renderPanel(); }
 // Names the vehicle just bought: "2049 Kaito Meridian", or "1965 Ardent Sunliner" for a classic.
 function nameVehicle(x, t, used){
   const m = vehModel(t.key); if(!m) return x;
-  const year = m[3] || (used ? curYear() - rint(3, 9) : curYear());
+  const year = m[7] || (used ? curYear() - rint(3, 9) : curYear());
   x.make = m[0]; x.model = m[1]; x.year = year; x.name = `${year} ${m[0]} ${m[1]}`;
   return x;
 }
@@ -5102,6 +5108,7 @@ function vehicleRowHtml(x){
   const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
+    ${ownedModel(x) ? '<div class="veh-specs">' + vehSpecs(ownedModel(x)) + '</div>' : ''}
     <div class="owned">${{car:'Car', bike:'Motorbike', bicycle:'Bicycle', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
     <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
@@ -7578,16 +7585,35 @@ function takeLoan(type, principal, term, apr, opts){
   state.loans.push(loan);
   return loan;
 }
+// Personal loans: you choose how much (up to what your credit allows) and how long; longer terms cost a little more a year in interest.
+const LOAN_TERMS = [2, 3, 5, 7], LOAN_SHARES = [0.25, 0.5, 0.75, 1];
+const loanForm = () => (state.loanForm = state.loanForm || {share:0.5, term:5});
+const loanMax = () => state.creditScore < 500 ? 0 : inflR(Math.min(50000, Math.max(1000, (state.creditScore - 500) * 60)), 100);
+const loanApr = term => Math.max(0.06, Math.min(0.24, state.econ.rate + (850 - state.creditScore) / 4000 + (term - 3) * 0.004 + (felon() ? 0.03 : 0)));
+const loanPay = (p, apr, term) => p <= 0 ? 0 : p * apr / (1 - Math.pow(1 + apr, -term));
+function setLoanForm(k, v){ loanForm()[k] = v; renderPanel(); }
+function personalLoanHtml(){
+  const a = state.age;
+  if(a < 18) return bankRow('Personal loan', 'Loans are available from age 18.', '');
+  const f = loanForm(), max = loanMax(), amt = Math.max(100, Math.round(max * f.share / 100) * 100), apr = loanApr(f.term), pay = Math.round(loanPay(amt, apr, f.term)), interest = pay * f.term - amt;
+  const why = state.bankrupt ? 'not while bankrupt' : state.done.personalLoan ? 'applied this year' : state.creditScore < 500 ? 'needs a credit score of 500' : state.crime.prison ? 'not from prison' : '';
+  const pill = (label, on, js) => `<button class="sortbtn${on ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  let body = `Borrow for anything, repaid in fixed yearly payments. With a credit score of <b>${state.creditScore}</b> (${creditTier(state.creditScore).toLowerCase()}) you can borrow up to <b>${fmt(max)}</b>.`;
+  if(max > 0) body += '</div><div class="owned">How much</div><div class="sortrow">' + LOAN_SHARES.map(sh => pill(fmt(Math.max(100, Math.round(max * sh / 100) * 100)), f.share === sh, `setLoanForm('share',${sh})`)).join('') + '</div>' +
+    '<div class="owned">Pay it back over</div><div class="sortrow">' + LOAN_TERMS.map(t => pill(t + ' years', f.term === t, `setLoanForm('term',${t})`)).join('') + '</div>' +
+    `<div class="kv"><div><span>Rate</span><b>${(apr * 100).toFixed(1)}%</b><span>APR</span></div><div><span>Each year</span><b>${fmt(pay)}</b><span>for ${f.term} years</span></div><div><span>Total interest</span><b>${fmt(interest)}</b><span>repay ${fmt(pay * f.term)}</span></div></div>` +
+    `<div class="owned">${felon() ? 'A felony record means about a 50% chance of being turned down. ' : 'Approved as long as your score stays above 500. '}Missed payments hurt your credit; you can pay it off early at any time with no penalty.`;
+  return bankRow('Personal loan', body, `<button onclick="applyPersonalLoan()" ${why || max <= 0 ? 'disabled' : ''}>${why ? 'Apply · ' + why : 'Borrow ' + fmt(amt) + ' over ' + f.term + ' years'}</button>`);
+}
 function applyPersonalLoan(){
-  if(state.age < 18 || state.bankrupt || state.done.personalLoan) return;
+  if(state.age < 18 || state.bankrupt || state.done.personalLoan || state.crime.prison) return;
   state.done.personalLoan = true;
   if(felon() && Math.random() < 0.5){ pushEntry(state.age, `${state.name}'s loan application is denied after a background check.`, {happy:-3}); render(); return; }
   if(state.creditScore < 500){ pushEntry(state.age, `${state.name} applies for a personal loan but gets denied.`, {happy:-2}); render(); return; }
-  const amt = inflR(Math.max(1000, (state.creditScore-500)*20), 100);
-  const apr = Math.max(0.06, Math.min(0.22, state.econ.rate + (850-state.creditScore)/4000));
-  takeLoan('Personal', amt, 5, apr);
+  const f = loanForm(), max = loanMax(), amt = Math.max(100, Math.round(max * f.share / 100) * 100), apr = loanApr(f.term);
+  takeLoan('Personal', amt, f.term, apr);
   state.money += amt;
-  pushEntry(state.age, `${state.name} takes out a personal loan of ${fmt(amt)}.`, {happy:2});
+  pushEntry(state.age, `${state.name} takes out a ${fmt(amt)} personal loan at ${(apr * 100).toFixed(1)}% over ${f.term} years (${fmt(Math.round(loanPay(amt, apr, f.term)))} a year).`, {happy:2});
   render();
 }
 function payoffLoan(id){
@@ -10453,11 +10479,13 @@ function renderPanel(){
     }
 
     h += '<div class="plabel">LOANS</div>';
-    h += bankRow('Personal Loan', a < 18 ? 'Loans are available from age 18.' : 'Amount depends on your credit score.', a >= 18 ? `<button onclick="applyPersonalLoan()" ${(state.bankrupt || state.done.personalLoan) ? 'disabled' : ''}>Apply</button>` : '');
+    h += personalLoanHtml();
     if(a >= 18 && !state.loans.some(l => l.type === 'Builder'))
-      h += bankRow('Credit Builder Loan', '$500, low rate, always approved — rebuilds credit fast when paid on time.', `<button onclick="applyBuilderLoan()">Take Loan</button>`);
+      h += bankRow('Credit builder loan', `${fmt(500)} at 8% over 2 years, about ${fmt(Math.round(loanPay(500, 0.08, 2)))} a year (${fmt(Math.round(loanPay(500, 0.08, 2) * 2 - 500))} interest in all). Always approved, even with bad credit. Paying it on time raises your credit score quickly.`, `<button onclick="applyBuilderLoan()">Take the builder loan</button>`);
     state.loans.forEach(l => {
-      h += bankRow(`${l.type} Loan`, `Balance ${fmt(l.balance)} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'deferred while in school' : fmt(l.yearlyPayment)+'/yr · '+l.yearsLeft+'yr left'}`,
+      const paid = l.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - l.balance / l.principal) * 100))) : 0, left = l.deferred ? 0 : Math.max(0, Math.round(l.yearlyPayment * l.yearsLeft - l.balance));
+      h += bankRow(`${l.type} loan`, `Balance ${fmt(l.balance)} of ${fmt(l.principal)} borrowed · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'payments wait until you leave school' : fmt(l.yearlyPayment)+' a year · '+l.yearsLeft+' year' + (l.yearsLeft === 1 ? '' : 's') + ' left · about ' + fmt(left) + ' interest to go'}` +
+        `<div class="stat-track" style="margin:6px 0 2px;"><div class="stat-fill" style="width:${paid}%;background:var(--green)"></div></div><span class="sub-meta">${paid}% paid off</span>`,
         !l.deferred ? `<button onclick="payoffLoan('${l.id}')" ${state.money < l.balance ? 'disabled' : ''}>Pay Off ${fmt(l.balance)}</button>` +
           `<button onclick="extraPayment('${l.id}')" ${canPay(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1)))) ? '' : 'disabled'}>Pay extra ${fmt(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1))))}</button>` +
           (canRefi(l) ? `<button onclick="refinanceLoan('${l.id}')">Refinance to ${(refiRate(l) * 100).toFixed(1)}%</button>` : '') : '');
@@ -13031,10 +13059,16 @@ const MIXES = {
   balanced:{label:'Balanced', parts:{IDXF:0.6, BNDF:0.3, GLDF:0.1}, blurb:'the classic 60/40 mix'},
   growth:{label:'Growth', parts:{IDXF:0.55, TECF:0.35, BNDF:0.1}, blurb:'mostly stocks, bigger ups and downs'},
 };
+const MIX_INFO = {conservative:{ret:'about 4% a year', risk:'Low risk'}, balanced:{ret:'about 6% a year', risk:'Medium risk'}, growth:{ret:'about 8% a year', risk:'Higher risk'}};
+const instrName = k => (ALL_INSTR.find(i => i.key === k) || {name:k}).name;
 function buyMix(kind, share){
-  const mix = MIXES[kind], total = Math.floor(state.money * share); if(!mix || total < 50) return;
-  for(const k in mix.parts) if(state.market[k]) execBuy(k, Math.floor(total * mix.parts[k]));
-  pushEntry(state.age, `${state.name} invests ${fmt(total)} in a ${mix.label.toLowerCase()} portfolio.`, {});
+  const mix = MIXES[kind], total = Math.floor(Math.max(0, state.money) * share);
+  if(!mix || state.crime.prison) return;
+  if(total < 50){ queueToast('You need at least ' + fmt(50) + ' in cash for this.', '', true); return; }
+  const parts = [];
+  for(const k in mix.parts){ const r = state.market[k] && execBuy(k, Math.floor(total * mix.parts[k])); if(r) parts.push(fmt(r.usd) + ' in ' + instrName(k)); }
+  (state.mixIn = state.mixIn || {})[kind] = (state.mixIn[kind] || 0) + total;
+  pushEntry(state.age, `${state.name} invests ${fmt(total)} in the ${mix.label.toLowerCase()} portfolio: ${parts.join(', ')}.`, {});
   render();
 }
 function portfolioHtml(){
@@ -13070,10 +13104,17 @@ function marketOverviewHtml(){
     '<div class="owned">' + (y5 !== null ? '5 years: ' + pctTxt(y5) + ' · ' : '') + 'Mood: <b>' + mood + '</b>. Analyst ratings below are informed guesses, not promises.</div></div>';
 }
 function mixesHtml(){
-  if(state.money < 100) return '';
-  return '<div class="plabel">Ready-made portfolios</div><div class="invrow"><div class="owned">Don\'t want to pick stocks? Put a share of your ' + fmt(state.money) + ' cash into a mix of funds.</div>' +
-    Object.keys(MIXES).map(k => `<div class="mixrow"><span><b>${MIXES[k].label}</b> <span class="sub-meta">${MIXES[k].blurb}</span></span><span class="mixbtns">` +
-      [[0.25, '25%'], [0.5, '50%'], [1, 'All']].map(([s, l]) => `<button class="sortbtn" onclick="buyMix('${k}',${s})">${l}</button>`).join('') + '</span></div>').join('') + '</div>';
+  const cash = Math.max(0, Math.floor(state.money));
+  let h = '<div class="plabel">Ready-made portfolios</div><div class="invrow"><div class="owned">Don\'t want to pick stocks? Put part of your cash (' + fmt(cash) + ') into a ready-made mix of funds. The money is split across the funds right away, and you can sell them like any other investment.</div></div>';
+  Object.keys(MIXES).forEach(k => {
+    const mix = MIXES[k], info = MIX_INFO[k], have = Object.keys(mix.parts).reduce((t, key) => t + (state.portfolio[key] || 0) * ((state.market[key] || {}).price || 0), 0);
+    h += `<div class="invrow"><div class="itop"><span><b>${mix.label}</b></span><span class="price">${info.risk}</span></div>` +
+      `<div class="owned">${mix.blurb[0].toUpperCase() + mix.blurb.slice(1)}. Long-run return ${info.ret}, not guaranteed.</div>` +
+      '<div class="chips">' + Object.keys(mix.parts).map(key => `<span class="chip">${Math.round(mix.parts[key] * 100)}% ${instrName(key)}</span>`).join('') + '</div>' +
+      ((state.mixIn || {})[k] ? `<div class="owned">You have put ${fmt(state.mixIn[k])} into this mix. These funds are worth ${fmt(have)} now.</div>` : '') +
+      '<div class="assetbuy">' + [[0.25, '25%'], [0.5, 'Half'], [1, 'All']].map(([sh, l]) => { const amt = Math.floor(cash * sh); return `<button onclick="buyMix('${k}',${sh})" ${amt < 50 || state.crime.prison ? 'disabled' : ''}>${l}: ${fmt(amt)}</button>`; }).join('') + '</div></div>';
+  });
+  return h;
 }
 // ---- banking ----
 function recordYearHistory(){
