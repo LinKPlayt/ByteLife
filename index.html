@@ -4393,9 +4393,10 @@ function rpath(pts, closed, open){
 }
 const RIMS = {silver:['#eef0f2', '#a3a9b0', '#7d848c'], black:['#4a4d52', '#1d1e21', '#111214'], gunmetal:['#9aa0a7', '#4b5056', '#33373c'], chrome:['#ffffff', '#c3c9cf', '#8e959c'],
   bronze:['#d8b47a', '#8a6634', '#5e4422'], machined:['#f4f5f6', '#b9bec4', '#1d1e21'], white:['#ffffff', '#dcdfe2', '#a9aeb3'], gold:['#e8cf86', '#a8873e', '#6e5726']};
-// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style, n: spokes, fin: finish, cal: caliper color, ww: whitewall}
+// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style, n: spokes, fin: finish, cal: caliper color, ww: whitewall,
+// lugs: lug nuts (trucks run 6), drill: 0 for plain rotors, at: knobby all-terrain tread}
 function drawWheel(id, cx, cy, R, rr, w){
-  w = w || {}; const fin = RIMS[w.fin || 'silver'], n = w.n || 5, t = w.t || 'split', gid = id + 'r' + Math.round(cx), blk = w.fin === 'black';
+  w = w || {}; const fin = RIMS[w.fin || 'silver'], n = w.n || 5, t = w.t || 'split', gid = id + 'r' + Math.round(cx), blk = w.fin === 'black', lugs = w.lugs || 5;
   const pt = (a, rad) => r1(cx + Math.cos(a) * rad) + ',' + r1(cy + Math.sin(a) * rad), C = (rad, f) => `<circle cx="${cx}" cy="${cy}" r="${r1(rad)}" ${f}/>`;
   const open = t !== 'disc' && t !== 'steel' && t !== 'hubcap' && t !== 'wire';
   let s = `<defs><radialGradient id="${gid}" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="${fin[0]}"/><stop offset=".55" stop-color="${fin[1]}"/><stop offset="1" stop-color="${fin[2]}"/></radialGradient>` +
@@ -4403,14 +4404,21 @@ function drawWheel(id, cx, cy, R, rr, w){
     `<radialGradient id="${gid}b" cx=".55" cy=".6" r=".6"><stop offset="0" stop-color="#3a3d42"/><stop offset=".75" stop-color="#1c1e21"/><stop offset="1" stop-color="#0b0c0d"/></radialGradient>` +
     `<linearGradient id="${gid}d" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d3d7db"/><stop offset=".45" stop-color="#8d939a"/><stop offset=".7" stop-color="#a9aeb4"/><stop offset="1" stop-color="#6f757c"/></linearGradient></defs>`;
   // tire with a shaded sidewall and a glint on the tread
-  s += C(R, `fill="url(#${gid}t)"`) + `<path d="M${pt(3.55, R * 0.965)} A${r1(R * 0.965)},${r1(R * 0.965)} 0 0 1 ${pt(5.2, R * 0.965)}" fill="none" stroke="#4a4c51" stroke-width="1.2" stroke-linecap="round"/>`;
+  if(w.at){
+    // all-terrain tires: chunky shoulder blocks that just break the tire's outline
+    s += C(R * 0.975, `fill="url(#${gid}t)"`);
+    for(let i = 0; i < 36; i++){ const a = i * Math.PI / 18, h = 0.062, r0 = R * (i % 2 ? 0.85 : 0.9);
+      s += `<path d="M${pt(a - h, r0)} L${pt(a - h * 0.92, R)} L${pt(a + h * 0.92, R)} L${pt(a + h, r0)}Z" fill="#26282c" stroke="#0b0c0d" stroke-width=".5"/>`; }
+    s += `<path d="M${pt(3.55, R * 0.9)} A${r1(R * 0.9)},${r1(R * 0.9)} 0 0 1 ${pt(5.2, R * 0.9)}" fill="none" stroke="#4a4c51" stroke-width="1" stroke-linecap="round"/>`;
+  }
+  else s += C(R, `fill="url(#${gid}t)"`) + `<path d="M${pt(3.55, R * 0.965)} A${r1(R * 0.965)},${r1(R * 0.965)} 0 0 1 ${pt(5.2, R * 0.965)}" fill="none" stroke="#4a4c51" stroke-width="1.2" stroke-linecap="round"/>`;
   if(w.ww) s += C(rr + (R - rr) * (w.ww === 2 ? 0.55 : 0.42), `fill="none" stroke="#f3f1ea" stroke-width="${r1((R - rr) * (w.ww === 2 ? 0.55 : 0.32))}"`);
   // rim lip, then the dark barrel behind the spokes
   s += C(rr, `fill="url(#${gid})"`) + C(rr * 0.92, `fill="url(#${gid}b)"`);
   if(open){
     // a big cross-drilled brake rotor, its hat and the caliper
     s += C(rr * 0.8, `fill="url(#${gid}d)"`) + C(rr * 0.77, `fill="none" stroke="#5f656c" stroke-width=".5" opacity=".7"`) + C(rr * 0.42, `fill="#3b3f44"`) + C(rr * 0.42, `fill="none" stroke="#9ba1a7" stroke-width=".6"`);
-    if(rr > 14) for(let i = 0; i < 24; i++) s += `<circle cx="${pt(i * Math.PI / 12, rr * (i % 2 ? 0.58 : 0.66)).replace(',', '" cy="')}" r="${r1(Math.max(0.5, rr * 0.022))}" fill="#4a4f55"/>`;
+    if(rr > 14 && w.drill !== 0) for(let i = 0; i < 24; i++) s += `<circle cx="${pt(i * Math.PI / 12, rr * (i % 2 ? 0.58 : 0.66)).replace(',', '" cy="')}" r="${r1(Math.max(0.5, rr * 0.022))}" fill="#4a4f55"/>`;
     if(w.cal){ const a0 = 2.42, a1 = 3.5, ri = rr * 0.5, ro = rr * 0.86;
       s += `<path d="M${pt(a0, ro)} A${r1(ro)},${r1(ro)} 0 0 1 ${pt(a1, ro)} L${pt(a1 - 0.06, ri)} A${r1(ri)},${r1(ri)} 0 0 0 ${pt(a0 + 0.06, ri)}Z" fill="${w.cal}" stroke="${hexMix(w.cal, '#000000', 0.45)}" stroke-width=".7" stroke-linejoin="round"/>` +
         `<path d="M${pt(a0 + 0.12, ro * 0.95)} A${r1(ro * 0.95)},${r1(ro * 0.95)} 0 0 1 ${pt(a1 - 0.12, ro * 0.95)}" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="${r1(Math.max(0.6, rr * 0.03))}" stroke-linecap="round"/>`; }
@@ -4435,7 +4443,7 @@ function drawWheel(id, cx, cy, R, rr, w){
   if(t === 'hubcap') s += C(rr * 0.92, `fill="url(#${gid})"`) + Array.from({length:n}, (_, i) => { const a = i * 2 * Math.PI / n; return `<line x1="${pt(a, rr * 0.3).replace(',', '" y1="')}" x2="${pt(a, rr * 0.85).replace(',', '" y2="')}" stroke="${fin[2]}" stroke-width=".9"/>`; }).join('') + C(rr * 0.42, `fill="${fin[0]}" stroke="${fin[2]}" stroke-width=".8"`);
   // hub with lug nuts and a center cap, then a bright lip on the rim edge
   if(open){ s += C(hub, `fill="${blk ? '#2a2c31' : `url(#${gid})`}" stroke="${blk ? '#62676e' : fin[2]}" stroke-width=".6"`);
-    if(rr > 12) for(let i = 0; i < 5; i++) s += `<circle cx="${pt(st + i * 2 * Math.PI / 5 + Math.PI / 5, rr * 0.18).replace(',', '" cy="')}" r="${r1(rr * 0.032)}" fill="#9aa0a6" stroke="#3b3e43" stroke-width=".4"/>`; }
+    if(rr > 12) for(let i = 0; i < lugs; i++) s += `<circle cx="${pt(st + i * 2 * Math.PI / lugs + Math.PI / lugs, rr * 0.18).replace(',', '" cy="')}" r="${r1(rr * 0.032)}" fill="#9aa0a6" stroke="#3b3e43" stroke-width=".4"/>`; }
   s += C(rr * 0.1, `fill="${blk ? '#1b1c1f' : fin[1]}" stroke="${blk ? '#6a6f75' : fin[2]}" stroke-width=".6"`) +
     C(rr * 0.925, `fill="none" stroke="#000" stroke-opacity=".5" stroke-width=".8"`) + C(rr, `fill="none" stroke="${blk ? '#8a8f95' : fin[0]}" stroke-width="${r1(Math.max(0.9, rr * 0.035))}" opacity=".85"`);
   return s;
@@ -4476,10 +4484,17 @@ function dloShape(p){
 function drawCar(p, c, id){
   const L = p.L, s = Math.min(580 / L, 150 / p.H), x0 = (DW - L * s) / 2, X = x => r1(x0 + x * s), Y = y => r1(DG - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
   const fx = L - p.FO, rx = fx - p.WB, sill = p.sill || 8.5;
+  // trucks and some SUVs have squared-off arches: straight sides, a flat top and rounded corners (sq is the flat top's half width, as a share of the arch radius)
+  const sqY = (wr, R) => [wr + R * 0.22, wr + R * 0.97], sqHalf = (wr, R) => { const [yc, yt] = sqY(wr, R); return sill <= yc ? R : R - R * (1 - p.sq) * (sill - yc) / (yt - yc); };
   // each axle: [x, tire radius, arch radius, half width of the arch at the sill, large-arc flag, rim diameter]; sports cars run bigger rear tires
-  const axle = (x, td, rim) => { const wr = td / 2, ar = wr + (p.gap || 1.6); return [x, wr, ar, Math.sqrt(Math.max(1, ar * ar - (wr - sill) * (wr - sill))), wr > sill ? 1 : 0, rim]; };
+  const axle = (x, td, rim) => { const wr = td / 2, ar = wr + (p.gap || 1.6); return [x, wr, ar, p.sq ? sqHalf(wr, ar) : Math.sqrt(Math.max(1, ar * ar - (wr - sill) * (wr - sill))), wr > sill ? 1 : 0, rim]; };
   const AF = axle(fx, p.TD, p.rim), AR = axle(rx, p.TDr || p.TD, p.rimR || p.rim), AX = [AF, AR];
-  const top = P(carShape(p)), arc = (a, from) => `${from ? 'L' : 'M'}${X(a[0] + a[3])},${Y(sill)} A${r1(a[2] * s)},${r1(a[2] * s)} 0 ${a[4]} 0 ${X(a[0] - a[3])},${Y(sill)}`;
+  // an arch's edge as points from the sill in front of the wheel, over it, to the sill behind it (e widens it, for flares)
+  const archPts = (a, e) => { const x = a[0], wr = a[1], R = a[2] + (e || 0);
+    if(!p.sq){ const t0 = Math.asin(Math.max(-1, Math.min(1, (sill - wr) / R))); return Array.from({length:25}, (_, i) => { const t = t0 + (Math.PI - 2 * t0) * i / 24; return [x + Math.cos(t) * R, wr + Math.sin(t) * R, 0]; }); }
+    const [yc, yt] = sqY(wr, R), hw = sqHalf(wr, R), k = p.sq, side = sill < yc;
+    return [[x + hw, sill, 0], ...(side ? [[x + R, yc, R * 0.4]] : []), [x + k * R, yt, R * 0.35], [x - k * R, yt, R * 0.35], ...(side ? [[x - R, yc, R * 0.4]] : []), [x - hw, sill, 0]]; };
+  const top = P(carShape(p)), arc = (a, from) => p.sq ? rpath(P(archPts(a)), false, from) : `${from ? 'L' : 'M'}${X(a[0] + a[3])},${Y(sill)} A${r1(a[2] * s)},${r1(a[2] * s)} 0 ${a[4]} 0 ${X(a[0] - a[3])},${Y(sill)}`;
   const body = rpath(top, false) + arc(AF, 1) + arc(AR, 1) + 'Z';
   const cd = hexMix(c, '#000000', 0.55), belt = (p.belt[0] + p.belt[1]) / 2, sh0 = p.lines && p.lines[0] ? p.lines[0].reduce((t, q) => t + q[1], 0) / p.lines[0].length : belt - 3.5;
   const sh = p.sh || sh0, hor = p.hor || sill + (sh - sill) * (p.hz || 0.48);
@@ -4492,10 +4507,14 @@ function drawCar(p, c, id){
     `<stop offset="${o(hor - 5)}" stop-color="${K(dk ? 0.35 : lt ? 0.16 : 0.24)}"/><stop offset="${o(sill + 3)}" stop-color="${K(dk ? 0.15 : 0.08)}"/><stop offset="1" stop-color="${K(0.5)}"/></linearGradient>` +
     `<linearGradient id="${id}e" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".42"/><stop offset=".025" stop-color="#000" stop-opacity=".2"/><stop offset=".09" stop-color="#000" stop-opacity="0"/><stop offset=".9" stop-color="#000" stop-opacity="0"/><stop offset=".975" stop-color="#000" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>` +
     `<linearGradient id="${id}gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a9bab" stop-opacity=".85"/><stop offset=".38" stop-color="#3a4856" stop-opacity=".7"/><stop offset="1" stop-color="#1a2129" stop-opacity=".8"/></linearGradient>` +
+    `<linearGradient id="${id}ch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfcfd"/><stop offset=".42" stop-color="#cdd3d8"/><stop offset=".5" stop-color="#6e757c"/><stop offset=".62" stop-color="#b9bfc5"/><stop offset="1" stop-color="#eef1f3"/></linearGradient>` +
     `<clipPath id="${id}cb"><path d="${body}"/></clipPath></defs>`;
   g += studio(id, (X(0) + X(L)) / 2, L * s / 2);
+  // what shows under a body-on-frame truck: frame rails, tank, spare
+  if(p.back) g += p.back(X, Y, s, c);
   // wheel wells (with the far-side liner), then the body over them
-  AX.forEach(([x, wr, ar]) => { g += `<circle cx="${X(x)}" cy="${Y(wr)}" r="${r1(ar * s)}" fill="#0c0d0f"/><circle cx="${X(x)}" cy="${Y(wr) - 2}" r="${r1(ar * s - 2)}" fill="#1b1d20"/>`; });
+  AX.forEach(a => { const [x, wr, ar] = a; g += p.sq ? `<path d="${rpath(P(archPts(a)), true)}" fill="#0c0d0f"/><path d="${rpath(P(archPts(a, -1)), true)}" fill="#1b1d20" transform="translate(0,-2)"/>` :
+    `<circle cx="${X(x)}" cy="${Y(wr)}" r="${r1(ar * s)}" fill="#0c0d0f"/><circle cx="${X(x)}" cy="${Y(wr) - 2}" r="${r1(ar * s - 2)}" fill="#1b1d20"/>`; });
   g += `<path d="${body}" fill="url(#${id}p)"/><path d="${body}" fill="url(#${id}e)"/>`;
   g += `<g clip-path="url(#${id}cb)">`;
   // surfaces above the shoulder crease face the sky, so they read lighter
@@ -4513,14 +4532,17 @@ function drawCar(p, c, id){
   if(!p.noDlo) g += `<path d="${dlo}" fill="none" stroke="#0b0c0e" stroke-width="${r1(0.9 * s)}"/>`;
   if(p.chromeDlo) g += `<path d="${dlo}" fill="none" stroke="#eef1f3" stroke-width="${r1(0.45 * s)}" transform="translate(0,${r1(-0.25 * s)})"/>`;
   // door gaps, handles, creases, rocker
-  (p.doors || []).forEach(x => { const b = belt - 0.6; g += `<path d="M${X(x)},${Y(b)} L${X(x - (p.lean || 1))},${Y(sill + 2)}" stroke="${K(0.7)}" stroke-width="1.1" opacity=".8"/><path d="M${X(x) + 1.1},${Y(b)} L${X(x - (p.lean || 1)) + 1.1},${Y(sill + 2)}" stroke="#fff" stroke-width=".6" opacity=".25"/>`; });
+  // a door edge is either an x (a straight cut) or a list of points (a cut that curves around the arch)
+  (p.doors || []).forEach(x => { const b = belt - 0.6, d = Array.isArray(x) ? rpath(P(x), false) : `M${X(x)},${Y(b)} L${X(x - (p.lean || 1))},${Y(sill + 2)}`;
+    g += `<path d="${d}" fill="none" stroke="${K(0.7)}" stroke-width="1.1" opacity=".8"/><path d="${d}" fill="none" stroke="#fff" stroke-width=".6" opacity=".25" transform="translate(1.1,0)"/>`; });
   (p.handles || []).forEach(x => { g += `<rect x="${X(x)}" y="${Y(belt - (p.hy || 3.2))}" width="${r1(6.5 * s)}" height="${r1(1.3 * s)}" rx="${r1(0.6 * s)}" fill="${p.flush ? K(0.3) : W(0.35)}" stroke="${K(0.55)}" stroke-width=".6"/><rect x="${X(x) + 1}" y="${r1(Y(belt - (p.hy || 3.2)) + 1.3 * s)}" width="${r1(5 * s)}" height="${r1(0.5 * s)}" fill="#000" opacity=".25"/>`; });
   (p.lines || []).forEach(ln => { const d = rpath(P(ln), false); g += `<path d="${d}" fill="none" stroke="#ffffff" stroke-opacity="${lt ? 0.9 : 0.6}" stroke-width="1.2" transform="translate(0,-.9)"/><path d="${d}" fill="none" stroke="${K(0.6)}" stroke-opacity=".5" stroke-width="1"/>`; });
   if(p.clad) g += `<rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="${r1((p.clad.r || 4) * s)}" fill="#1e2023"/><rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="1" fill="#fff" opacity=".2"/>`;
   else g += `<rect x="${X(rx)}" y="${Y(sill + 2.2)}" width="${r1((fx - rx) * s)}" height="${r1(2.2 * s)}" fill="${K(0.5)}" opacity=".55"/><rect x="${X(rx)}" y="${Y(sill + 2.4)}" width="${r1((fx - rx) * s)}" height="1" fill="#fff" opacity=".3"/>`;
   if(p.chrome) p.chrome.forEach(ln => { g += `<path d="${rpath(P(ln), false)}" fill="none" stroke="#f2f4f6" stroke-width="${r1((ln.w || 0.8) * s)}" stroke-linecap="round"/><path d="${rpath(P(ln), false)}" fill="none" stroke="#9aa1a8" stroke-width="${r1(0.3 * s)}" transform="translate(0,${r1(0.3 * s)})" stroke-linecap="round"/>`; });
   // flared fenders catch a highlight above each arch
-  if(p.hip) AX.forEach(([x, wr, ar]) => { const r = ar + 0.7; g += `<path d="M${X(x - r * 0.99)},${Y(wr + r * 0.12)} A${r1(r * s)},${r1(r * s)} 0 0 1 ${X(x + r * 0.99)},${Y(wr + r * 0.12)}" fill="none" stroke="#fff" stroke-opacity="${lt ? 0.55 : 0.3}" stroke-width="${r1(p.hip * 0.45 * s)}"/>`; });
+  if(p.hip && p.sq) AX.forEach(a => { g += `<path d="${rpath(P(archPts(a, 0.7)), false)}" fill="none" stroke="#fff" stroke-opacity="${lt ? 0.55 : 0.3}" stroke-width="${r1(p.hip * 0.45 * s)}"/>`; });
+  else if(p.hip) AX.forEach(([x, wr, ar]) => { const r = ar + 0.7; g += `<path d="M${X(x - r * 0.99)},${Y(wr + r * 0.12)} A${r1(r * s)},${r1(r * s)} 0 0 1 ${X(x + r * 0.99)},${Y(wr + r * 0.12)}" fill="none" stroke="#fff" stroke-opacity="${lt ? 0.55 : 0.3}" stroke-width="${r1(p.hip * 0.45 * s)}"/>`; });
   // bumper details: lower intakes, reflectors and side markers
   const cf = p.cf || 8, cr = p.cr || 11;
   if(!p.noTrim) g += `<path d="${rpath(P([[L + 1, cf - 1, 0], [L - 14, cf - 1, 0], [L - 13, cf + 2.2, 2], [L - 2, cf + 3.2, 2], [L + 1, cf + 6, 0]]), true)}" fill="#141517" opacity=".85"/>` +
@@ -4530,30 +4552,57 @@ function drawCar(p, c, id){
   if(p.hl) g += `<path d="${rpath(P(p.hl), true)}" fill="${p.hlc || '#c9d2da'}" stroke="#4f5862" stroke-width=".8"/><path d="${rpath(P(p.hl), true)}" fill="#fff" opacity="${p.hlc ? 0.2 : 0.55}" transform="translate(0,-1.2)"/>`;
   if(p.drl) g += `<path d="${rpath(P(p.drl), false)}" fill="none" stroke="#ffffff" stroke-width="${r1(0.7 * s)}" stroke-linecap="round"/>`;
   if(p.tl) g += `<path d="${rpath(P(p.tl), true)}" fill="#a3121c" stroke="#4e080d" stroke-width=".8"/><path d="${rpath(P(p.tl), true)}" fill="#ff7a7a" opacity=".3" transform="translate(1,-1.2)"/>`;
-  (p.shapes || []).forEach(sh => { g += `<path d="${rpath(P(sh.p), !sh.open)}" fill="${sh.open ? 'none' : sh.f || '#121315'}" ${sh.open ? `stroke="${sh.f || '#121315'}" stroke-width="${r1((sh.w || 0.6) * s)}" stroke-linecap="round"` : ''} opacity="${sh.o || 1}"/>`; });
+  // extra panels and trim; f:'chrome' gets a polished fill, f:'paint' the body color's own shading
+  const shapes = list => (list || []).map(sh => { const f = sh.f === 'chrome' ? (sh.open ? '#e9ecef' : `url(#${id}ch)`) : sh.f === 'paint' ? `url(#${id}p)` : sh.f || '#121315';
+    return `<path d="${rpath(P(sh.p), !sh.open)}" fill="${sh.open ? 'none' : f}" ${sh.open ? `stroke="${f}" stroke-width="${r1((sh.w || 0.6) * s)}" stroke-linecap="round"` : sh.s ? `stroke="${sh.s}" stroke-width=".7"` : ''} opacity="${sh.o || 1}"/>`; }).join('');
+  g += shapes(p.shapes);
   if(p.extra) g += p.extra(X, Y, s, c, cd);
   g += '</g>';
   // arch lips
   AX.forEach(a => { g += `<path d="${arc(a)}" fill="none" stroke="${p.clad ? '#1e2023' : K(0.35)}" stroke-width="${p.clad ? r1(2.4 * s) : 1.4}"/>`; });
-  if(p.mirror){ const [mx, my] = p.mirror; g += `<path d="${rpath(P([[mx - 2, my - 1.5, 0], [mx + 3, my - 1.5, 0], [mx + 1, my + 1.5, 0], [mx - 3, my + 1.5, 0]]), true)}" fill="#141517"/>` +
-    `<path d="${rpath(P([[mx - 7.5, my + 0.5, 1.5], [mx - 6.5, my + 5, 2.2], [mx + 0.5, my + 4.6, 1.8], [mx + 0.2, my + 0.2, 1]]), true)}" fill="${p.mirrorC || W(0.12)}" stroke="${K(0.55)}" stroke-width=".7"/>` +
-    `<path d="${rpath(P([[mx - 7.2, my + 1.6, 1], [mx - 0.2, my + 1.2, 1]]), false)}" stroke="#000" stroke-opacity=".25" stroke-width="1" fill="none"/>`; }
+  // the mirror (mirrorS scales it up for trucks' tow mirrors; mirrorC 'chrome' gives it chrome caps)
+  if(p.mirror){ const [mx, my] = p.mirror, ms = p.mirrorS || 1, M = pts => P(pts.map(q => [mx + q[0] * ms, my + q[1] * ms, q[2] * ms]));
+    g += `<path d="${rpath(M([[-2, -1.5, 0], [3, -1.5, 0], [1, 1.5, 0], [-3, 1.5, 0]]), true)}" fill="#141517"/>` +
+    `<path d="${rpath(M([[-7.5, 0.5, 1.5], [-6.5, 5, 2.2], [0.5, 4.6, 1.8], [0.2, 0.2, 1]]), true)}" fill="${p.mirrorC === 'chrome' ? `url(#${id}ch)` : p.mirrorC || W(0.12)}" stroke="${K(0.55)}" stroke-width=".7"/>` +
+    `<path d="${rpath(M([[-7.2, 1.6, 1], [-0.2, 1.2, 1]]), false)}" stroke="#000" stroke-opacity=".25" stroke-width="1" fill="none"/>`; }
   // open-top cars: seat backs, a steering wheel and the windshield
   if(p.ws){ const [b, t, w] = p.ws;
     (p.cseats || []).forEach(x => { g += `<path d="${rpath(P([[x - 9, belt - 1, 0], [x - 8, belt + 4.5, 2.5], [x + 1, belt + 6, 2.5], [x + 2, belt - 1, 0]]), true)}" fill="${p.leather || '#2b2523'}"/>`; });
     if(p.cseats) g += `<path d="M${X(b[0] - 18)},${Y(belt + 2)} L${X(b[0] - 14)},${Y(belt + 6.5)}" stroke="#1a1a1a" stroke-width="${r1(1.4 * s)}" stroke-linecap="round"/>`;
     const wsp = P([[b[0], b[1], 0.5], [t[0], t[1], 0.8], [t[0] - 2.2, t[1], 0.8], [b[0] - 2.6, b[1], 0.5]]);
     g += `<path d="${rpath(wsp, true)}" fill="#9fb4c6" fill-opacity=".35" stroke="#e8ecef" stroke-width="${r1(0.8 * s)}"/><path d="M${X(t[0] - w * 0.2)},${Y(t[1] - 1)} l-${r1(4 * s)},${r1(8 * s)}" stroke="#fff" stroke-opacity=".5" stroke-width="2"/>`; }
-  if(p.rails) g += `<rect x="${X(p.rails[0])}" y="${Y(p.H + 1.4)}" width="${r1((p.rails[1] - p.rails[0]) * s)}" height="${r1(1.5 * s)}" rx="${r1(0.7 * s)}" fill="#1c1e21"/>` + [p.rails[0] + 2, p.rails[1] - 4].map(x => `<rect x="${X(x)}" y="${Y(p.H + 0.6)}" width="${r1(2 * s)}" height="${r1(0.9 * s)}" fill="#1c1e21"/>`).join('');
-  if(p.steps) g += `<rect x="${X(rx + AR[2] + 1)}" y="${Y(sill - 0.5)}" width="${r1((fx - rx - AF[2] - AR[2] - 2) * s)}" height="${r1(2.2 * s)}" rx="${r1(0.8 * s)}" fill="#1b1c1f"/><rect x="${X(rx + AR[2] + 1)}" y="${Y(sill - 0.5)}" width="${r1((fx - rx - AF[2] - AR[2] - 2) * s)}" height="1" fill="#fff" opacity=".25"/>`;
+  // roof rails: [from, to] sits a straight rail on a flat roof; a list of points follows a sloping one
+  if(p.rails && Array.isArray(p.rails[0])) g += `<path d="${rpath(P(p.rails), false)}" fill="none" stroke="#1c1e21" stroke-width="${r1(1.5 * s)}" stroke-linecap="round"/>` +
+    [p.rails[0], p.rails[p.rails.length - 1]].map(q => `<path d="${rpath(P([[q[0] - 1.5, q[1], 0], [q[0] + 2, q[1], 0], [q[0] + 2.5, q[1] - 1.8, 0], [q[0] - 2, q[1] - 1.8, 0]]), true)}" fill="#1c1e21"/>`).join('');
+  else if(p.rails) g += `<rect x="${X(p.rails[0])}" y="${Y(p.H + 1.4)}" width="${r1((p.rails[1] - p.rails[0]) * s)}" height="${r1(1.5 * s)}" rx="${r1(0.7 * s)}" fill="#1c1e21"/>` + [p.rails[0] + 2, p.rails[1] - 4].map(x => `<rect x="${X(x)}" y="${Y(p.H + 0.6)}" width="${r1(2 * s)}" height="${r1(0.9 * s)}" fill="#1c1e21"/>`).join('');
+  // running boards: steps:[drop below the sill, height] (or 1 for the default)
+  if(p.steps){ const [sd, shh] = Array.isArray(p.steps) ? p.steps : [0.5, 2.2], sx = X(rx + AR[2] + 1), sw = r1((fx - rx - AF[2] - AR[2] - 2) * s);
+    g += `<rect x="${sx}" y="${Y(sill - sd)}" width="${sw}" height="${r1(shh * s)}" rx="${r1(0.8 * s)}" fill="#1b1c1f"/><rect x="${sx}" y="${Y(sill - sd)}" width="${sw}" height="1" fill="#fff" opacity=".25"/>`; }
   if(p.wing){ const [a, b2, y] = p.wing; g += `<rect x="${X(a + 3)}" y="${Y(y)}" width="${r1(1.4 * s)}" height="${r1((y - p.tail[1]) * s)}" fill="#151618"/><rect x="${X(b2 - 5)}" y="${Y(y)}" width="${r1(1.4 * s)}" height="${r1((y - p.tail[1]) * s)}" fill="#151618"/><path d="${rpath(P([[a, y, 0], [b2, y + 0.8, 1], [b2, y + 2.2, 1], [a - 1, y + 1.6, 0]]), true)}" fill="#151618"/>`; }
   if(p.bed){ const [bx, by] = p.bed; g += `<path d="M${X(0.6)},${Y(by)} L${X(bx)},${Y(by)}" stroke="#16171a" stroke-width="${r1(1.4 * s)}"/><path d="M${X(bx + 0.6)},${Y(by)} L${X(bx + 0.6)},${Y(sill + 2)}" stroke="${K(0.7)}" stroke-width="1.2"/><path d="M${X(1.4)},${Y(by - 1)} L${X(1.4)},${Y(p.tb || 36)}" stroke="${K(0.6)}" stroke-width="1"/>`; }
   if(p.skirt){ const a = rx + AR[3] + 0.5, b = fx - AF[3] - 0.5, k = p.skirt; g += `<path d="${rpath(P([[a, sill + k, 0], [b, sill + k, 0], [b + 0.5, sill - 1.2, 0], [a + 4, sill - 1.2, 0]]), true)}" fill="#141517"/><path d="M${X(a)},${Y(sill + k)} L${X(b)},${Y(sill + k)}" stroke="#fff" stroke-opacity=".28" stroke-width="1"/>`; }
   if(p.over) g += p.over(X, Y, s, c, cd);
   g += `<path d="${body}" fill="none" stroke="${K(0.65)}" stroke-width=".9" stroke-opacity=".75"/>`;
+  // fender flares: flare:{w: width, d: how far they run below the sill, c: color}
+  if(p.flare){ const f = p.flare, d = f.d || 0;
+    AX.forEach(a => { const o = archPts(a, f.w), i = archPts(a).reverse(); o[0][1] -= d; o[o.length - 1][1] -= d; i[0][1] -= d; i[i.length - 1][1] -= d;
+      g += `<path d="${rpath(P([...o, ...i]), true)}" fill="${f.c || '#1d1f22'}" stroke="#0b0c0d" stroke-width=".6"/>` +
+        `<path d="${rpath(P(o.slice(1, -1)), false)}" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1" transform="translate(0,1.2)"/>`; }); }
+  // trim that stands proud of the body: bumpers, step pads, mud flaps
+  g += shapes(p.ext);
   AX.forEach(([x, wr, , , , rim]) => { g += drawWheel(id, X(x), Y(wr), wr * s, (rim / 2) * s, Object.assign({cal:'#3d4248'}, p.wheel)) + `<ellipse cx="${X(x)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/>`; });
   return g;
 }
+// what shows under a pickup's bed: the frame rail, the spare slung beneath it and the hitch receiver
+const truckFrame = (top, x1, sx) => (X, Y, s) => `<rect x="${X(1)}" y="${Y(top)}" width="${r1((x1 - 1) * s)}" height="${r1(5.5 * s)}" fill="#17181b"/>` +
+  `<rect x="${X(sx)}" y="${Y(top - 2.5)}" width="${r1(18 * s)}" height="${r1(6 * s)}" rx="${r1(3 * s)}" fill="#141518"/>` +
+  `<rect x="${X(-2.4)}" y="${Y(top - 0.6)}" width="${r1(4 * s)}" height="${r1(2.6 * s)}" fill="#1d1f22"/>`;
+// a pickup's front bumper over a black air dam: F is the front of the body, yt and yb the bumper's top and bottom, n how far back its side runs
+const truckBumper = (F, yt, yb, f, n = 15) => [{p:[[F - 1.5, yb + 1, 0], [F - n + 8, yb + 1, 0], [F - n + 8.5, yb - 1.4, 1], [F - 3, yb - 2.2, 1], [F - 1, yb - 0.6, 0]], f:'#1b1c1f'},
+  {p:[[F + 0.9, yt, 1], [F - n, yt - 0.8, 1.2], [F - n + 1, yt - 4.5, 2], [F - n + 7, yb + 1.5, 3], [F - 2, yb, 1.5], [F + 1.1, yb + 4, 2]], f, s:f === 'chrome' ? '#6e757c' : '#0d0e10'}];
+// a pickup's rear step bumper: yt is its top; the black pad on top is the step
+const truckStep = (yt, f) => [{p:[[-0.3, yt, 1], [12.2, yt, 1], [13.6, yt - 2.6, 1.5], [11.8, 21.6, 1.5], [10, 20.6, 1], [0.6, 20.6, 1], [-0.3, 22, 1]], f, s:f === 'chrome' ? '#6e757c' : '#0d0e10'},
+  {p:[[0.2, yt + 0.2, 0.4], [8.6, yt + 0.2, 0.4], [8.6, yt - 1, 0.4], [0.2, yt - 1, 0.4]], f:'#1b1c1f'}];
 // shape specs for every car model (see carShape / dloShape for what each field means)
 Object.assign(VEH_SPECS, {
   'Toyota|Corolla|old':{L:182.6, H:57.3, WB:106.3, FO:36.2, TD:25.5, rim:16, cr:12, cf:7, tail:[1.5, 39.5], tb:31, deck:[30, 41], rr:[62, 55.6], rf:[112, 56], cowl:[139, 39.5], hood:[176, 34], nose:29,
@@ -4602,24 +4651,78 @@ Object.assign(VEH_SPECS, {
     belt:[44.5, 40.5], dlo:[36, 155], pil:[[114, 3, 0.6], [54, 1.5, 1.5]], chromeDlo:1, flush:1, doors:[154, 115, 69], lines:[[[2, 40], [115, 40.5, 60], [202, 36]], [[40, 25], [165, 23]]],
     hl:[[207.9, 34, 1], [191, 35.8, 2], [193, 32.5, 1], [208.1, 31, 1]], tl:[[0.3, 42, 1], [16, 43.3, 1], [14, 39.5, 1], [0.3, 38.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#1b1d21'},
   // ---- SUVs ----
-  'Toyota|RAV4':{L:180.9, H:67, WB:105.9, FO:37, TD:28.5, rim:18, cr:15, cf:12, sill:12, tail:[2.5, 62], tb:40, rr:[8, 66.5], rrR:4, rf:[111, 66.7], rfR:6, cowl:[139, 45], hood:[176, 41], nose:36.5,
-    belt:[47, 45.5], dlo:[9, 136], cIn:2, aIn:3.5, pil:[[94, 3.2, 0.6], [52, 3, 0.4]], doors:[134, 95, 54], clad:{r:4}, rails:[20, 105], lines:[[[3, 44], [90, 45, 60], [176, 40.5]]],
-    hl:[[180.6, 39.5, 1], [166, 41, 2], [168, 37, 1], [180.8, 36, 1]], tl:[[0.4, 48, 1], [9, 48.6, 1], [8, 44, 1], [0.3, 43.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#8a8d84'},
-  'Honda|CR-V':{L:184.8, H:66.5, WB:106.3, FO:38.5, TD:28.6, rim:18, cr:14.5, cf:12, sill:11.5, tail:[2.5, 61], tb:39, rr:[9, 65.5], rrR:5, rf:[113, 66.2], rfR:7, cowl:[142, 44.5], hood:[181, 40.5], nose:36,
-    belt:[46.5, 45], dlo:[9, 138], cIn:2, aIn:3.5, pil:[[96, 3.2, 0.6], [55, 3, 0.4]], doors:[136, 97, 57], clad:{r:3}, lines:[[[3, 43.5], [100, 44.2, 60], [180, 40]]],
-    hl:[[184.5, 39, 1], [169, 40.5, 2], [171, 37, 1], [184.7, 35.5, 1]], tl:[[0.4, 50, 1], [4, 50.5, 1], [3.5, 40, 1], [0.3, 39.5, 1]], wheel:{t:'split', n:5, fin:'black'}, col:'#6b6e72'},
-  'Jeep|Grand Cherokee':{L:193.5, H:70.8, WB:116.7, FO:36, TD:30, rim:20, cr:15, cf:12.5, sill:12, tail:[2, 66], tb:41, rr:[8, 70.3], rrR:4, rf:[122, 70.6], rfR:6, cowl:[150, 47.5], hood:[190, 44], nose:39,
-    belt:[49, 48], dlo:[10, 146], cIn:2, aIn:3.5, roof:[[2, 61, 0], [8, 71, 0], [30, 71.5, 0], [30, 66, 0], [12, 63.5, 0]], pil:[[103, 3.2, 0.6], [60, 3, 0.4]], doors:[145, 104, 62], clad:{r:3.5}, rails:[22, 115],
-    lines:[[[3, 46], [100, 46.6, 60], [190, 43.5]]], hl:[[193.2, 43, 1], [178, 44.5, 2], [180, 41, 1], [193.4, 39.5, 1]], tl:[[0.4, 52, 1], [10, 52.5, 1], [9, 48, 1], [0.3, 47.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#6b1220'},
-  'Ford|Explorer':{L:198.8, H:69.9, WB:119.1, FO:38, TD:29.5, rim:20, cr:15, cf:12.5, sill:12, tail:[2, 65.5], tb:40, rr:[8, 69.4], rrR:4, rf:[125, 69.8], rfR:6, cowl:[154, 46.5], hood:[194, 43], nose:38.5,
-    belt:[48.5, 47], dlo:[10, 150], cIn:2, aIn:3.5, roof:[[2, 60, 0], [8, 70, 0], [24, 70.5, 0], [24, 64, 0], [11, 62, 0]], pil:[[106, 3.2, 0.6], [62, 3, 0.4]], doors:[148, 107, 63], clad:{r:3}, rails:[22, 118],
-    lines:[[[3, 45.5], [110, 46, 60], [194, 42.5]]], hl:[[198.5, 42, 1], [183, 43.5, 2], [185, 40, 1], [198.7, 38.5, 1]], tl:[[0.4, 51, 1], [4, 51.5, 1], [3.5, 44, 1], [0.3, 43.5, 1]], wheel:{t:'y', n:5, fin:'machined'}, col:'#1d3554'},
-  'Chevrolet|Tahoe':{L:210.7, H:75.9, WB:120.9, FO:38, TD:31.5, rim:20, cr:16, cf:14, sill:14, tail:[1.5, 73.5], tb:45, rr:[5, 75.6], rrR:3, rf:[136, 75.9], rfR:5, cowl:[163, 52], hoodPts:[[185, 51.2, 30]], hood:[206, 50], hoodR:3, nose:45, noseR:3,
-    belt:[53, 52], dlo:[6, 158], cIn:1.5, aIn:3.5, pil:[[115, 3.4, 0.4], [70, 3.4, 0.2]], chromeDlo:1, doors:[158, 116, 71], steps:1, rails:[20, 125], lines:[[[3, 49], [110, 49.5, 60], [206, 47.5]]],
-    hl:[[210.4, 48, 1], [197, 49, 2], [198, 45.5, 1], [210.6, 44.5, 1]], tl:[[0.3, 62, 1], [3.5, 62.5, 1], [3, 48, 1], [0.3, 47.5, 1]], wheel:{t:'split', n:6, fin:'machined'}, col:'#1a1c1f'},
-  'BMW|X5':{L:194.3, H:69, WB:117.1, FO:36, TD:30.5, rim:21, cr:15, cf:12, sill:12, tail:[3, 64], tb:40, rr:[11, 68.5], rrR:5, rf:[121, 69], rfR:7, cowl:[149, 46.5], hood:[190, 43], nose:38,
-    belt:[49, 47], dlo:[17, 145], cPts:[[13, 51, 1]], cIn:3, aIn:3.5, pil:[[103, 3.2, 0.6], [60, 2.6, 0.4]], chromeDlo:1, doors:[143, 104, 62], rails:[24, 116],
-    lines:[[[3, 45.5], [110, 46.5, 60], [190, 42.5]], [[40, 28], [150, 27]]], hl:[[194, 42.5, 1], [178, 44, 2], [180, 40.5, 1], [194.2, 39, 1]], tl:[[0.4, 50.5, 1], [14, 51, 1], [12, 47, 1], [0.3, 46.5, 1]], wheel:{t:'y', n:5, fin:'gunmetal'}, col:'#2e4a6b'},
+  // like the sports cars these carry their full outline in pts and their own window shape in w
+  'Toyota|RAV4':{L:180.9, H:65.6, WB:105.9, FO:37, TD:28.6, rim:18, gap:1.8, cr:12.5, cf:12.5, sill:10.5, sq:0.6, nose:37, tail:[0.8, 33], noTrim:1,
+    pts:[[9, 12.5, 0], [2.5, 14.5, 3], [0.2, 20, 5], [0, 29, 4], [0.8, 33, 3], [1.4, 40, 6], [3.4, 49.5, 4], [8.6, 61.6, 4], [7.2, 63.4, 1.2], [12, 64.8, 5], [60, 65.6, 50], [108, 65.2, 10],
+      [139, 45.8, 4], [160, 43.6, 30], [175.6, 41.2, 6], [179.6, 37.6, 5], [180.9, 29, 8], [179.8, 18, 5], [176, 13.2, 3], [168, 12.4, 0]],
+    belt:[48.5, 46], w:[[136.6, 46.6, 1.2], [110.4, 63.6, 4], [60, 64.2, 40], [21.5, 63, 4], [17.2, 53.8, 2.5], [30, 50.4, 6], [56, 47.6, 0], [96, 46.9, 0]], seats:[106, 70],
+    pil:[[95.5, 3.2, 0.6], [56, 2.6, 0.4]], doors:[[[136.4, 46.4, 0], [132, 28, 6], [130.6, 15, 0]], [[95.8, 46.8, 0], [95.4, 15, 0]], [[56.2, 47.4, 0], [56.8, 36, 3], [58, 33, 0]]], handles:[99.5, 60], hy:3,
+    mirror:[137.5, 46.6], clad:{r:4.5}, flare:{w:2.6}, rails:[[14, 66.4], [40, 66.9, 20], [104, 66.7]],
+    lines:[[[3, 45.5], [60, 44.6, 50], [176, 40.4]], [[60, 25.5], [128, 23]]],
+    shapes:[{p:[[-1, 18.5, 0], [10, 18, 2], [21, 15, 0], [21, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[182, 19, 0], [170, 18.5, 2], [163, 15.5, 0], [163, 9, 0], [182, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 24, 0.5], [7, 24, 0.5], [7, 22.8, 0.5], [1, 22.8, 0.5]], f:'#9c1520'}],
+    hl:[[180.4, 37.2, 1], [176.5, 40.8, 1], [166.5, 40.6, 2], [165, 39.4, 1], [172, 37.4, 2]], hlc:'#2b3239', drl:[[179.4, 38.2], [168, 40.2]],
+    tl:[[0.6, 46.5, 1], [9.5, 46, 1.5], [10.5, 44, 1], [6, 41.5, 1], [0.6, 41, 1]], wheel:{t:'split', n:5, fin:'machined', drill:0}, col:'#8a8d84'},
+  'Honda|CR-V':{L:184.8, H:66.5, WB:106.3, FO:38, TD:29.2, rim:19, gap:1.8, cr:13, cf:12.8, sill:10.5, nose:38, tail:[0.8, 34], noTrim:1,
+    pts:[[10, 13, 0], [2.8, 15, 3], [0.4, 21, 5], [0, 30, 4], [0.8, 34, 3], [1.6, 42, 6], [3.6, 50.2, 3], [8.4, 62.4, 4], [6.8, 64.2, 1.2], [12, 65.8, 5], [70, 66.5, 50], [112, 66.1, 10],
+      [141.5, 45.8, 4], [163, 44.2, 30], [179.6, 42.4, 5], [183.8, 39.8, 4], [184.8, 30, 7], [183.6, 18.5, 5], [179.5, 13.5, 3], [172, 12.8, 0]],
+    belt:[48.2, 46.4], w:[[139.6, 46.8, 1.2], [113.4, 64.6, 4], [70, 65.2, 40], [22, 64.2, 4], [16.6, 50.4, 2], [60, 48.4, 0], [100, 47.4, 0]], seats:[108, 72],
+    pil:[[97.5, 3.2, 0.6], [57, 2.8, 0.3]], doors:[[[138.8, 46.6, 0], [131, 14, 0]], [[97.8, 47.2, 0], [97.4, 14, 0]], [[57.3, 48.2, 0], [57.9, 35, 5], [54.6, 31.6, 0]]], handles:[101, 61], hy:3.4,
+    mirror:[140.2, 46.8], clad:{r:3.2}, flare:{w:1.4},
+    lines:[[[3, 44.5], [60, 44.8, 50], [180, 41.6]], [[44, 22], [130, 21]]],
+    shapes:[{p:[[-1, 17.5, 0], [12, 17, 2], [23, 14, 0], [23, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[186, 18, 0], [174, 17.5, 2], [165, 14.5, 0], [165, 9, 0], [186, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 24, 0.5], [7, 24, 0.5], [7, 22.8, 0.5], [1, 22.8, 0.5]], f:'#9c1520'}],
+    hl:[[184, 39.8, 1], [181, 41.6, 1], [170, 41.2, 2], [169, 39.6, 1], [176, 38.6, 1]], hlc:'#2b3239', drl:[[183.4, 40.4], [171, 40.6]],
+    tl:[[1.4, 42.6, 1], [12.5, 43.2, 1], [12.5, 45.6, 1], [5, 45.6, 1], [8.2, 57.6, 1], [5.6, 57.8, 1]], wheel:{t:'split', n:5, fin:'black', drill:0}, col:'#6b6e72'},
+  // the Grand Cherokee and the Explorer have "floating" roofs: a black D-pillar so the roof looks like it hovers over the glass
+  'Jeep|Grand Cherokee':{L:193.5, H:69.2, WB:116.7, FO:36, TD:30.4, rim:20, gap:2, cr:13.5, cf:13, sill:11.5, nose:43, tail:[0.8, 36], noTrim:1,
+    pts:[[11, 13.5, 0], [3, 15.5, 3], [0.4, 22, 5], [0, 32, 4], [0.8, 36, 3], [1.6, 44, 6], [3.4, 52.4, 3], [8.6, 64.6, 4], [7, 66.6, 1.2], [12.5, 68.2, 5], [80, 69.2, 60], [118, 68.8, 10],
+      [147, 48.4, 4], [170, 46.6, 30], [189, 45.2, 4], [193.3, 43.6, 2], [192.4, 33, 5], [193.5, 26, 5], [192, 16, 4], [187, 13.2, 3], [178, 12.8, 0]],
+    belt:[51, 48.8], w:[[145, 49.2, 1.2], [119.6, 67.6, 4], [80, 68.1, 50], [26, 66.8, 4], [17.6, 53.8, 2], [60, 50.8, 0], [104, 49.8, 0]], seats:[113, 76], chromeDlo:1,
+    roof:[[-2, 54, 0], [16.6, 53.6, 0], [17.6, 53.8, 2], [26, 66.8, 4], [80, 68.1, 50], [119.6, 67.6, 4], [122, 69.5, 0], [-2, 72, 0]],
+    pil:[[104, 3.2, 0.6], [62, 3, 0.4]], doors:[[[143.6, 49, 0], [140.6, 31, 6], [139.4, 13.5, 0]], [[104.4, 49.6, 0], [104, 13.5, 0]], [[62.6, 50.6, 0], [63.2, 36, 6], [56.5, 27.5, 0]]], handles:[107.6, 66], hy:3.2,
+    mirror:[145.4, 49.4], clad:{r:3.4}, flare:{w:1.2}, rails:[[16, 70.4], [50, 70.9, 20], [112, 70.6]],
+    lines:[[[3, 47.2], [80, 47.6, 60], [189, 44.2]], [[44, 22.5], [140, 22]]],
+    shapes:[{p:[[-1, 19, 0], [12, 18.5, 2], [22, 15, 0], [22, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[195, 19.5, 0], [184, 19, 2], [176, 15.5, 0], [176, 9, 0], [195, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 26, 0.5], [7, 26, 0.5], [7, 24.8, 0.5], [1, 24.8, 0.5]], f:'#9c1520'}],
+    hl:[[193, 43.2, 1], [190, 44.6, 1], [180, 44.4, 1.5], [179.4, 42.6, 1], [192.8, 41.6, 1]], hlc:'#2b3239', drl:[[192.4, 42.4], [181, 43.2]],
+    tl:[[0.8, 46.6, 1], [15, 47.6, 1], [15, 45.6, 1], [1, 44.6, 1]], wheel:{t:'split', n:5, fin:'silver', drill:0}, col:'#6b1220'},
+  'Ford|Explorer':{L:198.8, H:68.4, WB:119.1, FO:37, TD:31, rim:20, gap:2, cr:13.5, cf:13, sill:11.5, nose:41, tail:[0.8, 35], noTrim:1,
+    pts:[[12, 13.5, 0], [3, 15.5, 3], [0.4, 22, 5], [0, 31, 4], [0.8, 35, 3], [1.8, 43, 6], [4, 51.2, 3], [10, 63.6, 5], [8.4, 65.4, 1.2], [14, 66.8, 5], [70, 68.2, 60], [121, 68, 10],
+      [151, 47.2, 4], [172, 45.4, 30], [193.5, 43.4, 5], [197.8, 41, 4], [198.8, 31, 7], [197.6, 19, 5], [193, 13.8, 3], [184, 13, 0]],
+    belt:[51, 48], w:[[149.2, 48, 1.2], [122.6, 66.8, 4], [75, 67.2, 50], [30, 65.4, 4], [20.2, 55.2, 2], [36, 51.8, 5], [64, 49.8, 0], [106, 48.8, 0]], seats:[116, 80],
+    roof:[[-2, 56, 0], [19, 55.4, 0], [20.2, 55.2, 2], [30, 65.4, 4], [44, 66.2, 0], [44, 70, 0], [-2, 70, 0]],
+    pil:[[106.5, 3.2, 0.6], [64.5, 3, 0.4]], doors:[[[147.6, 48, 0], [144.6, 32, 6], [143.4, 13.5, 0]], [[106.8, 48.8, 0], [106.4, 13.5, 0]], [[65, 49.8, 0], [65.6, 37, 6], [58.8, 28, 0]]], handles:[110, 68.6], hy:3.4,
+    mirror:[149.6, 48.2], clad:{r:3.2}, flare:{w:1.2}, rails:[[18, 69.6], [50, 70.2, 20], [116, 69.8]],
+    lines:[[[3, 46.2], [70, 46.6, 60], [194, 42.6]], [[46, 23], [142, 22.2]]],
+    shapes:[{p:[[-1, 19, 0], [13, 18.5, 2], [24, 15, 0], [24, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[200, 19.5, 0], [189, 19, 2], [181, 15.5, 0], [181, 9, 0], [200, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 25, 0.5], [7, 25, 0.5], [7, 23.8, 0.5], [1, 23.8, 0.5]], f:'#9c1520'}],
+    hl:[[198.2, 40.4, 1], [195, 43, 1], [183, 42.6, 2], [182.4, 40.8, 1], [190, 39.6, 1]], drl:[[197.6, 41], [184, 42]],
+    tl:[[1.2, 49.6, 1], [12, 49.8, 1], [12, 47.4, 1], [1, 46.8, 1]], wheel:{t:'y', n:5, fin:'machined', drill:0}, col:'#1d3554'},
+  // the Tahoe is a truck underneath: squared arches, a flat roof, running boards and six-lug wheels
+  'Chevrolet|Tahoe':{L:210.7, H:74.6, WB:120.9, FO:37.5, TD:32.5, rim:20, gap:2.4, cr:15.5, cf:15, sill:14, sq:0.66, nose:48, tail:[0.6, 36], noTrim:1,
+    pts:[[14, 15.5, 0], [4, 16.5, 2], [0.6, 19, 3], [0, 30, 3], [0.6, 36, 2], [0.8, 48, 6], [2, 56.6, 3], [4.2, 71.4, 3], [2.4, 73.2, 1], [6, 74.4, 3], [80, 74.6, 60], [134, 74.4, 6],
+      [163.5, 53, 3], [186, 52.3, 40], [205.6, 51.6, 3], [209.8, 50.2, 2], [210.7, 40, 4], [210.5, 24, 4], [209, 16.5, 3], [203, 14.8, 2], [193, 15.6, 0]],
+    belt:[56.2, 55], w:[[161, 53.8, 1], [136, 73.2, 4], [80, 73.4, 60], [10.4, 72.6, 3], [9, 57.8, 2], [60, 56.6, 0], [118, 56, 0], [144, 55.8, 2], [150, 54, 2]], seats:[125, 88, 50], chromeDlo:1,
+    pil:[[117, 3.4, 0.4], [72, 3.4, 0.2]], doors:[[[159.6, 54, 0], [154.6, 35, 6], [153.4, 16.5, 0]], [[117.4, 56, 0], [117, 16.5, 0]], [[72.6, 56.4, 0], [73.2, 38, 4], [69.6, 36, 0]]], handles:[121, 76.2], hy:3.6,
+    mirror:[161, 54.2], mirrorS:1.15, steps:[1, 2.6], hip:1.6, rails:[14, 126],
+    lines:[[[2, 51], [100, 51.2, 60], [206, 50]], [[60, 27], [152, 27]]],
+    shapes:[{p:[[-1, 21, 0], [13, 20.5, 2], [30, 17, 0], [30, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[212, 19.5, 0], [200, 19, 2], [194, 16.5, 0], [194, 9, 0], [212, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 28, 0.5], [7, 28, 0.5], [7, 26.8, 0.5], [1, 26.8, 0.5]], f:'#9c1520'}],
+    hl:[[210.3, 49.6, 1], [205, 50.8, 1], [199, 50.2, 1], [199.5, 47.2, 1], [210.5, 45.6, 1]], drl:[[210.2, 45.6], [209.8, 34]],
+    tl:[[0.9, 60, 1], [5, 60, 1], [4.6, 44, 1], [0.8, 44, 1]], wheel:{t:'split', n:6, fin:'machined', lugs:6, drill:0}, col:'#1a1c1f'},
+  // the X5's window line ends in BMW's forward-kinked rear corner
+  'BMW|X5':{L:194.3, H:68.6, WB:117.1, FO:35.5, TD:29.7, rim:21, gap:1.6, cr:12.8, cf:12.4, sill:11, nose:40, tail:[0.8, 35], noTrim:1,
+    pts:[[10, 12.8, 0], [2.6, 14.8, 3], [0.3, 21, 5], [0, 31, 4], [0.8, 35, 3], [1.8, 43, 6], [4.6, 51.2, 3], [10.6, 62.4, 4], [9, 64.4, 1.2], [16, 66.2, 6], [80, 68.6, 60], [118, 67.9, 10],
+      [148.5, 47.2, 4], [170, 45.2, 30], [189.5, 43.4, 5], [193.4, 40.8, 4], [194.3, 30, 7], [193, 18, 5], [188.5, 13, 3], [180, 12.4, 0]],
+    belt:[50.4, 47.6], w:[[146.6, 48, 1.2], [119.6, 66.6, 4], [80, 67.4, 50], [30, 64.6, 6], [18.6, 55.6, 3], [20.4, 52.2, 2], [34, 51, 4], [104, 48.6, 0]], seats:[113, 78], chromeDlo:1,
+    pil:[[104.5, 3, 0.6], [61.5, 2.6, 0.4]], doors:[[[145, 47.8, 0], [141.4, 30, 6], [140.4, 13, 0]], [[104.8, 48.6, 0], [104.4, 13, 0]], [[62, 50, 0], [62.4, 36, 5], [56.4, 26.5, 0]]], handles:[108, 65.5], hy:3,
+    mirror:[147.2, 48.2], hip:1.4,
+    lines:[[[3, 47.2], [60, 46.4, 50], [190, 43]], [[48, 21], [100, 22.8, 40], [142, 25]]],
+    shapes:[{p:[[148.6, 38.5, 0.4], [146.2, 38.5, 0.4], [144.6, 30.5, 0.4], [147, 30.2, 0.4]], f:'#1a1b1e'}, {p:[[-1, 18.5, 0], [11, 18, 2], [22, 15, 0], [22, 9, 0], [-1, 9, 0]], f:'#1d1f22'},
+      {p:[[196, 19, 0], [186, 19, 2], [178, 15.5, 0], [178, 9, 0], [196, 9, 0]], f:'#1d1f22'}, {p:[[1, 24, 0.5], [7, 24, 0.5], [7, 22.8, 0.5], [1, 22.8, 0.5]], f:'#9c1520'}],
+    hl:[[193.6, 40.4, 1], [190.4, 43, 1], [178, 42.6, 2], [177.4, 40.8, 1], [186, 39.6, 1]], drl:[[193, 41], [179, 42]],
+    tl:[[0.8, 46.6, 1], [14, 47.6, 1], [14, 45, 1], [1, 43.6, 1]], wheel:{t:'y', n:5, fin:'gunmetal', drill:0}, col:'#2e4a6b'},
   // ---- electric ----
   'Chevrolet|Equinox EV':{L:190.6, H:64.3, WB:116.3, FO:36, TD:29, rim:19, cr:14, cf:11, sill:11.5, tail:[3, 57], tb:38, rearPts:[[8, 60, 6]], rr:[18, 62.8], rf:[117, 64], cowl:[148, 43.5], hood:[186, 39], nose:34,
     belt:[47, 44], dlo:[16, 145], cIn:3, roof:[[8, 61.5, 0], [20, 64, 0], [125, 65, 0], [120, 62.2, 0], [22, 60.5, 0]], pil:[[100, 3.2, 0.6], [58, 3, 0.5]], doors:[142, 101, 60], clad:{r:4}, flush:1,
@@ -4735,21 +4838,80 @@ Object.assign(VEH_SPECS, {
     hl:[[178.4, 24.6, 1], [168, 28, 2], [165, 27.6, 1], [170, 25.6, 2], [178.8, 22.6, 1]], hlc:'#2b3239', drl:[[177.4, 24], [169, 26.8]],
     tl:[[0.4, 37.6, 1], [3, 38.6, 1], [3, 36.2, 1], [0.4, 35.6, 1]], wheel:{t:'split', n:5, fin:'silver', cal:'#1d4fa8'}, col:'#1f3f8f'},
   // ---- pickups ----
-  'Toyota|Tacoma':{L:213, H:72, WB:131.9, FO:34, TD:31.5, rim:18, cr:17, cf:14, sill:15, tail:[0.5, 50], tailR:0.5, tb:34, rearPts:[[62, 50, 0], [63.5, 51, 0], [65, 69, 2]], rr:[68, 71.5], rrR:3, rf:[140, 72], rfR:6, cowl:[160, 52], hoodPts:[[185, 53.5, 20]], hood:[208, 51.5], hoodR:3, nose:46,
-    belt:[53.5, 52.5], dlo:[69, 156], cIn:3, aIn:3.5, pil:[[109, 3.4, 0.4]], doors:[154, 110, 69], clad:{r:3}, bed:[62, 50], lines:[[[3, 47], [62, 47.5], [208, 48.5]]],
-    hl:[[212.7, 49.5, 1], [200, 51, 2], [201, 47, 1], [212.9, 46, 1]], tl:[[0.3, 48, 0.5], [2.5, 48.3, 0.5], [2.5, 38, 0.5], [0.3, 37.5, 0.5]], wheel:{t:'split', n:6, fin:'black'}, col:'#d9551a'},
-  'Chevrolet|Silverado 1500':{L:231.7, H:75.6, WB:147.4, FO:37, TD:32, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 54], tailR:0.5, tb:36, rearPts:[[69, 54, 0], [70.5, 55, 0], [72, 73, 2]], rr:[75, 75.3], rrR:3, rf:[156, 75.6], rfR:6, cowl:[178, 54], hoodPts:[[200, 55, 20]], hood:[227, 53.5], hoodR:2, nose:49.5, noseR:2,
-    belt:[57, 56], dlo:[76, 173], cIn:3, aIn:3.5, pil:[[122, 3.4, 0.3]], doors:[170, 123, 77], steps:1, bed:[69, 54], lines:[[[3, 50], [69, 50.5], [227, 51]]],
-    hl:[[231.4, 52, 1], [218, 53.5, 2], [219, 49.5, 1], [231.6, 48.5, 1]], tl:[[0.3, 52, 0.5], [3, 52.3, 0.5], [3, 40, 0.5], [0.3, 39.5, 0.5]], wheel:{t:'split', n:6, fin:'machined'}, col:'#9ea4aa'},
-  'Ford|F-150':{L:231.7, H:77.2, WB:145.4, FO:36, TD:32.5, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 55], tailR:0.5, tb:37, rearPts:[[67, 55, 0], [68.5, 56, 0], [70, 75, 2]], rr:[73, 77], rrR:3, rf:[157, 77.2], rfR:6, cowl:[179, 55], hoodPts:[[202, 56.5, 20]], hood:[227, 55], hoodR:2, nose:50, noseR:2,
-    belt:[58.5, 57.5], dlo:[74, 174], cIn:3, aIn:3.5, pil:[[121, 3.4, 0.3]], doors:[171, 122, 75], steps:1, bed:[67, 55], lines:[[[3, 51.5], [67, 52], [227, 52.5]]],
-    hl:[[231.4, 53.5, 1], [219, 55, 2], [220, 51, 1], [231.6, 50, 1]], tl:[[0.3, 53, 0.5], [3, 53.3, 0.5], [3, 41, 0.5], [0.3, 40.5, 0.5]], wheel:{t:'split', n:6, fin:'machined'}, col:'#2c4a7c'},
-  'Ram|1500':{L:232.9, H:77.6, WB:144.6, FO:37, TD:32.5, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 55], tailR:0.5, tb:37, rearPts:[[66, 55, 0], [67.5, 56, 0], [69, 75, 2]], rr:[72, 77.3], rrR:3, rf:[158, 77.6], rfR:6, cowl:[180, 55.5], hoodPts:[[204, 57, 20]], hood:[228, 55.5], hoodR:3, nose:50,
-    belt:[58.5, 57.5], dlo:[73, 175], cIn:3, aIn:3.5, pil:[[121, 3.4, 0.3]], doors:[172, 122, 74], steps:1, bed:[66, 55], lines:[[[3, 51.5], [66, 52], [228, 53]]],
-    hl:[[232.6, 53.5, 1], [220, 55, 2], [221, 51.5, 1], [232.8, 50.5, 1]], tl:[[0.3, 54, 0.5], [3, 54.3, 0.5], [3, 42, 0.5], [0.3, 41.5, 0.5]], wheel:{t:'split', n:6, fin:'silver'}, col:'#1a1c1f'},
-  'GMC|Sierra Denali':{L:231.9, H:75.5, WB:147.4, FO:37, TD:32.5, rim:22, cr:17, cf:15, sill:16, tail:[0.5, 54], tailR:0.5, tb:36, rearPts:[[69, 54, 0], [70.5, 55, 0], [72, 73, 2]], rr:[75, 75.2], rrR:3, rf:[157, 75.5], rfR:6, cowl:[179, 54], hoodPts:[[201, 55.2, 20]], hood:[227, 53.5], hoodR:2, nose:49.5, noseR:2,
-    belt:[57, 56], dlo:[76, 173], cIn:3, aIn:3.5, pil:[[122, 3.4, 0.3]], chromeDlo:1, doors:[170, 123, 77], steps:1, bed:[69, 54], lines:[[[3, 50], [69, 50.5], [227, 51]]],
-    hl:[[231.6, 52.5, 1], [218, 53.5, 2], [219, 49.5, 1], [231.8, 48.5, 1]], tl:[[0.3, 52, 0.5], [3, 52.3, 0.5], [3, 40, 0.5], [0.3, 39.5, 0.5]], wheel:{t:'split', n:6, fin:'chrome'}, col:'#4e5257'},
+  // full outlines like the SUVs: tailgate, bed rail, cab, raked windshield, high flat hood and an upright grille;
+  // bumpers stand proud of the body (ext), and the frame, spare and hitch show under the bed (back)
+  // the Tacoma is the off-road trim: black fender flares and all-terrain tires
+  'Toyota|Tacoma':{L:212.3, H:71.6, WB:127.4, FO:35, TD:30.6, rim:17, gap:1.8, sill:18, sq:0.55, nose:49, tail:[3, 50.2], noTrim:1,
+    pts:[[32.8, 18, 0], [32.4, 23, 1], [5.5, 23, 1.5], [3, 25.5, 1.5], [2.6, 37, 2], [3, 49, 1], [4, 50.2, 0.6], [67.4, 50.6, 0.6], [68.6, 51, 0.4], [70.4, 68, 3], [75, 70.6, 4], [110, 71.6, 40],
+      [133, 71, 5], [157, 53, 2.5], [180, 52, 30], [204, 50.2, 3], [208.6, 49.2, 2], [210.5, 46, 4], [211.6, 37, 3], [212.3, 30, 2], [211, 24, 3], [205, 18.8, 2], [194.4, 18, 0]],
+    belt:[52.2, 51.6], w:[[151.5, 49.4, 0.8], [131.6, 69.4, 3], [100, 70, 40], [78.4, 69, 3], [75.4, 52.4, 1.5], [110, 52, 0], [138, 51.8, 2], [142.5, 49.4, 2]], seats:[128, 92],
+    pil:[[112, 3.4, 0.3]], doors:[[[155, 51.8, 0], [153.4, 19.5, 0]], [[112.3, 52.2, 0], [112, 19.5, 0]], [[75.6, 52.6, 0], [74.8, 19.5, 0]]], handles:[115.6, 78.6], hy:3.8,
+    mirror:[148.5, 50.2], mirrorS:1.35, flare:{w:2}, hip:1.2,
+    lines:[[[3, 45.5], [68, 46], [205, 46.8]], [[76, 27], [153, 27]]],
+    shapes:[{p:[[67.5, 51.5, 0], [68.6, 51.5, 0], [68.6, 17, 0], [67.5, 17, 0]], f:'#141517'}, {p:[[213, 44, 0], [211, 44, 0.5], [210.6, 33, 0.5], [213, 33, 0]], f:'#18191c'}],
+    ext:[...truckBumper(212.3, 33.4, 20.4, 'paint', 13),
+      ...truckStep(30, '#2a2c30')],
+    back:truckFrame(23, 194, 13),
+    hl:[[211, 46.4, 1], [205.5, 48.6, 1.5], [196, 48.2, 2], [198, 45.6, 1], [210.6, 43.4, 1]], hlc:'#2b3239', drl:[[210.4, 45.6], [204, 47.4], [199, 47.2]],
+    tl:[[3.2, 49, 0.6], [7.5, 49, 0.6], [6.4, 38, 0.6], [3.2, 37.6, 0.6]], wheel:{t:'split', n:6, fin:'gunmetal', lugs:6, drill:0, at:1}, col:'#d9551a'},
+  'Chevrolet|Silverado 1500':{L:231.7, H:75.6, WB:147.4, FO:36.8, TD:33, rim:20, gap:2.2, sill:19.5, sq:0.7, nose:56, tail:[3, 56.4], noTrim:1,
+    pts:[[28.8, 19.5, 0], [28.4, 23.5, 1], [5.5, 23.5, 1.5], [3, 26, 1.5], [2.7, 40, 2], [3, 55.4, 1], [4, 56.4, 0.6], [76.2, 56.8, 0.6], [77.4, 57.2, 0.4], [78.4, 73, 3], [82, 75.4, 4], [125, 75.6, 40],
+      [151, 75, 5], [174.5, 58.4, 2.5], [200, 58.2, 30], [227, 57.4, 2.5], [231.2, 56.6, 1.5], [231.7, 48, 4], [231.4, 36, 2], [230, 24, 3], [226, 20, 2], [213.6, 19.5, 0]],
+    belt:[58.6, 58], w:[[169.4, 55.4, 0.8], [149.6, 73.2, 3], [115, 73.8, 40], [85, 73.4, 2.5], [84, 58.6, 1.5], [125, 58.2, 0], [155, 58, 2], [159.5, 55.4, 2]], seats:[142, 104],
+    pil:[[126.5, 3.6, 0.3]], doors:[[[173, 57.8, 0], [171.4, 21, 0]], [[126.8, 58.2, 0], [126.5, 21, 0]], [[84.4, 58.6, 0], [83.4, 21, 0]]], hy:4.2,
+    mirror:[166.5, 56.2], mirrorS:1.6, steps:[1.5, 2.6], hip:1.6,
+    lines:[[[3, 50.6], [77, 51], [228, 52]], [[84, 29], [171, 29]]],
+    shapes:[{p:[[76.3, 58, 0], [77.4, 58, 0], [77.4, 18, 0], [76.3, 18, 0]], f:'#141517'}, {p:[[232, 52, 0], [230.4, 52, 0.5], [230.2, 37, 0.5], [232, 37, 0]], f:'#18191c'}],
+    ext:[...truckBumper(231.7, 36, 20.6, 'chrome'),
+      ...truckStep(31.4, 'chrome'),
+      {p:[[8.4, 31.4, 0.3], [11.8, 31.4, 0.3], [11.8, 27.6, 0.3], [8.4, 27.6, 0.3]], f:'#1b1c1f'}],
+    back:truckFrame(23.5, 213, 11),
+    hl:[[231.4, 54.6, 1], [225, 55.2, 1.5], [224, 51.5, 1], [231.6, 50.6, 1]], hlc:'#2b3239', drl:[[231.2, 55.4], [225.4, 55.8]],
+    tl:[[3.2, 55, 0.6], [6, 55, 0.6], [6, 40.5, 0.6], [3.2, 40, 0.6]], wheel:{t:'y', n:6, fin:'machined', lugs:6, drill:0}, col:'#9ea4aa'},
+  'Ford|F-150':{L:231.7, H:77.2, WB:145.4, FO:36, TD:32.5, rim:20, gap:2.2, sill:19.5, sq:0.62, nose:56, tail:[3, 56.9], noTrim:1,
+    pts:[[31.85, 19.5, 0], [31.4, 23, 1], [5.5, 23, 1.5], [3, 25.5, 1.5], [2.6, 40, 2], [3, 55.8, 1], [4, 56.9, 0.6], [71.4, 57.4, 0.6], [72.4, 57.6, 0.4], [73.6, 74.5, 3], [78, 77, 4], [120, 77.2, 40],
+      [148, 76.6, 5], [171.5, 59.6, 2.5], [200, 59.2, 30], [226.5, 57.8, 3], [231, 56.6, 2], [231.5, 46, 6], [231.3, 35.5, 2], [230, 24, 3], [226, 20, 2], [214.15, 19.5, 0]],
+    belt:[59.2, 58.6], w:[[166.5, 56.2, 0.8], [146.5, 74.6, 3], [110, 75.2, 40], [81.5, 74.8, 2.5], [79.6, 59.6, 1.5], [120, 59.1, 0], [152, 58.8, 2], [156.5, 56.2, 2]], seats:[140, 100],
+    pil:[[123.5, 3.6, 0.3]], doors:[[[170, 58.6, 0], [168.6, 21, 0]], [[123.8, 59, 0], [123.5, 21, 0]], [[79.8, 59.4, 0], [78.8, 21, 0]]], hy:4.2,
+    mirror:[163.5, 57], mirrorS:1.6, steps:[1.5, 2.6], hip:1.4,
+    lines:[[[3, 51.4], [72, 51.8], [228, 52.8]], [[80, 28], [168, 28]]],
+    shapes:[{p:[[71.5, 58, 0], [72.6, 58, 0], [72.6, 18, 0], [71.5, 18, 0]], f:'#141517'}, {p:[[173.6, 47, 0.5], [177.6, 47, 0.5], [176.2, 37.5, 0.5], [172.6, 37.5, 0.5]], f:'#1a1b1e'},
+      {p:[[232, 50, 0], [230.2, 50, 0.5], [230, 36.5, 0.5], [232, 36.5, 0]], f:'#18191c'}],
+    ext:[...truckBumper(231.7, 35.6, 20.6, '#2a2c30'),
+      ...truckStep(31, 'chrome')],
+    back:truckFrame(23, 214, 13),
+    hl:[[231.2, 55.8, 1], [224, 56.4, 1.5], [222.4, 53.4, 1], [224.4, 49.6, 1], [231.6, 49.2, 1]], hlc:'#2b3239', drl:[[231, 55], [224.8, 55.6]],
+    tl:[[3.2, 55, 0.6], [6, 55, 0.6], [6, 41.5, 0.6], [3.2, 41, 0.6]], wheel:{t:'split', n:6, fin:'machined', lugs:6, drill:0}, col:'#2c4a7c'},
+  // the Ram keeps its round wheel arches and a hood that falls away toward the nose
+  'Ram|1500':{L:232.9, H:77.6, WB:144.6, FO:38.3, TD:32, rim:20, gap:2.4, sill:19.5, nose:54, tail:[3, 56.8], noTrim:1,
+    pts:[[31.94, 19.5, 0], [31.6, 23.5, 1], [5.5, 23.5, 1.5], [3, 26, 1.5], [2.6, 40, 2], [3, 55.6, 1.2], [4.2, 56.8, 0.8], [73.4, 57.4, 0.8], [74.5, 57.8, 0.4], [76.6, 74, 4], [82, 77, 6], [120, 77.6, 50],
+      [146.5, 76.6, 6], [173, 59, 3], [200, 58.2, 30], [225, 56.4, 6], [231.4, 54.4, 3], [232.9, 47, 6], [232.6, 36, 2], [231, 24, 3], [227, 20, 2], [212.66, 19.5, 0]],
+    belt:[59.4, 58.8], w:[[167.5, 56.4, 0.8], [145.6, 75, 3], [110, 75.6, 50], [84, 74.8, 3], [81.6, 59.2, 1.5], [125, 58.8, 0], [153, 58.6, 2], [157.5, 56.2, 2]], seats:[140, 101],
+    pil:[[124, 3.6, 0.3]], doors:[[[171.4, 58.4, 0], [170, 21, 0]], [[124.3, 59, 0], [124, 21, 0]], [[81.8, 59.4, 0], [80.6, 21, 0]]], hy:4.2,
+    mirror:[164.5, 57.2], mirrorS:1.5, steps:[1.5, 2.6],
+    lines:[[[3, 51.6], [74, 52], [190, 52.4, 40], [226, 50.6]], [[82, 28.5], [170, 28.5]]],
+    shapes:[{p:[[73.5, 58.4, 0], [74.6, 58.4, 0], [74.6, 18, 0], [73.5, 18, 0]], f:'#141517'}, {p:[[234, 47, 0], [231.6, 47, 0.5], [231.2, 37, 0.5], [234, 37, 0]], f:'#18191c'}],
+    ext:[...truckBumper(232.9, 36, 20.6, 'chrome'),
+      ...truckStep(31, 'chrome')],
+    back:truckFrame(23.5, 212, 13),
+    hl:[[232.4, 52.8, 1], [225.5, 54.2, 2], [224.4, 51, 1], [226, 48.6, 1], [232.8, 48.4, 1]], hlc:'#2b3239', drl:[[232.2, 51.8], [226, 52.8]],
+    tl:[[3.2, 55.2, 0.6], [6.2, 55.2, 0.6], [6.2, 42, 0.6], [3.2, 41.4, 0.6]], wheel:{t:'split', n:6, fin:'silver', lugs:6, drill:0}, col:'#1a1c1f'},
+  // Denali: chrome everywhere (window surround, mirror caps, door strip, step bars, bumpers) and 22-inch wheels
+  'GMC|Sierra Denali':{L:231.9, H:75.5, WB:147.4, FO:37, TD:32.8, rim:22, gap:2.2, sill:19.5, sq:0.74, nose:57, tail:[3, 56.4], noTrim:1,
+    pts:[[28.9, 19.5, 0], [28.5, 23.5, 1], [5.5, 23.5, 1.5], [3, 26, 1.5], [2.7, 40, 2], [3, 55.4, 1], [4, 56.4, 0.6], [76.2, 56.8, 0.6], [77.4, 57.2, 0.4], [78.2, 73, 2.5], [81.5, 75.3, 3.5], [125, 75.5, 40],
+      [151.5, 75, 4], [174.5, 58.6, 2.5], [200, 58.6, 30], [228, 58, 2], [231.6, 57.2, 1.2], [231.9, 48, 3], [231.6, 36, 2], [230, 24, 3], [226, 20, 2], [213.5, 19.5, 0]],
+    belt:[58.6, 58], w:[[169.4, 55.6, 0.8], [150, 73.2, 3], [115, 73.8, 40], [84.6, 73.4, 2.5], [83.6, 58.6, 1.5], [125, 58.2, 0], [155, 58, 2], [159.5, 55.6, 2]], seats:[142, 104], chromeDlo:1,
+    pil:[[126.5, 3.6, 0.3]], doors:[[[173, 57.8, 0], [171.4, 21, 0]], [[126.8, 58.2, 0], [126.5, 21, 0]], [[84, 58.6, 0], [83, 21, 0]]], hy:4.2,
+    mirror:[166.5, 56.4], mirrorS:1.6, mirrorC:'chrome', hip:1.6,
+    lines:[[[3, 51], [77, 51.4], [228, 52.6]]],
+    shapes:[{p:[[76.3, 58, 0], [77.4, 58, 0], [77.4, 18, 0], [76.3, 18, 0]], f:'#141517'}, {p:[[84, 27, 0.5], [171.6, 27, 0.5], [171.6, 25.6, 0.5], [84, 25.6, 0.5]], f:'chrome'},
+      {p:[[233, 53, 0], [230.6, 53, 0.5], [230.4, 37, 0.5], [233, 37, 0]], f:'chrome'}],
+    ext:[...truckBumper(231.9, 36, 20.6, 'chrome'),
+      ...truckStep(31.4, 'chrome'),
+      {p:[[67.6, 18.2, 1], [175, 18.2, 1], [175, 15.4, 1], [67.6, 15.4, 1]], f:'chrome', s:'#6e757c'}],
+    back:truckFrame(23.5, 213, 11),
+    hl:[[231.6, 55.8, 1], [224, 56.4, 1.5], [223, 50.6, 1.5], [231.8, 50, 1]], hlc:'#2b3239', drl:[[231.4, 55.4], [225, 55.8]],
+    tl:[[3.2, 55, 0.6], [6, 55, 0.6], [6, 40.5, 0.6], [3.2, 40, 0.6]], wheel:{t:'split', n:6, fin:'chrome', lugs:6, drill:0}, col:'#4e5257'},
   // ---- classics (the convertibles are drawn with the top down) ----
   'Cadillac|Eldorado Biarritz':{L:223, H:52, WB:129.5, FO:40, TD:28.5, rim:15, cr:13, cf:12, sill:11, noDlo:1, belt:[37.5, 37.5], sh:33, noTrim:1,
     pts:[[6, 13, 0], [0.5, 16, 3], [0, 30, 4], [0.5, 37.5, 2], [20, 38.2, 10], [48, 38.2, 6], [50, 40.5, 3], [72, 41, 4], [74, 37.5, 2], [138, 37.5, 2], [142, 38.5, 4], [215, 37.8, 10], [222.6, 35, 4], [223, 24, 6], [219, 12, 0]],
@@ -4773,7 +4935,7 @@ Object.assign(VEH_SPECS, {
     lines:[[[2, 30], [30, 32, 20], [60, 28, 30], [110, 28, 30], [170, 30]]], hl:[[174.9, 25, 1], [168, 26, 1], [168, 24, 1], [175, 23.5, 1]], tl:[[0.3, 30, 1], [2.5, 30.3, 1], [2.5, 26, 1], [0.3, 25.8, 1]], wheel:{t:'steel', n:5, fin:'silver'}, col:'#1f5fa8'},
 });
 // handles go just ahead of each door's rear edge
-Object.values(VEH_SPECS).forEach(p => { if(p.doors && !p.handles) p.handles = p.doors.slice(1).map(x => x + 3.5); if(!p.mirror && p.cowl) p.mirror = [p.cowl[0] - 2, p.belt[1] + 1.4]; });
+Object.values(VEH_SPECS).forEach(p => { if(p.doors && !p.handles) p.handles = p.doors.slice(1).map(x => (Array.isArray(x) ? x[0][0] : x) + 3.5); if(!p.mirror && p.cowl) p.mirror = [p.cowl[0] - 2, p.belt[1] + 1.4]; });
 // ---- two wheels: motorcycles, scooters and e-bikes ----
 // Same idea as the cars: inches, x forward from the rear axle, y up from the ground.
 function spokedWheel(cx, cy, R, rimR, o){
