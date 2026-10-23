@@ -243,6 +243,9 @@
   .lic-photo svg{ width:100%; height:100%; display:block; }
   .lic-info{ display:flex; flex-direction:column; font-size:12.5px; line-height:1.45; min-width:0; }
   .lic-info b{ font-size:15px; }
+  .art{ width:100%; height:auto; display:block; border-radius:12px; margin:4px 0 8px; box-shadow:inset 0 0 0 1px var(--line); }
+  .veh-row{ display:flex; gap:6px; }
+  .veh-row .veh-select{ flex:1; min-width:0; }
   .veh-select{ width:100%; margin:6px 0 4px; padding:9px 10px; font-size:16px; font-family:inherit; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
   .veh-specs{ font-size:12.5px; color:var(--muted); margin:2px 0 6px; }
   .name-row{ display:flex; gap:8px; }
@@ -1114,6 +1117,11 @@ function upgradeSave(saved){
   }
   for(const k in saved) if(!(k in base)) base[k] = saved[k];      // fields set during play (lifestyle, gender, cheats...) that a fresh life doesn't start with
   base.recent = (saved.recent || []).filter(k => typeof k === 'string');
+  (base.assets || []).forEach(x => {
+    const list = x.category === 'Cars' && VEH_MODELS[x.key]; if(!list || (x.make && list.some(m => m[0] === x.make && m[1] === x.model))) return;
+    const m = list[seedOf(x.id) % list.length], yr = m[7] || ((base.world && base.world.year) || 2026) - Math.max(0, (saved.age || 0) - (x.boughtAge || 0)) - (/^Used/.test(x.name) ? 5 : 0);
+    x.make = m[0]; x.model = m[1]; x.year = yr; x.name = yr + ' ' + m[0] + ' ' + m[1];
+  });
   if(base.movedOut) (base.relationships || []).forEach(r => { if(['Mother', 'Father', 'Sibling'].includes(r.type)) r.livingTogether = false; });
   if(!base.movedOut && saved.age >= 18 && (base.assets || []).some(x => x.category === 'Homes' && !x.rental)){ base.movedOut = true; (base.relationships || []).forEach(r => { if(['Mother', 'Father', 'Sibling'].includes(r.type)) r.livingTogether = false; }); }
   // Saves from before the driving test: adults are taken to have passed it already.
@@ -1986,7 +1994,7 @@ const CHOICE_EVENTS = [
     {label:'Pass', delta:{}},'famous'],
   // ---- vehicles and travel ----
   [16,20,n=>`${n} is ready for a first car.`,
-    {label:'Buy a cheap used sedan ($6,000)', delta:{money:-6000,happy:6}, effect:()=>{ state.assetSeq++; state.assets.push({id:'a' + state.assetSeq, key:'used', name:'Used Sedan', category:'Cars', value:inflR(6000, 100), boughtPrice:inflR(6000, 100), boughtAge:state.age, cond:rint(45, 70)}); }},
+    {label:'Buy a cheap used sedan ($6,000)', delta:{money:-6000,happy:6}, effect:()=>{ state.assetSeq++; (state.vehPick = state.vehPick || {}).used = rint(0, VEH_MODELS.used.length - 1); state.assets.push(nameVehicle({id:'a' + state.assetSeq, key:'used', name:'Used Sedan', category:'Cars', value:inflR(6000, 100), boughtPrice:inflR(6000, 100), boughtAge:state.age, cond:rint(45, 70)}, findCatalog('used'), true)); }},
     {label:'Stick with the bus for now', delta:{money:300}},'afford&nocar'],
   [18,80,n=>`${n}'s car is making a grinding noise.`,
     {label:'Get it checked right away ($400)', delta:{money:-400}, effect:()=>{ roadVehicles().forEach(x => x.cond = Math.min(100, (x.cond || 70) + 20)); }},
@@ -4070,6 +4078,7 @@ function buyAsset(key, financed){
     pushEntry(state.age, `${state.name} buys ${label()} in cash.`, CAT_BUY_DELTA[t.category]);
   }
   if(t.category === 'Cars') state.assets[state.assets.length - 1].cond = 100;
+  if(t.category === 'Homes'){ state.assets[state.assets.length - 1].seed = 'h' + t.key + state.age; state.assets[state.assets.length - 1].builtYear = curYear(); }
   if(t.category === 'Homes' && !state.movedOut) moveOut(state.age, `${state.name} moves out of their parents' place and into their new home.`, {happy:4});
   render();
 }
@@ -4139,6 +4148,7 @@ function buyListing(id, financed){
     const apr = Math.max(0.035, Math.min(0.18, state.econ.rate + 0.01 + Math.max(0.005, (700 - state.creditScore) / 5000) + (felon() ? 0.03 : 0)));
     takeLoan('Mortgage', l.price - Math.round(l.price * 0.25), 30, apr, {assetId:id2});
   }
+  state.assets[state.assets.length - 1].seed = l.id; state.assets[state.assets.length - 1].builtCond = l.cond; state.assets[state.assets.length - 1].builtYear = curYear();
   state.listings = state.listings.filter(x => x.id !== id);
   const gap = l.fair - l.price;
   pushEntry(state.age, `${state.name} buys a ${l.units > 1 ? l.units + '-unit ' : ''}${t.name.toLowerCase()} in a ${loc.name.toLowerCase()} area for ${fmt(l.price)}${financed ? ' with a mortgage' : ' in cash'}${gap > l.fair * 0.05 ? ', well below what it is worth' : gap < -l.fair * 0.05 ? ', paying over the odds' : ''}.`, {happy:4});
@@ -4271,6 +4281,7 @@ function rentalCardHtml(x){
   const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${r.home ? ' <span class="tick">YOUR HOME</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
+    ${propertyArt(x.key, x.seed || x.id)}<div class="veh-specs">${propDetails(x.key, x.seed || x.id, r.units, x.builtCond, x.builtYear)}</div>
     <div class="owned">${r.units > 1 ? r.occupied + ' of ' + r.units + ' units rented' : r.occupied ? 'Rented' : 'Vacant'}${t.commercial ? ' · commercial' : t.shortTerm ? ' · short-term rental' : ''} · equity ${fmt(equity)}${loan ? ' · mortgage ' + fmt(loan.yearlyPayment) + '/yr' : ''}
     ${r.lastNet !== null && r.lastNet !== undefined ? `<br>Last year: rent ${fmt(r.lastRent)}, after tax, upkeep${r.manager ? ' and management' : ''} <span class="${r.lastNet >= 0 ? 'up' : 'down'}">${fmt(r.lastNet)}</span>${loan ? `, after the mortgage <span class="${flow >= 0 ? 'up' : 'down'}">${fmt(flow)}</span>` : ''}` : '<br>Tenants move in next year.'}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${r.cond < 40 ? 'down' : ''}">${r.cond}/100</span></div>
@@ -4287,6 +4298,7 @@ function listingHtml(l){
   const canFin = state.creditScore >= 620 && !state.bankrupt && canPay(down);
   return `<div class="invrow">
     <div class="itop"><span><b>${loc.name} ${t.name}</b>${l.cond < 50 ? ' <span class="tick">FIXER-UPPER</span>' : ''}</span><span class="price">${fmt(l.price)}</span></div>
+    ${propertyArt(l.key, l.id)}<div class="veh-specs">${propDetails(l.key, l.id, l.units, l.cond)}</div>
     <div class="owned">${l.units > 1 ? l.units + ' units · ' : ''}condition ${l.cond}/100 · estimated value ${fmt(l.fair)} <span class="${diff <= 0 ? 'up' : 'down'}">(${Math.abs(Math.round(diff * 100))}% ${diff <= 0 ? 'below' : 'above'})</span><br>
     Rent if fully let: about ${fmt(rent)}/yr (${(rent / l.price * 100).toFixed(1)}% of the price)${loc.storms ? ' · storm risk' : loc.growth > 0 ? ' · values tend to rise faster' : loc.growth < 0 ? ' · values grow slowly' : ''}</div>
     <div class="assetbuy"><button onclick="buyListing('${l.id}')" ${canPay(l.price) ? '' : 'disabled'}>Buy cash</button><button onclick="buyListing('${l.id}',true)" ${canFin ? '' : 'disabled'}>Mortgage (${fmt(down)} down)</button></div>
@@ -4337,6 +4349,223 @@ function assetsYear(a){
   else applyDelta({money:-upkeep});
 }
 
+// ---------- Pictures of vehicles and property ----------
+// Small hand-built SVG scenes: each vehicle is drawn side-on in its paint color, each property in its setting.
+let artSeq = 0;
+const seedOf = s => { let h = 2166136261; s = String(s); for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+const seeded = s => { let a = seedOf(s); return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+const VEH_COLORS = [['Pearl White', '#f1f0ea'], ['Jet Black', '#1f2124'], ['Silver', '#b8bdc3'], ['Graphite Gray', '#5b6068'], ['Ruby Red', '#b0212b'], ['Deep Blue', '#1f4d8b'],
+  ['Forest Green', '#2f5c3b'], ['Sunset Orange', '#e0662b'], ['Sand Beige', '#cdb99b'], ['Sky Blue', '#6aa5d6'], ['Canary Yellow', '#e7c23c']];
+const VEH_BODY = {ebike:'ebike', scooter:'moped', used:'sedan', motorcycle:'moto', newsed:'sedan', minivan:'minivan', suv:'suv', ev:'ev', pickup:'pickup', classic:'classic',
+  sports:'sports', luxcar:'sedan', rv:'rv', supercar:'supercar', sailboat:'sail', speedboat:'speedboat', yacht:'yacht', jet:'jet'};
+const vehColorPick = key => Math.min(((state.vehColor || {})[key] || 0), VEH_COLORS.length - 1);
+function pickColor(key, i){ (state.vehColor = state.vehColor || {})[key] = Math.max(0, Math.min(VEH_COLORS.length - 1, +i || 0)); renderPanel(); }
+const vehColorOf = x => x.color ? (VEH_COLORS.find(c => c[0] === x.color) || VEH_COLORS[0])[1] : VEH_COLORS[seedOf(x.id || x.key) % VEH_COLORS.length][1];
+
+function artFrame(id, scene, inner, h){
+  const sky = scene === 'sea' || scene === 'air' ? ['#bfe0f5', '#e8f4fb'] : scene === 'dusk' ? ['#f6c79a', '#fbe7cf'] : ['#cfe6f4', '#eef6fa'];
+  let ground = '';
+  if(scene === 'road') ground = '<rect y="112" width="320" height="38" fill="#7d8187"/><rect y="110" width="320" height="4" fill="#a9adb2"/><g fill="#eceae2">' + [10, 70, 130, 190, 250, 310].map(x => `<rect x="${x}" y="134" width="34" height="3" rx="1.5"/>`).join('') + '</g>';
+  else if(scene === 'sea') ground = `<rect y="104" width="320" height="46" fill="url(#${id}w)"/><g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.4" fill="none">` + [[20, 118], [90, 128], [170, 116], [240, 132], [290, 120]].map(([x, y]) => `<path d="M${x},${y} q8,-4 16,0 q8,4 16,0"/>`).join('') + '</g>';
+  else if(scene === 'air') ground = '<g fill="#fff" opacity=".9"><ellipse cx="60" cy="118" rx="38" ry="10"/><ellipse cx="88" cy="112" rx="24" ry="11"/><ellipse cx="250" cy="34" rx="30" ry="8"/><ellipse cx="272" cy="29" rx="18" ry="9"/></g>';
+  else ground = '<rect y="112" width="320" height="38" fill="#8fbf6a"/><rect y="112" width="320" height="5" fill="#7aae58"/>';
+  return `<svg class="art" viewBox="0 0 320 ${h || 150}" role="img" aria-hidden="true"><defs><linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient>` +
+    `<linearGradient id="${id}w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a92c4"/><stop offset="1" stop-color="#2d6a99"/></linearGradient>` +
+    `<linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/></linearGradient></defs>` +
+    `<rect width="320" height="150" fill="url(#${id}s)"/>${ground}${inner}</svg>`;
+}
+const wheel = (x, y, r, white) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#1c1d20"/>${white ? `<circle cx="${x}" cy="${y}" r="${r * 0.72}" fill="#f2f2ee"/>` : ''}<circle cx="${x}" cy="${y}" r="${r * 0.55}" fill="#9aa0a6"/><circle cx="${x}" cy="${y}" r="${r * 0.2}" fill="#5a5f66"/>` +
+  [0, 72, 144, 216, 288].map(a => `<line x1="${x}" y1="${y}" x2="${(x + Math.cos(a * Math.PI / 180) * r * 0.5).toFixed(1)}" y2="${(y + Math.sin(a * Math.PI / 180) * r * 0.5).toFixed(1)}" stroke="#6d737a" stroke-width="1.6"/>`).join('');
+const shadow = (x, w, y) => `<ellipse cx="${x}" cy="${y || 124}" rx="${w}" ry="5" fill="#000" opacity=".22"/>`;
+// one car-shaped body: outline, glass, wheels and lights, with gloss from the shared gradient
+function carBody(id, c, body, glass, wheels, extra){
+  const cd = hexMix(c, '#000000', 0.28);
+  return `<path d="${body}" fill="${c}" stroke="${cd}" stroke-width="1.5"/><path d="${body}" fill="url(#${id}g)"/>` + glass.map(g => `<path d="${g}" fill="#2b3f52" opacity=".88"/>`).join('') +
+    `<path d="${glass[0]}" fill="#fff" opacity=".12"/>` + (extra || '') + wheels.map(([x, r, w]) => wheel(x, 120 - r * 0.15, r, w)).join('');
+}
+function vehicleArt(key, color, scale){
+  const id = 'va' + (++artSeq), c = color || '#b8bdc3', cd = hexMix(c, '#000000', 0.3), body = VEH_BODY[key] || 'sedan';
+  let g = '', scene = 'road';
+  const light = (x, y) => `<rect x="${x}" y="${y}" width="9" height="5" rx="2" fill="#fff6c8"/>`, tail = (x, y) => `<rect x="${x}" y="${y}" width="6" height="6" rx="2" fill="#c8282f"/>`;
+  if(body === 'sedan' || body === 'ev'){
+    g = shadow(165, 128) + carBody(id, c, 'M38,112 L38,94 Q40,84 60,81 L104,78 Q126,56 156,54 L204,54 Q228,57 250,77 L282,82 Q295,86 295,99 L295,112 Z',
+      ['M112,78 Q130,61 156,60 L176,60 L176,78Z', 'M182,60 L203,60 Q222,62 240,78 L182,78Z'], [[86, 18], [248, 18]],
+      `<line x1="178" y1="80" x2="178" y2="108" stroke="${cd}" stroke-width="1.2"/><line x1="120" y1="80" x2="118" y2="106" stroke="${cd}" stroke-width="1.2"/>` + light(282, 88) + tail(38, 88) +
+      (body === 'ev' ? `<path d="M268,96 l-5,8 h5 l-3,7 l8,-10 h-5 l3,-5z" fill="#3fb4e8"/>` : `<rect x="286" y="96" width="8" height="8" rx="1" fill="${cd}"/>`));
+  } else if(body === 'suv'){
+    g = shadow(165, 132) + carBody(id, c, 'M36,112 L36,82 Q38,70 56,68 L96,66 L114,40 L238,40 Q252,42 260,66 L284,70 Q296,74 296,92 L296,112 Z',
+      ['M120,66 L132,46 L178,46 L178,66Z', 'M184,46 L234,46 Q244,48 250,66 L184,66Z', 'M100,66 L116,44 L126,44 L114,66Z'], [[88, 21], [248, 21]],
+      `<rect x="114" y="36" width="122" height="4" rx="2" fill="${cd}"/>` + light(282, 78) + tail(36, 76));
+  } else if(body === 'pickup'){
+    g = shadow(165, 134) + carBody(id, c, 'M32,112 L32,78 L132,76 L140,42 L206,42 Q218,44 224,70 L284,74 Q297,78 297,94 L297,112 Z',
+      ['M146,70 L152,48 L180,48 L180,70Z', 'M186,48 L202,48 Q212,50 216,70 L186,70Z'], [[78, 21], [252, 21]],
+      `<line x1="132" y1="78" x2="132" y2="108" stroke="${cd}" stroke-width="1.6"/><rect x="34" y="74" width="96" height="5" fill="${cd}"/>` + light(283, 82) + tail(32, 82));
+  } else if(body === 'minivan'){
+    g = shadow(165, 134) + carBody(id, c, 'M34,112 L34,72 Q38,46 72,44 L222,44 Q248,46 264,70 L286,74 Q297,80 297,96 L297,112 Z',
+      ['M48,70 Q52,52 74,50 L118,50 L118,70Z', 'M124,50 L184,50 L184,70 L124,70Z', 'M190,50 L220,50 Q240,52 252,70 L190,70Z'], [[84, 19], [250, 19]],
+      `<line x1="121" y1="72" x2="121" y2="106" stroke="${cd}" stroke-width="1.2"/><line x1="187" y1="72" x2="187" y2="106" stroke="${cd}" stroke-width="1.2"/>` + light(284, 84) + tail(34, 80));
+  } else if(body === 'sports' || body === 'supercar'){
+    const sc = body === 'supercar';
+    g = shadow(165, 130) + carBody(id, c, sc ? 'M34,112 L36,100 Q70,94 112,90 Q150,66 192,64 Q232,68 270,88 L300,96 L298,112 Z' : 'M36,112 L38,98 Q60,90 92,86 Q130,64 172,62 L202,62 Q240,66 262,84 L292,90 Q299,96 297,112 Z',
+      sc ? ['M128,88 Q154,70 190,69 L210,72 Q190,82 170,88Z'] : ['M108,86 Q134,68 170,67 L180,67 L180,86Z', 'M186,67 L200,67 Q226,70 244,86 L186,86Z'], [[84, 17], [250, 17]],
+      (sc ? `<path d="M150,96 L200,94 L190,104 L156,104Z" fill="${cd}"/>` : '') + `<path d="M36,92 L58,88 L60,84 L40,86Z" fill="${cd}"/>` + light(286, 94) + tail(38, 96));
+  } else if(body === 'classic'){
+    g = shadow(165, 136) + carBody(id, c, 'M28,112 L28,94 Q32,84 58,84 L138,84 L150,70 L158,84 L272,86 Q298,88 299,100 L299,112 Z',
+      ['M150,72 L157,84 L146,84Z'], [[82, 18, true], [252, 18, true]],
+      `<rect x="26" y="104" width="275" height="5" rx="2.5" fill="#d9dde1"/><path d="M28,94 Q30,80 46,80 L60,84Z" fill="${cd}"/><rect x="96" y="80" width="40" height="5" rx="2" fill="#7a3b2a"/>` + light(288, 92) + tail(28, 90));
+  } else if(body === 'moto'){
+    g = shadow(160, 92) + wheel(98, 112, 24) + wheel(228, 112, 24) + `<path d="M98,112 L140,82 L198,82 L228,112" stroke="#3a3d42" stroke-width="5" fill="none"/><path d="M134,80 Q156,64 190,70 L196,84 L140,86Z" fill="${c}" stroke="${cd}" stroke-width="1.4"/>` +
+      `<path d="M112,80 L150,78 L150,84 L110,86Z" fill="#2b2c30"/><path d="M196,70 L214,60 L220,62 L206,78Z" fill="#3a3d42"/><rect x="214" y="56" width="16" height="4" rx="2" fill="#3a3d42"/>` + light(222, 70) + `<rect x="148" y="90" width="34" height="14" rx="4" fill="#6b7077"/>`;
+  } else if(body === 'moped'){
+    g = shadow(160, 80) + wheel(110, 114, 17) + wheel(214, 114, 17) + `<path d="M104,108 Q108,82 140,84 L178,84 L196,56 L206,58 L196,96 Q210,98 214,108 Z" fill="${c}" stroke="${cd}" stroke-width="1.4"/>` +
+      `<rect x="120" y="76" width="40" height="8" rx="4" fill="#2b2c30"/><rect x="192" y="50" width="22" height="4" rx="2" fill="#3a3d42"/>` + light(204, 62);
+  } else if(body === 'ebike'){
+    g = shadow(160, 86) + wheel(100, 110, 26) + wheel(222, 110, 26) + `<g stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round"><path d="M100,110 L140,72 L198,72 L222,110"/><path d="M140,72 L158,110 L198,72"/><path d="M158,110 L100,110"/><path d="M198,72 L204,54"/></g>` +
+      `<rect x="146" y="76" width="36" height="12" rx="4" fill="#2b2c30"/><rect x="132" y="62" width="22" height="5" rx="2.5" fill="#2b2c30"/><path d="M196,54 L214,52" stroke="#3a3d42" stroke-width="4" stroke-linecap="round"/>`;
+  } else if(body === 'rv'){
+    g = shadow(165, 138) + `<path d="M28,112 L28,40 Q30,30 42,30 L246,30 Q258,30 262,46 L290,76 Q298,82 298,96 L298,112 Z" fill="${hexMix(c, '#ffffff', 0.55)}" stroke="#8a8f96" stroke-width="1.5"/>` +
+      `<rect x="28" y="78" width="270" height="10" fill="${c}"/><rect x="28" y="90" width="270" height="4" fill="${cd}"/>` + [46, 96, 146].map(x => `<rect x="${x}" y="44" width="34" height="20" rx="3" fill="#2b3f52" opacity=".85"/>`).join('') +
+      `<path d="M252,48 L284,78 L252,78Z" fill="#2b3f52" opacity=".85"/><rect x="204" y="42" width="24" height="54" rx="2" fill="#e8e6dd" stroke="#8a8f96"/>` + wheel(78, 114, 18) + wheel(250, 114, 18) + light(288, 86);
+  } else if(body === 'sail'){
+    scene = 'sea';
+    g = `<path d="M60,104 L262,104 L240,124 L84,124 Z" fill="${c}" stroke="${cd}" stroke-width="1.5"/><rect x="60" y="102" width="202" height="4" fill="#f2f2ee"/><line x1="160" y1="14" x2="160" y2="102" stroke="#6d6f72" stroke-width="3"/>` +
+      `<path d="M163,18 L163,98 L238,98 Z" fill="#fbfaf4" stroke="#c9c7bd"/><path d="M157,26 L157,98 L96,98 Z" fill="#f2efe4" stroke="#c9c7bd"/>`;
+  } else if(body === 'speedboat'){
+    scene = 'sea';
+    g = `<path d="M40,98 L250,94 Q290,96 300,104 L270,122 L70,122 Z" fill="${c}" stroke="${cd}" stroke-width="1.5"/><path d="M40,98 L250,94 Q290,96 300,104 L60,108Z" fill="#f2f2ee"/>` +
+      `<path d="M168,94 L190,74 L214,74 L206,94Z" fill="#2b3f52" opacity=".75"/><path d="M20,118 q20,-6 50,0" stroke="#fff" stroke-width="3" fill="none" opacity=".7"/>`;
+  } else if(body === 'yacht'){
+    scene = 'sea';
+    g = `<path d="M24,96 L276,90 Q306,92 312,100 L280,124 L52,124 Z" fill="#f4f4f0" stroke="#8a8f96" stroke-width="1.5"/><rect x="30" y="104" width="250" height="6" fill="${c}"/>` +
+      `<path d="M70,90 L80,66 L230,66 L250,90Z" fill="#f4f4f0" stroke="#8a8f96"/><path d="M110,66 L118,48 L200,48 L212,66Z" fill="#f4f4f0" stroke="#8a8f96"/>` +
+      `<rect x="86" y="72" width="150" height="10" rx="3" fill="#2b3f52" opacity=".85"/><rect x="122" y="52" width="80" height="8" rx="3" fill="#2b3f52" opacity=".85"/>` + [50, 80, 110, 140, 170, 200, 230].map(x => `<circle cx="${x}" cy="98" r="2.5" fill="#2b3f52"/>`).join('');
+  } else if(body === 'jet'){
+    scene = 'air';
+    g = `<path d="M40,80 Q44,66 70,64 L250,62 Q292,64 304,76 Q292,88 250,90 L70,92 Q44,92 40,80Z" fill="#f4f4f0" stroke="#9aa0a6" stroke-width="1.5"/><path d="M60,66 L36,26 L56,26 L94,64Z" fill="${c}"/>` +
+      `<path d="M150,88 L120,128 L146,128 L196,88Z" fill="#d9dde1" stroke="#9aa0a6"/><rect x="70" y="58" width="34" height="12" rx="6" fill="#d9dde1" stroke="#9aa0a6"/><path d="M286,70 Q296,74 300,76 L286,78Z" fill="#2b3f52"/>` +
+      [120, 140, 160, 180, 200, 220, 240].map(x => `<circle cx="${x}" cy="74" r="3" fill="#2b3f52"/>`).join('') + `<rect x="60" y="80" width="230" height="3" fill="${c}"/>`;
+  }
+  return artFrame(id, scene, g, scale);
+}
+
+// ---- property scenes ----
+const tree = (x, y, s) => `<rect x="${x - 2 * s}" y="${y - 14 * s}" width="${4 * s}" height="${14 * s}" fill="#7a5a3a"/><circle cx="${x}" cy="${y - 22 * s}" r="${12 * s}" fill="#5f9a4a"/><circle cx="${x - 7 * s}" cy="${y - 16 * s}" r="${8 * s}" fill="#6aa653"/>`;
+const pine = (x, y, s) => `<rect x="${x - 2 * s}" y="${y - 8 * s}" width="${4 * s}" height="${8 * s}" fill="#6a4a2e"/><path d="M${x},${y - 46 * s} L${x + 14 * s},${y - 8 * s} L${x - 14 * s},${y - 8 * s}Z" fill="#2f6a44"/>`;
+const palm = (x, y, s) => `<path d="M${x},${y} Q${x + 4 * s},${y - 30 * s} ${x - 2 * s},${y - 56 * s}" stroke="#8a6a42" stroke-width="${4 * s}" fill="none"/>` + [[-26, -4], [24, -2], [-18, 10], [20, 12], [0, -16]].map(([dx, dy]) => `<path d="M${x - 2 * s},${y - 56 * s} q${dx * s / 2},${(dy - 10) * s} ${dx * s},${dy * s}" stroke="#3f8a4a" stroke-width="${4 * s}" fill="none" stroke-linecap="round"/>`).join('');
+const winGrid = (x, y, cols, rows, w, h, gx, gy, lit) => { let o = ''; for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++) o += `<rect x="${x + c * (w + gx)}" y="${y + r * (h + gy)}" width="${w}" height="${h}" rx="1" fill="${lit && lit(r, c) ? '#ffd877' : '#3d5873'}" opacity=".9"/>`; return o; };
+const door = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.5" fill="${c || '#7a4a2e'}"/><circle cx="${x + w - 4}" cy="${y + h / 2}" r="1.3" fill="#e8d28a"/>`;
+// a pitched-roof house; x,y is the bottom-left corner
+function house(x, y, w, h, wall, roof, o){
+  o = o || {};
+  const rh = o.roofH || h * 0.55;
+  let s = (o.chimney ? `<rect x="${x + w * 0.7}" y="${y - h - rh * 0.8}" width="10" height="${rh * 0.6}" fill="#8a5a46"/>` : '') +
+    `<rect x="${x}" y="${y - h}" width="${w}" height="${h}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><path d="M${x - 8},${y - h} L${x + w / 2},${y - h - rh} L${x + w + 8},${y - h}Z" fill="${roof}"/>`;
+  if(o.floors === 2){ s += winGrid(x + 10, y - h + 10, Math.max(2, Math.floor((w - 20) / 26)), 2, 16, 14, 10, 12); }
+  else s += winGrid(x + 10, y - h + 12, 1, 1, 18, 16, 0, 0) + winGrid(x + w - 28, y - h + 12, 1, 1, 18, 16, 0, 0);
+  if(!o.noDoor) s += door(x + w / 2 - 7, y - 26, 14, 26, o.door);
+  if(o.garage) s += `<rect x="${x + w}" y="${y - h * 0.62}" width="${o.garage}" height="${h * 0.62}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><rect x="${x + w + 6}" y="${y - h * 0.5}" width="${o.garage - 12}" height="${h * 0.5}" fill="#d9dde1"/>` + [1, 2, 3].map(i => `<line x1="${x + w + 6}" x2="${x + w + o.garage - 6}" y1="${y - h * 0.5 + i * h * 0.12}" y2="${y - h * 0.5 + i * h * 0.12}" stroke="#b9bec4"/>`).join('');
+  return s;
+}
+function tower(x, y, w, floors, wall, o){
+  o = o || {};
+  const fh = o.fh || 13, h = floors * fh + 10, cols = Math.max(2, Math.floor((w - 10) / 14));
+  return `<rect x="${x}" y="${y - h}" width="${w}" height="${h}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/>` + winGrid(x + 6, y - h + 6, cols, floors, 9, fh - 5, (w - 12 - cols * 9) / Math.max(1, cols - 1), 5, o.lit) +
+    (o.roof ? `<rect x="${x - 3}" y="${y - h - 4}" width="${w + 6}" height="5" fill="${hexMix(wall, '#000000', 0.3)}"/>` : '');
+}
+const WALLS = ['#f2e6cf', '#e9dcc3', '#dfe5e8', '#f4efe6', '#d9c6a8', '#cfd8c4', '#e8d0c0', '#c9d6e2'], ROOFS = ['#7a3b2e', '#5a5f66', '#3f4a5a', '#8a5a3a', '#4a5a3a'];
+function propertyArt(key, seed){
+  const id = 'pa' + (++artSeq), r = seeded(seed || key), wall = WALLS[Math.floor(r() * WALLS.length)], roof = ROOFS[Math.floor(r() * ROOFS.length)];
+  let g = '', scene = 'grass';
+  const sun = '<circle cx="286" cy="26" r="12" fill="#ffe08a" opacity=".9"/>';
+  switch(key){
+    case 'cabin':
+      g = `<path d="M0,112 L60,52 L120,112Z" fill="#9fb3c4"/><path d="M90,112 L170,40 L250,112Z" fill="#8aa1b6"/><path d="M160,48 L170,40 L180,48 L176,52 L164,52Z" fill="#f4f6f8"/>` +
+        `<rect x="104" y="72" width="104" height="40" fill="#8a5a36"/>` + [76, 84, 92, 100, 108].map(y => `<line x1="104" x2="208" y1="${y}" y2="${y}" stroke="#6a4226" stroke-width="1.2"/>`).join('') +
+        `<path d="M96,72 L156,42 L216,72Z" fill="#4a3a2e"/>` + door(150, 86, 14, 26, '#4a2e1c') + winGrid(118, 82, 1, 1, 18, 14, 0, 0, () => true) + winGrid(178, 82, 1, 1, 18, 14, 0, 0, () => true) + pine(40, 114, 1) + pine(66, 116, 0.8) + pine(256, 114, 1.1) + pine(290, 116, 0.9);
+      break;
+    case 'condo': case 'condo-rental':
+      g = sun + tower(96, 112, 120, 6, wall, {roof:true, lit:(a, b) => r() < 0.2}) + `<rect x="140" y="92" width="32" height="20" fill="#3d5873"/><rect x="132" y="88" width="48" height="4" fill="${roof}"/>` + tree(60, 114, 1) + tree(258, 114, 0.9);
+      break;
+    case 'starter': case 'sfr': case 'familyhome':
+      g = sun + house(110, 112, 100, 46, wall, roof, {chimney: r() < 0.5}) + `<g stroke="#f4f4f0" stroke-width="2">` + Array.from({length:9}, (_, i) => `<line x1="${20 + i * 9}" y1="102" x2="${20 + i * 9}" y2="114"/>`).join('') + '<line x1="18" x2="96" y1="106" y2="106"/></g>' + tree(250, 114, 1.1) + `<rect x="148" y="112" width="24" height="38" fill="#c9c2b2"/>`;
+      break;
+    case 'suburb':
+      g = sun + house(70, 112, 120, 64, wall, roof, {floors:2, garage:58, roofH:30}) + tree(32, 114, 1) + tree(282, 114, 1.2) + `<rect x="190" y="112" width="58" height="38" fill="#b9b4a6"/>`;
+      break;
+    case 'lux':
+      g = sun + `<rect x="60" y="56" width="200" height="56" fill="#f4f4f0" stroke="#c9c7bd"/><rect x="40" y="50" width="160" height="6" fill="#3a3d42"/><rect x="150" y="70" width="104" height="38" fill="#7fb0d0" opacity=".85"/>` +
+        `<rect x="70" y="66" width="70" height="42" fill="#3d5873" opacity=".85"/><rect x="194" y="40" width="70" height="16" fill="#e9e6dc" stroke="#c9c7bd"/><rect x="60" y="114" width="150" height="14" rx="3" fill="#5fb6e0"/>` + palm(286, 116, 0.9) + palm(28, 116, 0.8);
+      break;
+    case 'mansion':
+      g = `<path d="M0,112 Q160,82 320,112Z" fill="#7aae58"/>` + `<rect x="50" y="56" width="220" height="56" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><path d="M40,56 L160,28 L280,56Z" fill="${roof}"/>` +
+        `<path d="M126,56 L160,40 L194,56Z" fill="#f4f4f0"/>` + [132, 146, 160, 174, 188].map(x => `<rect x="${x - 2}" y="58" width="5" height="54" fill="#f4f4f0"/>`).join('') + winGrid(60, 64, 3, 2, 14, 14, 8, 10) + winGrid(212, 64, 3, 2, 14, 14, 8, 10) +
+        door(152, 86, 16, 26, '#5a3420') + pine(26, 114, 1.1) + pine(296, 114, 1.1);
+      break;
+    case 'beach': case 'vacation':
+      scene = 'beach';
+      g = sun + `<rect y="98" width="320" height="18" fill="#4a92c4"/><rect y="112" width="320" height="38" fill="#eeddb0"/>` + [96, 120, 196, 220].map(x => `<rect x="${x}" y="96" width="5" height="18" fill="#8a6a42"/>`).join('') +
+        house(88, 98, 140, 40, wall, '#3f8aa8', {roofH:22}) + `<rect x="80" y="96" width="156" height="4" fill="#8a6a42"/>` + palm(40, 118, 1) + palm(276, 118, 0.9);
+      break;
+    case 'ranch':
+      g = sun + `<rect y="96" width="320" height="16" fill="#c9b46a" opacity=".6"/>` + house(40, 112, 100, 40, '#f4efe6', '#5a5f66', {roofH:24}) + `<rect x="188" y="62" width="80" height="50" fill="#a8322a"/><path d="M182,62 L228,32 L274,62Z" fill="#6a2a22"/>` +
+        `<rect x="214" y="84" width="28" height="28" fill="#f4efe6"/><path d="M214,84 L242,112 M242,84 L214,112" stroke="#a8322a" stroke-width="3"/><g stroke="#f4efe6" stroke-width="2.5">` + Array.from({length:14}, (_, i) => `<line x1="${8 + i * 22}" y1="112" x2="${8 + i * 22}" y2="126"/>`).join('') + '<line x1="0" x2="320" y1="117" y2="117"/></g>';
+      break;
+    case 'penthouse':
+      g = tower(20, 112, 54, 5, '#c9d0d6') + tower(244, 112, 60, 6, '#b9c2ca') + tower(108, 112, 104, 7, '#dde3e7', {roof:true, fh:13, lit:(a) => a === 0}) + `<rect x="118" y="12" width="14" height="3" fill="#5fa04a"/><rect x="184" y="12" width="14" height="3" fill="#5fa04a"/>`;
+      break;
+    case 'duplex':
+      g = sun + house(60, 112, 200, 50, wall, roof, {roofH:28, noDoor:true}) + door(110, 86, 14, 26) + door(196, 86, 14, 26, '#3f4a5a') + `<line x1="160" y1="62" x2="160" y2="112" stroke="${hexMix(wall, '#000000', 0.25)}" stroke-width="2"/>` + tree(26, 114, 0.9) + tree(296, 114, 0.9);
+      break;
+    case 'commercial':
+      g = `<rect y="112" width="320" height="38" fill="#9a9ea4"/>` + `<rect x="50" y="40" width="220" height="72" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><rect x="62" y="48" width="196" height="16" rx="2" fill="#3a3d42"/>` +
+        `<text x="160" y="60" font-size="11" font-weight="700" text-anchor="middle" fill="#f4e6c8" font-family="Arial,sans-serif">FOR LEASE · RETAIL</text>` +
+        `<path d="M58,70 L262,70 L254,82 L66,82Z" fill="#c43a3a"/>` + [0, 1, 2, 3, 4, 5, 6].map(i => `<path d="M${66 + i * 27},70 l14,0 l-3,12 l-14,0Z" fill="#f4f4f0"/>`).join('') + `<rect x="70" y="86" width="120" height="26" fill="#7fb0d0" opacity=".85"/>` + door(206, 86, 22, 26, '#3a3d42');
+      break;
+    case 'apt4':
+      g = sun + tower(96, 112, 128, 3, '#b0543a', {fh:20, roof:true}) + `<rect x="148" y="92" width="24" height="20" fill="#3a3d42"/>` + tree(56, 114, 1) + tree(266, 114, 1);
+      break;
+    case 'student':
+      g = sun + tower(70, 112, 180, 4, '#c9b48a', {fh:16, roof:true}) + `<rect x="120" y="34" width="80" height="12" fill="#2f5f8a"/><text x="160" y="43" font-size="8" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">CAMPUS LIVING</text>` + tree(36, 114, 1) + tree(284, 114, 1);
+      break;
+    case 'apt12':
+      g = tower(30, 112, 260, 6, wall, {fh:14, roof:true, lit:() => r() < 0.15}) + `<rect x="140" y="92" width="40" height="20" fill="#3a3d42"/>`;
+      break;
+    case 'stripmall':
+      g = `<rect y="112" width="320" height="38" fill="#8a8e94"/><g stroke="#f4f4f0" stroke-width="2">` + Array.from({length:12}, (_, i) => `<line x1="${14 + i * 26}" y1="122" x2="${22 + i * 26}" y2="146"/>`).join('') + '</g>' +
+        `<rect x="10" y="62" width="300" height="50" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/>` + ['#c43a3a', '#2f6db0', '#e0a03a', '#3f8a4a', '#7a4a8a', '#c4683a'].map((cc, i) => `<rect x="${16 + i * 49}" y="68" width="43" height="9" fill="${cc}"/><rect x="${20 + i * 49}" y="82" width="35" height="30" fill="#7fb0d0" opacity=".85"/>`).join('');
+      break;
+    default:
+      g = sun + house(110, 112, 100, 46, wall, roof);
+  }
+  return artFrame(id, scene === 'beach' ? 'day' : scene, g);
+}
+// Floor plans and ages, the same every time for the same property.
+const PROP_DETAIL = {cabin:[2, 1, 900, 1], condo:[2, 2, 1100, 0], starter:[3, 2, 1400, 0.15], suburb:[4, 3, 2600, 0.3], lux:[5, 5, 4800, 0.7], mansion:[8, 10, 12000, 5], beach:[4, 3, 2400, 0.25],
+  ranch:[4, 3, 3200, 40], penthouse:[4, 4, 4200, 0], familyhome:[4, 2, 2200, 0.25], 'condo-rental':[2, 2, 1000, 0], sfr:[3, 2, 1500, 0.15], duplex:[2, 1, 1000, 0.2], vacation:[3, 2, 1600, 0.2],
+  commercial:[0, 1, 2100, 0.3], apt4:[2, 1, 850, 0.25], student:[4, 2, 1200, 0.5], apt12:[2, 1, 800, 1], stripmall:[0, 1, 1500, 2]};
+function propDetails(key, seed, units, cond, baseYear){
+  const d = PROP_DETAIL[key]; if(!d) return '';
+  // a run-down place is an old one: condition sets roughly how long ago it was built
+  const r = seeded(seed || key), sq = Math.round(d[2] * (0.85 + r() * 0.3) / 10) * 10, age = cond != null ? Math.round((100 - cond) * 0.9 + r() * 12) : key === 'familyhome' ? 25 + Math.floor(r() * 40) : Math.floor(r() * 60) + 1, built = (baseYear || curYear()) - age;
+  const lot = d[3] ? (d[3] >= 1 ? d[3] + '-acre lot' : d[3] + '-acre lot') : '';
+  const n = units || 1;
+  if(key === 'commercial' || key === 'stripmall') return [n > 1 ? n + ' storefronts' : 'retail space', (sq * n).toLocaleString() + ' sq ft', lot, 'built ' + built].filter(Boolean).join(' · ');
+  if(n > 1) return [n + ' units of ' + d[0] + ' bd / ' + d[1] + ' ba', (sq * n).toLocaleString() + ' sq ft in all', lot, 'built ' + built].filter(Boolean).join(' · ');
+  return [d[0] + ' bd · ' + d[1] + ' ba', sq.toLocaleString() + ' sq ft', lot, 'built ' + built].filter(Boolean).join(' · ');
+}
+
+// Everything owned at a glance: how much it is worth, what it costs to keep, and how much is still owed on it.
+function assetSummaryHtml(){
+  const own = state.assets; if(!own.length) return '';
+  const cum = state.econ.cumInflation, val = own.reduce((t, x) => t + x.value, 0), owed = own.reduce((t, x) => { const l = state.loans.find(y => y.assetId === x.id); return t + (l ? l.balance : 0); }, 0);
+  const upkeep = own.reduce((t, x) => { const c = findCatalog(x.key) || {}; return t + (c.upkeepFlat ? c.upkeepFlat * cum : c.upkeepPct ? x.value * c.upkeepPct : 0); }, 0);
+  const n = k => own.filter(x => x.category === k).length, veh = n('Cars'), homes = n('Homes'), rent = n('Real Estate'), other = own.length - veh - homes - rent;
+  return '<div class="plabel">What you own</div><div class="kv kv2">' +
+    `<div><span>Total value</span><b>${fmt(val)}</b><span>${own.length} thing${own.length > 1 ? 's' : ''}</span></div>` +
+    `<div><span>Your equity</span><b>${fmt(val - owed)}</b><span>${owed ? fmt(owed) + ' still owed' : 'all paid off'}</span></div>` +
+    `<div><span>Upkeep</span><b>${fmt(Math.round(upkeep / 10) * 10)}</b><span>a year, about</span></div>` +
+    `<div><span>Inventory</span><b>${[homes ? homes + ' home' + (homes > 1 ? 's' : '') : '', rent ? rent + ' rental' + (rent > 1 ? 's' : '') : '', veh ? veh + ' vehicle' + (veh > 1 ? 's' : '') : '', other ? other + ' other' : ''].filter(Boolean).slice(0, 2).join(', ')}</b><span>${[homes, rent, veh, other].filter(Boolean).length > 2 ? 'and more' : '&nbsp;'}</span></div></div>`;
+}
 function assetCatalogRow(t, cat){
   if(t.hidden) return '';
   const minA = t.minAge || CAT_MIN[cat], locked = state.age < minA;
@@ -4347,7 +4576,9 @@ function assetCatalogRow(t, cat){
   const canFinance = financeable && state.money >= down && state.creditScore >= 580 && !state.bankrupt;
   return `<div class="invrow">
     <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
-    ${models ? `<select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
+    ${models ? vehicleArt(t.key, VEH_COLORS[vehColorPick(t.key)][1]) + `<div class="veh-row"><select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select>' +
+      `<select class="veh-select" aria-label="${t.name} paint color" onchange="pickColor('${t.key}', this.value)">` + VEH_COLORS.map((cl, i) => `<option value="${i}" ${i === vehColorPick(t.key) ? 'selected' : ''}>${cl[0]}</option>`).join('') + '</select></div><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
+    ${cat === 'Homes' ? propertyArt(t.key, 'h' + t.key + state.age) + '<div class="veh-specs">' + propDetails(t.key, 'h' + t.key + state.age) + '</div>' : ''}
     <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
       <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Buy · ${fromAge(minA)}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
@@ -4364,6 +4595,7 @@ function ownedAssetRow(x){
   const sellVal = x.value * (1 - fee);
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
+    ${x.category === 'Homes' ? propertyArt(x.key, x.seed || x.id) + '<div class="veh-specs">' + propDetails(x.key, x.seed || x.id, 1, null, x.builtYear) + '</div>' : ''}
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
     ${homeExtrasHtml(x)}
     <div class="assetbuy">${x.category === 'Homes' && state.age >= 18 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
@@ -4812,6 +5044,7 @@ const roadVehicles = () => state.assets.filter(x => x.category === 'Cars' && ROA
 function lic(){
   if(!state.license) state.license = {status:'none'};
   const L = state.license;
+  if(L.status === 'licensed' && (L.issuedAge == null || !L.number)){ L.issuedAge = L.issuedAge == null ? Math.min(state.age, 16) : L.issuedAge; L.number = L.number || 'D' + String(seedOf(state.name + state.age) % 9e7 + 1e7); }
   if(state.noLicense){ L.status = 'surrendered'; delete state.noLicense; }                    // older saves
   if(state.licenseBack){ L.suspendedUntil = state.licenseBack; delete state.licenseBack; }
   return L;
@@ -5022,6 +5255,7 @@ function nameVehicle(x, t, used){
   const m = vehModel(t.key); if(!m) return x;
   const year = m[7] || (used ? curYear() - rint(3, 9) : curYear());
   x.make = m[0]; x.model = m[1]; x.year = year; x.name = `${year} ${m[0]} ${m[1]}`;
+  x.color = used ? pick(VEH_COLORS)[0] : VEH_COLORS[vehColorPick(t.key)][0];
   return x;
 }
 function buyUsedVehicle(key){
@@ -5111,7 +5345,8 @@ function vehicleRowHtml(x){
   const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    ${ownedModel(x) ? '<div class="veh-specs">' + vehSpecs(ownedModel(x)) + '</div>' : ''}
+    ${vehicleArt(x.key, vehColorOf(x))}
+    ${ownedModel(x) ? '<div class="veh-specs">' + (x.color ? x.color + ' · ' : '') + vehSpecs(ownedModel(x)) + '</div>' : ''}
     <div class="owned">${{car:'Car', bike:'Motorbike', bicycle:'Bicycle', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
     <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
@@ -5386,15 +5621,26 @@ function acceptDeal(id){
 }
 function declineDeal(id){ const f = FM(); f.offers = f.offers.filter(x => x.id !== id); renderPanel(); }
 function toggleFame(k){ const f = FM(); f[k] = !f[k]; if(k === 'offGrid' && f[k]) pushEntry(state.age, `${state.name} steps away from public life for a while.`, {happy:3}); renderPanel(); }
+// Where fame stands: the tier and how far to the next, which way it moved, and what it is built on.
+function fameDashHtml(){
+  const f = FM(), lvl = Math.round(f.level), tiers = FAME_TIERS.slice().reverse(), i = tiers.findIndex(t => t[1] === fameTier(lvl)), next = tiers[i + 1];
+  const lh = (state.lifeHist || []).slice(-2), moved = lh.length === 2 ? lh[1].fame - lh[0].fame : 0, base = tiers[i][0];
+  const prog = next ? Math.round((lvl - base) / (next[0] - base) * 100) : 100, fol = state.social && state.social.account ? state.social.followers : 0;
+  return '<div class="kv kv2">' +
+    `<div><span>Tier</span><b>${fameTier(lvl)}</b><div class="meter"><span style="width:${prog}%;background:var(--gold)"></span></div><span>${next ? (next[0] - lvl) + ' to ' + next[1].toLowerCase() : 'the very top'}</span></div>` +
+    `<div><span>Last year</span><b class="${moved > 0 ? 'up' : moved < 0 ? 'down' : ''}">${moved > 0 ? '+' : ''}${moved}</b><span>${moved > 0 ? 'rising' : moved < 0 ? 'fading' : 'holding steady'}</span></div>` +
+    `<div><span>Public image</span><b>${f.image}/100</b><span>${f.image >= 70 ? 'well liked' : f.image >= 40 ? 'mixed' : 'disliked'}</span></div>` +
+    `<div><span>Followers</span><b>${fol ? fmtFollowers(fol) : 'none'}</b><span>${fol ? 'on social media' : 'no account yet'}</span></div></div>`;
+}
 function famePanelHtml(){
   const f = FM(), src = fameSources(), lvl = Math.round(f.level);
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
   let h = `<div class="status">Fame: <b>${fameTier(lvl)}</b> (${lvl}/100)${f.peak >= lvl + 10 ? ' · peaked at ' + Math.round(f.peak) : ''}` +
     (lvl >= 10 ? ` · public image <b>${f.image}</b>/100` : '') +
-    (src.length ? '<br>Known for: ' + src.slice(0, 3).map(x => x[1]).join(', ') : '<br>Fame comes from star careers like acting, music, sports and politics, a big social following, great wealth, or notoriety.') +
+    (src.length ? '<br>Known for: ' + src.slice(0, 3).map(x => x[1] === (state.job && state.job.title.toLowerCase()) ? 'your work as ' + (/^[aeiou]/.test(x[1]) ? 'an ' : 'a ') + x[1] : x[1]).join(', ') : '<br>Fame comes from star careers like acting, music, sports and politics, a big social following, great wealth, or notoriety.') +
     (f.inherited ? '<br>Famous family: doors open a little easier for you.' : '') +
     (f.awards.length ? '<br>Awards: ' + f.awards.map(x => x.name.replace(/^(the|a) /, '') + ' (' + x.age + ')').join(', ') : '') + '</div>' +
-    `<div class="stat-track" style="margin:-2px 0 4px;"><div class="stat-fill" style="width:${lvl}%;background:var(--gold)"></div></div>`;
+    `<div class="stat-track" style="margin:-2px 0 4px;"><div class="stat-fill" style="width:${lvl}%;background:var(--gold)"></div></div>` + fameDashHtml();
   if(f.offers.length){
     h += '<div class="plabel">Brand deals (this year only)</div>';
     f.offers.forEach(d => h += bankRow(`${d.brand} ${d.kind}`, `Pays ${fmt(d.pay)}. Ads cost a little authenticity.`, `<button onclick="acceptDeal('${d.id}')">Sign</button><button onclick="declineDeal('${d.id}')">Decline</button>`));
@@ -6709,6 +6955,19 @@ function toggleSmoking(){
 function iopt(icon, label, meta, fn, dis, done){
   return '<button class="opt' + (done ? ' done' : '') + '" ' + (dis ? 'disabled ' : '') + 'onclick="' + fn + '"><span class="olab"><span class="oi" aria-hidden="true">' + icon + '</span><span>' + label + '</span></span><span class="meta">' + meta + '</span></button>';
 }
+// The year ahead: the chance of a new illness, whether checkups are due, fitness, and the body.
+function healthReportHtml(){
+  const hh = H(), hb = hh.habits, a = state.age, had = hh.conditions.map(c => c.key);
+  let none = 1; for(const k in CONDITIONS){ if(had.includes(k)) continue; none *= 1 - Math.max(0, Math.min(0.9, onsetChance(k, CONDITIONS[k], a + 1) || 0)); }
+  const risk = Math.round((1 - none) * 100), riskTxt = risk >= 25 ? 'High' : risk >= 10 ? 'Moderate' : 'Low';
+  const every = a >= 40 ? 1 : 2, checkDue = hh.lastCheckup == null || a - hh.lastCheckup >= every, dentDue = a >= 3 && (hh.lastDentist == null || a - hh.lastDentist >= 1);
+  const ex = hb.exercise || 0;
+  return '<div class="plabel">Health report</div><div class="kv kv2">' +
+    `<div><span>New illness next year</span><b class="${risk >= 25 ? 'down' : ''}">${riskTxt}</b><span>about ${risk}% chance</span></div>` +
+    `<div><span>Checkups</span><b>${checkDue || dentDue ? 'Due' : 'Up to date'}</b><span>${[checkDue ? 'checkup' : '', dentDue ? 'dentist' : ''].filter(Boolean).join(' and ') || (every === 1 ? 'yearly from 40' : 'every two years')}</span></div>` +
+    `<div><span>Fitness</span><b>${ex === 2 ? 'Training' : ex === 1 ? 'Active' : 'Inactive'}</b><span>${hb.diet === 'healthy' ? 'healthy diet' : hb.diet === 'junk' ? 'junk food diet' : 'normal diet'}</span></div>` +
+    `<div><span>Body</span><b>${BUILDS[avatarLooks(state).build]}</b><span>${fmtHeight(heightNow(state))}</span></div></div>`;
+}
 function healthPanelHtml(){
   const hh = H(), hb = hh.habits, s = state.stats, a = state.age;
   const known = hh.conditions.filter(c => c.known);
@@ -6718,6 +6977,7 @@ function healthPanelHtml(){
   let h = '<div class="kv"><div><span>Health</span><b>' + s.health + '</b><span>' + label.toLowerCase() + '</span></div>' +
     '<div><span>Life outlook</span><b>~' + lifeOutlook() + '</b><span>est. lifespan</span></div>' +
     '<div><span>Conditions</span><b>' + known.length + '</b><span>' + (untreated ? '<span class="down" style="display:inline">' + untreated + ' untreated</span>' : known.length ? 'all managed' : 'none known') + '</span></div></div>';
+  h += healthReportHtml();
   h += healthChartHtml();
   h += '<div class="status">Last checkup: ' + (hh.lastCheckup !== null && hh.lastCheckup !== undefined ? (hh.lastCheckup === a ? "this year" : "age " + hh.lastCheckup) : "never") +
     " · Dentist: " + (hh.lastDentist != null ? (hh.lastDentist === a ? "this year" : "age " + hh.lastDentist) : "never") +
@@ -7372,6 +7632,15 @@ function legalYear(a){
   return true;
 }
 // ---- panel ----
+// The criminal side of a life in numbers.
+function crimeDashHtml(){
+  const k = CR(), a = state.age, recs = k.record.filter(x => !x.expunged && !(x.juvenile && a >= 18)), heat = Math.round(k.heat || 0);
+  return '<div class="kv kv2">' +
+    `<div><span>Record</span><b>${recs.length ? recs.length + ' conviction' + (recs.length > 1 ? 's' : '') : 'Clean'}</b><span>${felonyCount() ? felonyCount() + ' felon' + (felonyCount() > 1 ? 'ies' : 'y') : k.arrests ? k.arrests + ' arrest' + (k.arrests > 1 ? 's' : '') + ' in all' : 'never arrested'}</span></div>` +
+    `<div><span>Police attention</span><b>${heatLabel(k.heat)}</b><div class="meter"><span style="width:${Math.min(100, heat)}%;background:var(--red)"></span></div></div>` +
+    `<div><span>Made from crime</span><b>${fmt(k.earned || 0)}</b><span>over a lifetime</span></div>` +
+    `<div><span>Experience</span><b>${skillTier(k.skill)}</b><span>${k.probation ? 'on probation ' + k.probation + ' more yr' : k.wanted ? 'wanted by police' : 'free and clear'}</span></div></div>`;
+}
 function crimePanelHtml(){
   const k = CR(), a = state.age, recs = k.record.filter(x => !x.expunged && !(x.juvenile && a >= 18));
   let h = '<div class="status">Record: <b>' + (recs.length ? recs.length + " conviction" + (recs.length > 1 ? "s" : "") + (felonyCount() ? " (" + felonyCount() + " felon" + (felonyCount() > 1 ? "ies" : "y") + ")" : "") : "clean") + "</b>" +
@@ -7379,6 +7648,7 @@ function crimePanelHtml(){
     (k.probation ? "<br>On probation for " + k.probation + " more year" + (k.probation > 1 ? "s" : "") + ". Another offense will cost more." : "") +
     (k.wanted ? '<br><span class="down">On the run from the law.</span>' : "") +
     (felonyCount() ? "<br>A felony record makes jobs harder to get and closes off law, medicine and teaching." : "") + "</div>";
+  h += crimeDashHtml();
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
   if(k.prison){
     const pr = k.prison;
@@ -8127,6 +8397,17 @@ function bizEventYear(a){
   }
   return true;
 }
+// The year in numbers, and how profit has moved over the last few years.
+function bizDashHtml(b){
+  if(b.lastRevenue === undefined || !b.history || !b.history.length) return '';
+  const margin = b.lastRevenue > 0 ? b.lastProfit / b.lastRevenue : 0, hist = b.history.slice(-8);
+  return '<div class="plabel">Last year</div><div class="kv kv2">' +
+    `<div><span>Revenue</span><b>${fmt(b.lastRevenue)}</b><span>sales and royalties</span></div>` +
+    `<div><span>Costs</span><b>${fmt(b.lastCosts)}</b><span>staff and overhead</span></div>` +
+    `<div><span>Profit</span><b class="${b.lastProfit >= 0 ? 'up' : 'down'}">${fmt(b.lastProfit)}</b><span>${b.lastRevenue > 0 ? Math.round(margin * 100) + '% margin' : '&nbsp;'}</span></div>` +
+    `<div><span>Value</span><b>${fmt(b.value)}</b><span>${b.lastKept ? fmt(b.lastKept) + ' reinvested' : 'what a buyer might pay'}</span></div></div>` +
+    (hist.length >= 3 ? '<div class="invrow"><div class="itop"><span><b>Profit, last ' + hist.length + ' years</b></span><span class="price">' + sparkline(hist, 120, 26) + '</span></div></div>' : '');
+}
 function bizPanelHtml(){
   const b = bizNormalize(state.business), t = bizType(b.type), cum = state.econ.cumInflation, U = b.upgrades;
   const pill = (label, active, js) => `<button class="sortbtn${active ? ' active' : ''}" onclick="${js}">${label}</button>`;
@@ -8143,6 +8424,7 @@ function bizPanelHtml(){
   h += '<div class="invrow"><div class="itop"><span>Reputation</span><span class="price">' + b.reputation + '/100</span></div>' + meter(b.reputation, 'gold') +
        '<div class="itop"><span>Staff morale</span><span class="price ' + (b.morale < 35 ? 'down' : '') + '">' + b.morale + '/100</span></div>' + meter(b.morale, b.morale < 35 ? 'red' : 'green') + '</div>';
 
+  h += bizDashHtml(b);
   h += '<div class="plabel">Staff</div>';
   h += bankRow('Employees', `Each costs about ${fmt(empCost(b))} a year and brings in about ${fmt(t.revPerEmp * cum * bizRevenueMult(b) / Math.max(1, 1 + 0.15 * (b.locations - 1)))}.`, `
     <button onclick="hireEmployee()">Hire</button><button onclick="hireEmployee(5)">Hire 5</button><button onclick="fireEmployee()" ${b.employees <= 0 ? 'disabled' : ''}>Fire</button>`);
@@ -9473,11 +9755,7 @@ function togglePanel(name){
 }
 const PANEL_TITLES = {health:"Health", me:"Your life", act:"Activities, travel & hobbies", edu:"School", job:"Career", soc:"People & pets", bank:"Bank", inv:"Investing", ast:"Assets", biz:"Business", media:"Fame & social media", hob:"Hobbies", crime:"Crime & the law"};
 // Expected age at death if health stayed as it is now, from the same yearly risks the game rolls.
-function lifeExpectancy(){
-  let alive = 1, years = 0;
-  for(let y = state.age; y < 125 && alive > 0.001; y++){ alive *= 1 - Math.min(0.95, mortalityChance(y, state.stats.health) * diff('death')); years += alive; }
-  return Math.round(state.age + years);
-}
+function lifeExpectancy(){ return lifeOutlook(); }                          // one estimate, shared by the Me and Health tabs
 // Typical (median) net worth by age, in today's dollars.
 const PEER_NW = [[25, 10000], [35, 40000], [45, 135000], [55, 250000], [65, 365000], [75, 410000], [200, 335000]];
 function lifeGlanceHtml(){
@@ -10181,10 +10459,13 @@ function givingHtml(){
 }
 
 // ---- Invest: back a startup, or cash out everything ----
+// Each startup's name goes with what it does.
+const PITCHES = [['Quillpad', 'an AI tutoring app'], ['Zentro Health', 'a telehealth app'], ['Lumenfold', 'a solar panel startup'], ['Brightbox Robotics', 'a warehouse robotics company'], ['Tidewater Energy', 'a battery startup'],
+  ['Mossgrove Foods', 'a plant-based food company'], ['Pathly', 'a travel app'], ['Kitebridge', 'an electric-scooter startup'], ['Orbital Seeds', 'a farm robotics company'], ['Nimbus Pay', 'a payments app'], ['Halcyon Bio', 'a biotech lab'], ['Fernway Mobility', 'an electric-bus maker']];
 const PITCH_NAMES = ['Quillpad', 'Zentro Health', 'Lumenfold', 'Brightbox Robotics', 'Tidewater Energy', 'Mossgrove Foods', 'Pathly', 'Kitebridge', 'Orbital Seeds', 'Nimbus Pay', 'Halcyon Bio', 'Fernway Mobility'];
 const STARTUP_KINDS = ['an AI tutoring app', 'a battery startup', 'a meal-kit company', 'a payments app', 'a biotech lab', 'an electric-scooter startup', 'a farm robotics company', 'a travel app'];
 function startupPitch(){
-  if(!state.pitch || state.pitch.age !== state.age) state.pitch = {age:state.age, co:pick(PITCH_NAMES), kind:pick(STARTUP_KINDS)};
+  if(!state.pitch || state.pitch.age !== state.age) { const pp = pick(PITCHES); state.pitch = {age:state.age, co:pp[0], kind:pp[1]}; }
   return state.pitch;
 }
 const angelAmts = () => [5000, 25000, 100000].map(x => inflR(x, 500));
@@ -10463,11 +10744,11 @@ const SUBMENUS = {
   job:    [['work', 'My work', /performance|career ladder/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
   soc:    [['social', 'Socialize', /needs attention|get together/i], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['debt', 'Debt', /your debt/i], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
-  inv:    [['mine', 'My portfolio', /^the market|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
-  ast:    [['home', 'Property', /where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
-  biz:    [['run', 'Overview', null], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
+  inv:    [['mine', 'My portfolio', /^the market|your performance|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
+  ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
+  biz:    [['run', 'Overview', /last year/i], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
   media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
-  health: [['overview', 'Overview', null], ['care', 'Care', /care and wellness|conditions/i], ['habits', 'Habits', /^habits/i]],
+  health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions/i], ['habits', 'Habits', /^habits/i]],
   crime:  [['law', 'Your record', /staying out|your record|prison|detention|felony/i], ['crimes', 'Crimes', /^crimes/i]],
 };
 function setSub(key){
@@ -10529,7 +10810,7 @@ function renderPanel(){
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
-      h += portfolioChartHtml() + marketOverviewHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
+      h += portfolioChartHtml() + marketOverviewHtml() + investPerfHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
       h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
@@ -10559,7 +10840,7 @@ function renderPanel(){
   } else if(state.panel === 'ast'){
     const av = assetsValue();
     h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Assets <b>${fmt(av)}</b> &nbsp;·&nbsp; Debt <b>${fmt(totalDebt())}</b><br>Net worth <b>${fmt(netWorth())}</b></div>`;
-    h += homeHtml() + realEstateHtml() + licenseHtml();
+    h += assetSummaryHtml() + homeHtml() + realEstateHtml() + licenseHtml();
     const mine = state.assets.filter(x => !x.rental);
     if(mine.length){
       h += '<div class="plabel">YOUR THINGS</div>';
@@ -13192,6 +13473,19 @@ function buyMix(kind, share){
   (state.mixIn = state.mixIn || {})[kind] = (state.mixIn[kind] || 0) + total;
   pushEntry(state.age, `${state.name} invests ${fmt(total)} in the ${mix.label.toLowerCase()} portfolio: ${parts.join(', ')}.`, {});
   render();
+}
+// How the investments have done: value, return, best and worst holding, and income.
+function investPerfHtml(){
+  const pv = portfolioValue(); if(pv < 1) return '';
+  const basis = Object.keys(state.portfolio).reduce((t, k) => t + ((state.portfolio[k] || 0) > 1e-9 ? (state.basis[k] || 0) : 0), 0), ret = basis > 0 ? (pv - basis) / basis : 0;
+  const rows = Object.keys(state.portfolio).filter(k => (state.portfolio[k] || 0) > 1e-9 && state.market[k] && state.basis[k] > 0).map(k => ({k, r:(state.portfolio[k] * state.market[k].price - state.basis[k]) / state.basis[k]})).sort((a, b) => b.r - a.r);
+  const best = rows[0], worst = rows[rows.length - 1], div = state.divLast || 0;
+  return '<div class="plabel">Your performance</div><div class="kv kv2">' +
+    `<div><span>Invested</span><b>${fmt(basis)}</b><span>now worth ${fmt(pv)}</span></div>` +
+    `<div><span>Total return</span><b class="${ret >= 0 ? 'up' : 'down'}">${ret >= 0 ? '+' : ''}${(ret * 100).toFixed(1)}%</b><span>${ret >= 0 ? 'gain ' + fmt(pv - basis) : 'loss ' + fmt(basis - pv)}</span></div>` +
+    (best ? `<div><span>Best holding</span><b>${(best.r >= 0 ? '+' : '') + Math.round(best.r * 100)}%</b><span>${instrName(best.k)}</span></div>` : '') +
+    (worst && rows.length > 1 ? `<div><span>Worst holding</span><b>${(worst.r >= 0 ? '+' : '') + Math.round(worst.r * 100)}%</b><span>${instrName(worst.k)}</span></div>` : '') +
+    `<div><span>Dividends last year</span><b>${fmt(div)}</b><span>${pv > 0 ? (div / pv * 100).toFixed(1) + '% yield' : ''}</span></div></div>`;
 }
 function portfolioHtml(){
   const pv = portfolioValue(); if(pv < 1) return '';
