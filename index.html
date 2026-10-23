@@ -243,6 +243,22 @@
   .lic-photo svg{ width:100%; height:100%; display:block; }
   .lic-info{ display:flex; flex-direction:column; font-size:12.5px; line-height:1.45; min-width:0; }
   .lic-info b{ font-size:15px; }
+  .photo{ margin:4px 0 8px; border-radius:12px; overflow:hidden; background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--line); }
+  .photo img{ display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover; }
+  .photo figcaption{ font-size:10.5px; color:var(--muted); padding:4px 8px 5px; line-height:1.3; }
+  .photo figcaption a{ color:inherit; }
+  .home-facts{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; margin:8px 0 4px; padding:10px 12px; border-radius:12px; background:var(--surface-2); }
+  .home-facts span{ display:block; font-size:10.5px; font-weight:700; color:var(--muted); letter-spacing:.02em; }
+  .home-facts b{ display:block; font-size:13.5px; font-weight:600; line-height:1.35; }
+  .home-group{ margin-top:12px; font-weight:700; color:var(--ink); }
+  .mod-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin-top:6px; }
+  .mod-btn{ text-align:left; padding:9px 10px; border-radius:11px; background:var(--surface); border:1px solid var(--line); color:var(--ink); font-size:13px; line-height:1.3; }
+  .mod-btn b{ display:block; font-weight:700; }
+  .mod-btn span{ display:block; font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .mod-btn.done{ border-color:var(--green); background:color-mix(in srgb, var(--green) 10%, var(--surface)); }
+  .mod-btn:disabled{ opacity:1; }
+  .mod-btn:disabled:not(.done){ opacity:.55; }
+  .swatch-pill i{ display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; vertical-align:-1px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2); }
   .art{ width:100%; height:auto; display:block; border-radius:12px; margin:4px 0 8px; box-shadow:inset 0 0 0 1px var(--line); }
   .veh-row{ display:flex; gap:6px; }
   .veh-row .veh-select{ flex:1; min-width:0; }
@@ -4281,7 +4297,7 @@ function rentalCardHtml(x){
   const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${r.home ? ' <span class="tick">YOUR HOME</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    ${propertyArt(x.key, x.seed || x.id)}<div class="veh-specs">${propDetails(x.key, x.seed || x.id, r.units, x.builtCond, x.builtYear)}</div>
+    ${housePhoto(x.key, x.seed || x.id)}<div class="veh-specs">${propDetails(x.key, x.seed || x.id, r.units, x.builtCond, x.builtYear)}</div>
     <div class="owned">${r.units > 1 ? r.occupied + ' of ' + r.units + ' units rented' : r.occupied ? 'Rented' : 'Vacant'}${t.commercial ? ' · commercial' : t.shortTerm ? ' · short-term rental' : ''} · equity ${fmt(equity)}${loan ? ' · mortgage ' + fmt(loan.yearlyPayment) + '/yr' : ''}
     ${r.lastNet !== null && r.lastNet !== undefined ? `<br>Last year: rent ${fmt(r.lastRent)}, after tax, upkeep${r.manager ? ' and management' : ''} <span class="${r.lastNet >= 0 ? 'up' : 'down'}">${fmt(r.lastNet)}</span>${loan ? `, after the mortgage <span class="${flow >= 0 ? 'up' : 'down'}">${fmt(flow)}</span>` : ''}` : '<br>Tenants move in next year.'}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${r.cond < 40 ? 'down' : ''}">${r.cond}/100</span></div>
@@ -4298,7 +4314,7 @@ function listingHtml(l){
   const canFin = state.creditScore >= 620 && !state.bankrupt && canPay(down);
   return `<div class="invrow">
     <div class="itop"><span><b>${loc.name} ${t.name}</b>${l.cond < 50 ? ' <span class="tick">FIXER-UPPER</span>' : ''}</span><span class="price">${fmt(l.price)}</span></div>
-    ${propertyArt(l.key, l.id)}<div class="veh-specs">${propDetails(l.key, l.id, l.units, l.cond)}</div>
+    ${housePhoto(l.key, l.id)}<div class="veh-specs">${propDetails(l.key, l.id, l.units, l.cond)}</div>
     <div class="owned">${l.units > 1 ? l.units + ' units · ' : ''}condition ${l.cond}/100 · estimated value ${fmt(l.fair)} <span class="${diff <= 0 ? 'up' : 'down'}">(${Math.abs(Math.round(diff * 100))}% ${diff <= 0 ? 'below' : 'above'})</span><br>
     Rent if fully let: about ${fmt(rent)}/yr (${(rent / l.price * 100).toFixed(1)}% of the price)${loc.storms ? ' · storm risk' : loc.growth > 0 ? ' · values tend to rise faster' : loc.growth < 0 ? ' · values grow slowly' : ''}</div>
     <div class="assetbuy"><button onclick="buyListing('${l.id}')" ${canPay(l.price) ? '' : 'disabled'}>Buy cash</button><button onclick="buyListing('${l.id}',true)" ${canFin ? '' : 'disabled'}>Mortgage (${fmt(down)} down)</button></div>
@@ -4339,9 +4355,10 @@ function assetsYear(a){
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5;
     const property = t.category === 'Homes' || t.category === 'Real Estate';
     x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
-    if(property && !x.rental) upkeep += x.value * t.upkeepPct * (x.solar ? 0.7 : 1);
+    if(property && !x.rental) upkeep += x.value * t.upkeepPct * (x.solar ? 0.7 : 1) * (x.mods && x.mods.roof ? 0.9 : 1) + (x.category === 'Homes' ? modsUpkeep(x) : 0);
     if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation * (state.world.fx.gas || 1);
   });
+  homeComfortYear(a);
   const mate = state.assets.find(x => x.roommate && !x.rental);
   if(mate) pushEntry(a, `${state.name}'s roommate pays ${fmt(inflR(8400, 100))} in rent for the room in the ${mate.name}.`, {money:inflR(8400, 100), happy:-1});
   if(upkeep <= 0) return;
@@ -4554,6 +4571,208 @@ function propDetails(key, seed, units, cond, baseYear){
   return [d[0] + ' bd · ' + d[1] + ' ba', sq.toLocaleString() + ' sq ft', lot, 'built ' + built].filter(Boolean).join(' · ');
 }
 
+const PHOTOS = {"v:scooter:1":{"f":"img/v/scooter-1.jpg","a":"Khaosaming","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Honda_Zoomer_Ruckus_Motor_Scooter_50cc_Snowy_Winter.JPG"},
+  "v:scooter:2":{"f":"img/v/scooter-2.jpg","a":"Travis Rigel Lukas Hornung","l":"CC BY 2.0","u":"https://commons.wikimedia.org/wiki/File:Genuine_Buddy_01.jpg"},
+  "v:scooter:3":{"f":"img/v/scooter-3.jpg","a":"Khaosaming","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Vespa_Primavera_125.jpg"},
+  "v:used:2":{"f":"img/v/used-2.jpg","a":"M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Ford_Focus_Trend_(III)_%E2%80%93_Frontansicht,_17._September_2011,_Ratingen.jpg"},
+  "v:motorcycle:0":{"f":"img/v/motorcycle-0.jpg","a":"Chris Woodrich","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Honda_CMX500_Rebel_parked_at_Hogs_for_Hospice,_Leamington,_Ontario,_2025-08-02.jpg"},
+  "v:motorcycle:4":{"f":"img/v/motorcycle-4.jpg","a":"Cjp24","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:BMW_R_1300_GS_Adventure_Triple_Black_(1).jpg"},
+  "v:newsed:0":{"f":"img/v/newsed-0.jpg","a":"Cutlass","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:2023_Hyundai_Elantra_Limited_in_Silver,_front_left,_04-04-2026.jpg"},
+  "v:newsed:1":{"f":"img/v/newsed-1.jpg","a":"EurovisionNim","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2018_Toyota_Corolla_(MZEA12R)_Ascent_Sport_hatchback_(2018-11-02)_01.jpg"},
+  "v:newsed:2":{"f":"img/v/newsed-2.jpg","a":"TTTNIS","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Mazda3_SKYACTIV-G.jpg"},
+  "v:newsed:3":{"f":"img/v/newsed-3.jpg","a":"Elise240SX","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Honda_Civic_Touring_in_Lunar_Silver_Metallic,_Front_Left,_05-10-2022.jpg"},
+  "v:minivan:0":{"f":"img/v/minivan-0.jpg","a":"MercurySable99","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Kia_Carnival_Hybrid_EX,_front_right,_10-12-2025.jpg"},
+  "v:minivan:1":{"f":"img/v/minivan-1.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Toyota_Sienna_XLE_Hybrid,_front_12.21.21.jpg"},
+  "v:minivan:2":{"f":"img/v/minivan-2.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Honda_Odyssey_EX-L_(facelift),_front_1.1.21.jpg"},
+  "v:minivan:3":{"f":"img/v/minivan-3.jpg","a":"Mr.choppers","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:2020_Chrysler_Pacifica_Touring-L_in_Bright_White,_front_left.jpg"},
+  "v:suv:0":{"f":"img/v/suv-0.jpg","a":"Mr.choppers","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2024_Toyota_RAV4_Prime_XSE_Premium_in_Silver_Sky_with_Midnight_Black_roof,_front_left.jpg"},
+  "v:suv:1":{"f":"img/v/suv-1.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Honda_CR-V_e-HEV_Elegance_AWD_(VI)_%E2%80%93_f_14072024.jpg"},
+  "v:suv:2":{"f":"img/v/suv-2.jpg","a":"Elise240SX","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Jeep_Grand_Cherokee_Summit_Reserve_4x4_in_Bright_White,_Front_Left,_01-16-2022.jpg"},
+  "v:suv:4":{"f":"img/v/suv-4.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Chevrolet_Tahoe_RST,_front_3.7.22.jpg"},
+  "v:ev:0":{"f":"img/v/ev-0.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Chevrolet_Equinox_EV,_front_left_4.26.25.jpg"},
+  "v:ev:1":{"f":"img/v/ev-1.jpg","a":"Vauxford","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Ford_Mustang_Mach-E_Standard_Range_Front.jpg"},
+  "v:ev:2":{"f":"img/v/ev-2.jpg","a":"Alexander-93","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Tesla_Model_3_(2023)_Autofr%C3%BChling_Ulm_IMG_9282.jpg"},
+  "v:ev:3":{"f":"img/v/ev-3.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Hyundai_Ioniq_5_AWD_Techniq-Paket_%E2%80%93_f_31122024.jpg"},
+  "v:ev:4":{"f":"img/v/ev-4.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Tesla_Model_Y_Premium_(Facelift)_%E2%80%93_f_05052026.jpg"},
+  "v:ev:5":{"f":"img/v/ev-5.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2023_Rivian_R1S_Adventure,_front_1.29.23.jpg"},
+  "v:pickup:0":{"f":"img/v/pickup-0.jpg","a":"Alexander-93","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Toyota_Tacoma_(N300)_TRD_1X7A2438.jpg"},
+  "v:pickup:2":{"f":"img/v/pickup-2.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Ford_F-150_SuperCrew,_front_4.28.21.jpg"},
+  "v:classic:1":{"f":"img/v/classic-1.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:1965_Ford_Mustang_Convertible_Classic-Gala_2021_1X7A0275.jpg"},
+  "v:classic:2":{"f":"img/v/classic-2.jpg","a":"Noah Wulf","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Blue_1957_Chevrolet_Bel_Air_Convertible_in_Las_Vegas.jpg"},
+  "v:classic:3":{"f":"img/v/classic-3.jpg","a":"Berthold Werner","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Mercedes-Benz_W113_280_SL_2014-09-07_12-45-34.jpg"},
+  "v:classic:4":{"f":"img/v/classic-4.jpg","a":"Charles from Port Chester, New York","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_Sting_Ray_427_Cabriolet_(C2,_1967)_(55219368966).jpg"},
+  "v:sports:0":{"f":"img/v/sports-0.jpg","a":"Kazyakuruma","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Nissan_FAIRLADY_Z_(Z34)_Version_ST,_2022,_left-front.jpg"},
+  "v:sports:1":{"f":"img/v/sports-1.jpg","a":"WMrapids","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Seventh_generation_2024_Ford_Mustang_(cropped).jpg"},
+  "v:sports:2":{"f":"img/v/sports-2.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_C8_IAA_2021_1X7A0156.jpg"},
+  "v:sports:3":{"f":"img/v/sports-3.jpg","a":"Vauxford","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_BMW_M4_Competition_Automatic_3.0_Front.jpg"},
+  "v:sports:4":{"f":"img/v/sports-4.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Porsche_992_Carrera_convertible_DSC_7026.jpg"},
+  "v:luxcar:0":{"f":"img/v/luxcar-0.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2019_Lexus_LS_500_AWD_beige,_front_Hagerty_6.1.19.jpg"},
+  "v:luxcar:1":{"f":"img/v/luxcar-1.jpg","a":"Damian B Oh","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Genesis_G90_3.5T_RS4_Savile_Silver_(1)_(cropped).jpg"},
+  "v:supercar:0":{"f":"img/v/supercar-0.jpg","a":"MrWalkr","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2017_Lamborghini_Huracan_LP610.jpg"},
+  "v:supercar:1":{"f":"img/v/supercar-1.jpg","a":"Max Baillie","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Ferrari_296_(cropped).jpg"},
+  "v:sailboat:0":{"f":"img/v/sailboat-0.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Hobie_Getaway_catamaran_sailboat_1997.jpg"},
+  "v:sailboat:1":{"f":"img/v/sailboat-1.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:J70_sailboat_3333.jpg"},
+  "v:sailboat:2":{"f":"img/v/sailboat-2.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Beneteau_First_285_sailboat_1728.jpg"},
+  "v:sailboat:3":{"f":"img/v/sailboat-3.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Catalina_275_Sport_sailboat_2556.jpg"},
+  "v:speedboat:0":{"f":"img/v/speedboat-0.jpg","a":"Marius Vassnes","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Bayliner_in_Austevoll.jpg"},
+  "v:speedboat:1":{"f":"img/v/speedboat-1.jpg","a":"Matti Blume","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Sea_Ray_SPX_210,_Interboot_2020,_Friedrichshafen_(IB200261).jpg"},
+  "v:speedboat:2":{"f":"img/v/speedboat-2.jpg","a":"Matti Blume","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:MasterCraft,_Interboot_2020,_Friedrichshafen_(IB200217).jpg"},
+  "v:yacht:2":{"f":"img/v/yacht-2.jpg","a":"Monmar Comunicació from Vic","l":"CC BY-SA 2.0","u":"https://commons.wikimedia.org/wiki/File:Sunseeker_Predator_84_(7542162456).jpg"},
+  "v:jet:4":{"f":"img/v/jet-4.jpg","a":"Rob Hodgkins","l":"CC BY-SA 2.0","u":"https://commons.wikimedia.org/wiki/File:G-ULFS_Gulfstream_G650_CVT_05-05-16_(27046023031)_(cropped).jpg"}};
+// Real photographs, from Wikimedia Commons under free licenses; each shows its author and license.
+const photoEsc = s => String(s || '').replace(/[<>"&`]/g, '');
+function photoHtml(pid, alt){
+  const p = PHOTOS[pid]; if(!p) return '';
+  return `<figure class="photo"><img src="${p.f}" alt="${photoEsc(alt)}" loading="lazy" decoding="async" width="640" height="360"><figcaption>Photo: ${photoEsc(p.a)} · <a href="${photoEsc(p.u)}" target="_blank" rel="noopener noreferrer">${photoEsc(p.l)}</a></figcaption></figure>`;
+}
+// The exact model's photo, or the drawing if a photo is missing.
+const vehPhoto = (key, i, color) => photoHtml('v:' + key + ':' + i, (VEH_MODELS[key] && VEH_MODELS[key][i] ? VEH_MODELS[key][i].slice(0, 2).join(' ') : key)) || vehicleArt(key, color);
+const ownedModelIndex = x => { const l = VEH_MODELS[x.key] || []; const i = l.findIndex(m => m[0] === x.make && m[1] === x.model); return i < 0 ? 0 : i; };
+function housePhoto(key, seed){
+  const ids = Object.keys(PHOTOS).filter(k => k.startsWith('h:' + key + ':'));
+  if(!ids.length) return propertyArt(key, seed);
+  return photoHtml(ids[seedOf(seed || key) % ids.length], (findCatalog(key) || {name:key}).name);
+}
+// ---------- Homes: full details and customization ----------
+// Each home has a fixed set of facts (from its seed) that renovations and add-ons then change.
+const HOME_BASE = {
+  cabin:{style:'Log cabin', stories:1, garage:0, school:[4, 7], walk:[2, 15], hoa:0},
+  condo:{style:'Mid-rise condo', stories:1, garage:1, school:[5, 8], walk:[75, 96], hoa:3600},
+  starter:{style:'Bungalow', stories:1, garage:1, school:[5, 8], walk:[35, 65], hoa:0},
+  suburb:{style:'Two-story Colonial', stories:2, garage:2, school:[7, 10], walk:[20, 50], hoa:600},
+  lux:{style:'Contemporary', stories:2, garage:3, school:[8, 10], walk:[15, 45], hoa:1800},
+  mansion:{style:'Georgian estate', stories:3, garage:4, school:[8, 10], walk:[2, 20], hoa:0},
+  beach:{style:'Raised beach house', stories:2, garage:1, school:[5, 8], walk:[30, 70], hoa:0},
+  ranch:{style:'Farmhouse on acreage', stories:2, garage:2, school:[5, 8], walk:[0, 8], hoa:0},
+  penthouse:{style:'Top-floor penthouse', stories:2, garage:2, school:[6, 9], walk:[85, 99], hoa:14000},
+  familyhome:{style:'Family home', stories:2, garage:2, school:[6, 9], walk:[25, 60], hoa:0},
+};
+const NO_YARD = ['condo', 'penthouse'];
+// [key, group, label, cost (share of value, minimum in today's dollars), share of cost added to value, happiness, extra yearly upkeep, changes]
+const HOME_MODS = [
+  ['kitchen', 'Renovate', "Remodel the kitchen", 0.06, 25000, 0.75, 4, 0, {}],
+  ['bath', 'Renovate', 'Remodel the bathrooms', 0.035, 15000, 0.65, 3, 0, {}],
+  ['floors', 'Renovate', 'Put in hardwood floors', 0.025, 9000, 0.8, 2, 0, {}],
+  ['roof', 'Renovate', 'Replace the roof and windows', 0.03, 18000, 0.6, 1, 0, {yard:true}],
+  ['basement', 'Renovate', 'Finish the basement', 0.05, 35000, 0.7, 3, 0, {beds:1, sqft:600, yard:true, not:['beach', 'cabin']}],
+  ['addbath', 'Renovate', 'Add a bathroom', 0.04, 30000, 0.6, 2, 0, {baths:1, yard:true}],
+  ['addition', 'Renovate', 'Build an addition', 0.12, 90000, 0.7, 5, 0, {beds:1, sqft:450, yard:true}],
+  ['pool', 'Outdoors', 'Put in a swimming pool', 0.07, 60000, 0.4, 5, 2500, {yard:true}],
+  ['hottub', 'Outdoors', 'Add a hot tub', 0.012, 9000, 0.3, 3, 600, {}],
+  ['deck', 'Outdoors', 'Build a deck and patio', 0.025, 20000, 0.65, 3, 0, {yard:true}],
+  ['garden', 'Outdoors', 'Landscape the garden', 0.015, 12000, 0.8, 3, 900, {yard:true}],
+  ['outkitchen', 'Outdoors', 'Build an outdoor kitchen', 0.03, 25000, 0.5, 3, 300, {yard:true}],
+  ['fence', 'Outdoors', 'Put up a fence', 0.01, 8000, 0.5, 1, 0, {yard:true}],
+  ['garage', 'Outdoors', 'Add a two-car garage', 0.05, 45000, 0.6, 2, 0, {garage:2, yard:true}],
+  ['smart', 'Comfort & tech', 'Make it a smart home', 0.008, 6000, 0.3, 2, 150, {}],
+  ['security', 'Comfort & tech', 'Install a security system', 0.005, 4000, 0.2, 1, 450, {}],
+  ['theater', 'Comfort & tech', 'Build a home theater', 0.03, 25000, 0.3, 4, 0, {}],
+  ['gym', 'Comfort & tech', 'Set up a home gym', 0.012, 10000, 0.2, 2, 0, {}],
+  ['wine', 'Comfort & tech', 'Build a wine cellar', 0.03, 30000, 0.3, 2, 0, {not:['condo', 'penthouse', 'beach']}],
+  ['fireplace', 'Comfort & tech', 'Add a fireplace', 0.012, 9000, 0.6, 2, 0, {}],
+  ['evcharger', 'Comfort & tech', 'Install an EV charger', 0.003, 2000, 0.5, 1, 0, {}],
+];
+const HOME_FEAT = {kitchen:'Remodeled kitchen', bath:'Updated bathrooms', floors:'Hardwood floors', roof:'New roof & windows', basement:'Finished basement', addbath:'Extra bathroom', addition:'Home addition',
+  pool:'Swimming pool', hottub:'Hot tub', deck:'Deck & patio', garden:'Landscaped garden', outkitchen:'Outdoor kitchen', fence:'Fenced yard', garage:'Two-car garage', smart:'Smart home',
+  security:'Security system', theater:'Home theater', gym:'Home gym', wine:'Wine cellar', fireplace:'Fireplace', evcharger:'EV charger'};
+const HOME_STYLES = ['Modern', 'Farmhouse', 'Coastal', 'Industrial', 'Traditional', 'Minimalist', 'Mid-century', 'Bohemian'];
+const HOME_FURNISH = [['Bare', 0, 0], ['Basic', 4000, 1], ['Comfortable', 15000, 3], ['Designer', 60000, 5], ['Luxury', 200000, 7]];
+const HOME_PAINT = [['White', '#f4f2ec'], ['Cream', '#efe3c6'], ['Light gray', '#c9ccd0'], ['Charcoal', '#4a4e54'], ['Navy blue', '#2f4466'], ['Sage green', '#9db29a'],
+  ['Brick red', '#9a3f33'], ['Butter yellow', '#ecd389'], ['Sky blue', '#9cc3df'], ['Natural wood', '#9a6a42']];
+const modOf = k => HOME_MODS.find(m => m[0] === k);
+const modCost = (x, m) => Math.round(Math.max(m[4] * state.econ.cumInflation, x.value * m[3]) / 100) * 100;
+const modOk = (x, m) => { const c = m[8]; if(c.not && c.not.includes(x.key)) return false; if(c.yard && NO_YARD.includes(x.key)) return false; if(m[0] === 'garage' && homeFacts(x).garage >= 2) return false; return true; };
+const homeMods = x => Object.keys(x.mods || {}).filter(k => x.mods[k]);
+const modsUpkeep = x => homeMods(x).reduce((t, k) => t + ((modOf(k) || [])[7] || 0), 0) * state.econ.cumInflation;
+const hasHomeMod = k => state.assets.some(x => x.category === 'Homes' && !x.rental && x.mods && x.mods[k]);
+function homeFacts(x){
+  const key = x.key, d = PROP_DETAIL[key] || PROP_DETAIL.starter, b = HOME_BASE[key] || HOME_BASE.familyhome, r = seeded(x.seed || x.id || key);
+  const sq0 = Math.round(d[2] * (0.85 + r() * 0.3) / 10) * 10, age = Math.floor(r() * 60) + 1;
+  const heat = ['Central air and gas furnace', 'Heat pump', 'Radiant floor heating', 'Central air and electric heat'][Math.floor(r() * 4)];
+  const school = b.school[0] + Math.floor(r() * (b.school[1] - b.school[0] + 1)), walk = b.walk[0] + Math.floor(r() * (b.walk[1] - b.walk[0] + 1));
+  const f = {style:b.style, stories:b.stories, beds:d[0], baths:d[1], sqft:sq0, lot:d[3], built:(x.builtYear || curYear()) - age, garage:b.garage, heat, school, walk, hoa:b.hoa};
+  homeMods(x).forEach(k => { const c = (modOf(k) || [])[8] || {}; f.beds += c.beds || 0; f.baths += c.baths || 0; f.sqft += c.sqft || 0; f.garage += c.garage || 0; });
+  return f;
+}
+function homeFeatureChips(x){
+  const out = homeMods(x).map(k => HOME_FEAT[k] || k);
+  if(x.solar) out.push('Solar panels');
+  if(x.style) out.push(x.style + ' interior');
+  if(x.furnish) out.push(HOME_FURNISH[x.furnish][0] + ' furnishings');
+  if(x.paint) out.push(x.paint + ' exterior');
+  return out;
+}
+function homeDetailsHtml(x){
+  const f = homeFacts(x), cum = state.econ.cumInflation, tax = Math.round(x.value * 0.011 / 10) * 10, ins = Math.round((x.value * 0.0035 + 600 * cum) / 10) * 10;
+  const energy = Math.round(f.sqft * 1.4 * cum * (x.solar ? 0.35 : 1) * (x.mods && x.mods.roof ? 0.9 : 1) / 10) * 10;
+  const rows = [['Style', f.style], ['Stories', f.stories], ['Bedrooms', f.beds], ['Bathrooms', f.baths], ['Living space', f.sqft.toLocaleString() + ' sq ft'], ['Lot', f.lot ? f.lot + ' acre' + (f.lot === 1 ? '' : 's') : 'none (shared building)'],
+    ['Built', f.built], ['Parking', f.garage ? f.garage + '-car garage' : 'street parking'], ['Heating & cooling', f.heat], ['School rating', f.school + '/10'], ['Walk score', f.walk + '/100'],
+    ['Property tax', fmt(tax) + '/yr'], ['Insurance', fmt(ins) + '/yr'], ['Energy bills', fmt(energy) + '/yr' + (x.solar ? ' (solar)' : '')], ['HOA fees', f.hoa ? fmt(f.hoa * cum) + '/yr' : 'none'],
+    ['Upkeep', fmt(Math.round((x.value * ((findCatalog(x.key) || {}).upkeepPct || 0.011) * (x.solar ? 0.7 : 1) + modsUpkeep(x)) / 10) * 10) + '/yr']];
+  return '<div class="home-facts">' + rows.map(r => `<div><span>${r[0]}</span><b>${r[1]}</b></div>`).join('') + '</div>';
+}
+function homeCustomizeHtml(x){
+  const pill = (label, on, js, dis) => `<button class="sortbtn${on ? ' active' : ''}" onclick="${js}" ${dis ? 'disabled' : ''}>${label}</button>`, pr = state.crime.prison;
+  let h = homeDetailsHtml(x);
+  ['Renovate', 'Outdoors', 'Comfort & tech'].forEach(g => {
+    const list = HOME_MODS.filter(m => m[1] === g && modOk(x, m));
+    if(!list.length) return;
+    h += `<div class="owned home-group">${g}</div><div class="mod-grid">` + list.map(m => { const done = x.mods && x.mods[m[0]], c = modCost(x, m);
+      return `<button class="mod-btn${done ? ' done' : ''}" onclick="homeMod('${x.id}','${m[0]}')" ${done || pr || !canPay(c) ? 'disabled' : ''}><b>${m[2]}</b><span>${done ? 'done ✓' : fmt(c) + ' · +' + m[6] + ' happy' + (m[7] ? ' · ' + fmt(m[7] * state.econ.cumInflation) + '/yr upkeep' : '') + ' · adds ~' + fmt(c * m[5])}</span></button>`; }).join('') +
+      (g === 'Comfort & tech' && !x.solar ? `<button class="mod-btn" onclick="installSolar('${x.id}')" ${pr || !canPay(solarCost()) ? 'disabled' : ''}><b>Put solar panels on the roof</b><span>${fmt(solarCost())} · energy bills and upkeep drop</span></button>` : '') + '</div>';
+  });
+  const restyle = Math.round((5000 * state.econ.cumInflation + x.value * 0.01) / 100) * 100, paintC = Math.round(Math.max(4000 * state.econ.cumInflation, x.value * 0.012) / 100) * 100;
+  h += `<div class="owned home-group">Interior style · ${fmt(restyle)} to redecorate</div><div class="sortrow">` + HOME_STYLES.map(s => pill(s, x.style === s, `homeStyle('${x.id}','${s}')`, pr || x.style === s || state.done['hs_' + x.id])).join('') + '</div>';
+  h += `<div class="owned home-group">Furnishings</div><div class="sortrow">` + HOME_FURNISH.map((f, i) => pill(f[0] + (f[1] ? ' · ' + fmt(inflR(f[1], 100)) : ''), (x.furnish || 0) === i, `homeFurnish('${x.id}',${i})`, pr || (x.furnish || 0) === i || (i > (x.furnish || 0) && !canPay(inflR(f[1], 100))))).join('') + '</div>';
+  h += `<div class="owned home-group">Exterior paint · ${fmt(paintC)}</div><div class="sortrow">` + HOME_PAINT.map(p => `<button class="sortbtn swatch-pill${x.paint === p[0] ? ' active' : ''}" onclick="homePaint('${x.id}','${p[0]}')" ${pr || x.paint === p[0] || !canPay(paintC) ? 'disabled' : ''}><i style="background:${p[1]}"></i>${p[0]}</button>`).join('') + '</div>';
+  h += `<div class="owned home-group">Name your home</div><div class="assetbuy"><input class="amt-input" id="hn_${x.id}" maxlength="28" placeholder="e.g. Willow Creek House" value="${x.nickname || ''}" aria-label="Home name"><button onclick="nameHome('${x.id}')">Save name</button></div>`;
+  return h;
+}
+const findHome = id => state.assets.find(y => y.id === id && y.category === 'Homes');
+function homeMod(id, key){
+  const x = findHome(id), m = modOf(key); if(!x || !m || state.crime.prison || (x.mods && x.mods[key]) || !modOk(x, m)) return;
+  const c = modCost(x, m); if(!ensureCash(c)) return;
+  state.money -= c; (x.mods = x.mods || {})[key] = true; x.value += Math.round(c * m[5]);
+  pushEntry(state.age, `${state.name} spends ${fmt(c)} to ${m[2].replace(/^./, s => s.toLowerCase())} at ${homeLabel(x)}.`, {happy:m[6]});
+  render();
+}
+function homeStyle(id, s){
+  const x = findHome(id); if(!x || state.crime.prison || x.style === s || state.done['hs_' + id]) return;
+  const c = Math.round((5000 * state.econ.cumInflation + x.value * 0.01) / 100) * 100; if(!ensureCash(c)) return;
+  state.money -= c; x.style = s; state.done['hs_' + id] = true;
+  pushEntry(state.age, `${state.name} redecorates ${homeLabel(x)} in a ${s.toLowerCase()} style.`, {happy:3});
+  render();
+}
+function homeFurnish(id, i){
+  const x = findHome(id), f = HOME_FURNISH[i]; if(!x || !f || state.crime.prison || (x.furnish || 0) === i) return;
+  const up = i > (x.furnish || 0), c = up ? inflR(f[1], 100) : 0;
+  if(up && !ensureCash(c)) return;
+  state.money -= c; const was = x.furnish || 0; x.furnish = i;
+  pushEntry(state.age, up ? `${state.name} furnishes ${homeLabel(x)}: ${f[0].toLowerCase()} furniture throughout.` : `${state.name} sells off some furniture and lives more simply.`, {happy: up ? f[2] - HOME_FURNISH[was][2] : -1});
+  render();
+}
+function homePaint(id, p){
+  const x = findHome(id); if(!x || state.crime.prison || x.paint === p) return;
+  const c = Math.round(Math.max(4000 * state.econ.cumInflation, x.value * 0.012) / 100) * 100; if(!ensureCash(c)) return;
+  state.money -= c; x.paint = p; x.value += Math.round(c * 0.5);
+  pushEntry(state.age, `${state.name} has ${homeLabel(x)} painted ${p.toLowerCase()}.`, {happy:1});
+  render();
+}
+function nameHome(id){
+  const x = findHome(id), el = document.getElementById('hn_' + id); if(!x || !el) return;
+  const nm = cleanPersonName(el.value).replace(/'/g, '’').slice(0, 28);
+  x.nickname = nm || '';
+  if(nm) pushEntry(state.age, `${state.name} names their home "${nm}".`, {happy:1});
+  render();
+}
+const homeLabel = x => x.nickname ? x.nickname : 'the ' + x.name.toLowerCase();
+function toggleHome(id){ state.openHome = state.openHome === id ? null : id; renderPanel(); }
+// A comfortable home lifts the mood a little every year.
+function homeComfortYear(a){
+  const home = state.assets.find(x => x.category === 'Homes' && !x.rental && state.movedOut); if(!home) return;
+  const lux = ['pool', 'hottub', 'theater', 'garden', 'deck', 'fireplace', 'outkitchen', 'gym'].filter(k => home.mods && home.mods[k]).length + (home.furnish >= 3 ? 1 : 0);
+  if(lux >= 2) applyDelta({happy: Math.min(3, Math.floor(lux / 2))});
+}
 // Everything owned at a glance: how much it is worth, what it costs to keep, and how much is still owed on it.
 function assetSummaryHtml(){
   const own = state.assets; if(!own.length) return '';
@@ -4576,9 +4795,8 @@ function assetCatalogRow(t, cat){
   const canFinance = financeable && state.money >= down && state.creditScore >= 580 && !state.bankrupt;
   return `<div class="invrow">
     <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
-    ${models ? vehicleArt(t.key, VEH_COLORS[vehColorPick(t.key)][1]) + `<div class="veh-row"><select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select>' +
-      `<select class="veh-select" aria-label="${t.name} paint color" onchange="pickColor('${t.key}', this.value)">` + VEH_COLORS.map((cl, i) => `<option value="${i}" ${i === vehColorPick(t.key) ? 'selected' : ''}>${cl[0]}</option>`).join('') + '</select></div><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
-    ${cat === 'Homes' ? propertyArt(t.key, 'h' + t.key + state.age) + '<div class="veh-specs">' + propDetails(t.key, 'h' + t.key + state.age) + '</div>' : ''}
+    ${models ? vehPhoto(t.key, vehPick(t.key)) + `<select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
+    ${cat === 'Homes' ? housePhoto(t.key, 'h' + t.key + state.age) + '<div class="veh-specs">' + (HOME_BASE[t.key] ? HOME_BASE[t.key].style + ' · ' : '') + propDetails(t.key, 'h' + t.key + state.age) + '</div>' : ''}
     <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
       <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Buy · ${fromAge(minA)}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
@@ -4594,8 +4812,10 @@ function ownedAssetRow(x){
   const fee = (x.category === 'Homes' || x.category === 'Cars') ? 0.05 : 0;
   const sellVal = x.value * (1 - fee);
   return `<div class="invrow">
-    <div class="itop"><span><b>${x.name}</b></span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
-    ${x.category === 'Homes' ? propertyArt(x.key, x.seed || x.id) + '<div class="veh-specs">' + propDetails(x.key, x.seed || x.id, 1, null, x.builtYear) + '</div>' : ''}
+    <div class="itop"><span><b>${x.category === 'Homes' && x.nickname ? photoEsc(x.nickname) + '</b> <span class="sub-meta">' + x.name + '</span>' : x.name + '</b>'}</span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
+    ${x.category === 'Homes' ? housePhoto(x.key, x.seed || x.id) + (() => { const f = homeFacts(x), chips = homeFeatureChips(x); return '<div class="veh-specs">' + [f.style, f.beds + ' bd · ' + f.baths + ' ba', f.sqft.toLocaleString() + ' sq ft', 'built ' + f.built].join(' · ') + '</div>' +
+      (chips.length ? '<div class="chips">' + chips.map(c => '<span class="chip good">' + c + '</span>').join('') + '</div>' : '') +
+      `<div class="assetbuy"><button onclick="toggleHome('${x.id}')">${state.openHome === x.id ? 'Hide details' : 'Details & customize'}</button></div>` + (state.openHome === x.id ? homeCustomizeHtml(x) : ''); })() : ''}
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
     ${homeExtrasHtml(x)}
     <div class="assetbuy">${x.category === 'Homes' && state.age >= 18 ? `<button onclick="rentOutHome('${x.id}')">Rent it out</button>` : ''}<button onclick="sellAsset('${x.id}')">Sell for ${fmt(sellVal)}</button>${(x.category === 'Homes' || x.category === 'Real Estate') ? `<button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || state.money + state.savings < renoCost(x) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>` : ''}</div>
@@ -5255,7 +5475,6 @@ function nameVehicle(x, t, used){
   const m = vehModel(t.key); if(!m) return x;
   const year = m[7] || (used ? curYear() - rint(3, 9) : curYear());
   x.make = m[0]; x.model = m[1]; x.year = year; x.name = `${year} ${m[0]} ${m[1]}`;
-  x.color = used ? pick(VEH_COLORS)[0] : VEH_COLORS[vehColorPick(t.key)][0];
   return x;
 }
 function buyUsedVehicle(key){
@@ -5345,8 +5564,8 @@ function vehicleRowHtml(x){
   const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    ${vehicleArt(x.key, vehColorOf(x))}
-    ${ownedModel(x) ? '<div class="veh-specs">' + (x.color ? x.color + ' · ' : '') + vehSpecs(ownedModel(x)) + '</div>' : ''}
+    ${vehPhoto(x.key, ownedModelIndex(x), vehColorOf(x))}
+    ${ownedModel(x) ? '<div class="veh-specs">' + vehSpecs(ownedModel(x)) + '</div>' : ''}
     <div class="owned">${{car:'Car', bike:'Motorbike', bicycle:'Bicycle', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
     <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
@@ -6709,7 +6928,7 @@ const medTxt = (c, yearly) => c ? fmt(c) + (yearly ? '/yr' : '') : 'parents pay'
 function exercisedThisYear(){
   const d = state.lastDone || {};                // healthYear runs after the new year's slate is cleared
   return !!(d.gym || d.sport || d.play || d.petWalk || d['pr_workout'] || d.hc_trainer || ACTIVE_HOBBIES.some(k => d['hob_' + k])) ||
-         ACTIVE_HOBBIES.some(k => hobbyLevel(k) >= 40) || (!state.crime.prison && (H().habits.exercise || 0) > 0);
+         ACTIVE_HOBBIES.some(k => hobbyLevel(k) >= 40) || (!state.crime.prison && ((H().habits.exercise || 0) > 0 || (state.movedOut && hasHomeMod('gym'))));
 }
 const recently = (age, yrs) => age != null && state.age - age <= yrs;
 function onsetChance(key, d, a){
