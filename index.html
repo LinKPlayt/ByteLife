@@ -243,10 +243,6 @@
   .lic-photo svg{ width:100%; height:100%; display:block; }
   .lic-info{ display:flex; flex-direction:column; font-size:12.5px; line-height:1.45; min-width:0; }
   .lic-info b{ font-size:15px; }
-  .photo{ margin:4px 0 8px; border-radius:12px; overflow:hidden; background:var(--surface-2); box-shadow:inset 0 0 0 1px var(--line); }
-  .photo img{ display:block; width:100%; height:auto; aspect-ratio:16/9; object-fit:cover; }
-  .photo figcaption{ font-size:10.5px; color:var(--muted); padding:4px 8px 5px; line-height:1.3; }
-  .photo figcaption a{ color:inherit; }
   .home-facts{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 12px; margin:8px 0 4px; padding:10px 12px; border-radius:12px; background:var(--surface-2); }
   .home-facts span{ display:block; font-size:10.5px; font-weight:700; color:var(--muted); letter-spacing:.02em; }
   .home-facts b{ display:block; font-size:13.5px; font-weight:600; line-height:1.35; }
@@ -259,7 +255,7 @@
   .mod-btn:disabled{ opacity:1; }
   .mod-btn:disabled:not(.done){ opacity:.55; }
   .swatch-pill i{ display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; vertical-align:-1px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2); }
-  .art{ width:100%; height:auto; display:block; border-radius:12px; margin:4px 0 8px; box-shadow:inset 0 0 0 1px var(--line); }
+  .art{ width:100%; height:auto; display:block; overflow:hidden; border-radius:12px; margin:4px 0 8px; box-shadow:inset 0 0 0 1px var(--line); }
   .veh-row{ display:flex; gap:6px; }
   .veh-row .veh-select{ flex:1; min-width:0; }
   .veh-select{ width:100%; margin:6px 0 4px; padding:9px 10px; font-size:16px; font-family:inherit; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); }
@@ -4297,7 +4293,7 @@ function rentalCardHtml(x){
   const gp = (x.value - x.boughtPrice) / x.boughtPrice * 100;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${r.home ? ' <span class="tick">YOUR HOME</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    ${housePhoto(x.key, x.seed || x.id)}<div class="veh-specs">${propDetails(x.key, x.seed || x.id, r.units, x.builtCond, x.builtYear)}</div>
+    ${propertyArt(x.key, x.seed || x.id, x)}<div class="veh-specs">${propDetails(x.key, x.seed || x.id, r.units, x.builtCond, x.builtYear)}</div>
     <div class="owned">${r.units > 1 ? r.occupied + ' of ' + r.units + ' units rented' : r.occupied ? 'Rented' : 'Vacant'}${t.commercial ? ' · commercial' : t.shortTerm ? ' · short-term rental' : ''} · equity ${fmt(equity)}${loan ? ' · mortgage ' + fmt(loan.yearlyPayment) + '/yr' : ''}
     ${r.lastNet !== null && r.lastNet !== undefined ? `<br>Last year: rent ${fmt(r.lastRent)}, after tax, upkeep${r.manager ? ' and management' : ''} <span class="${r.lastNet >= 0 ? 'up' : 'down'}">${fmt(r.lastNet)}</span>${loan ? `, after the mortgage <span class="${flow >= 0 ? 'up' : 'down'}">${fmt(flow)}</span>` : ''}` : '<br>Tenants move in next year.'}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${r.cond < 40 ? 'down' : ''}">${r.cond}/100</span></div>
@@ -4314,7 +4310,7 @@ function listingHtml(l){
   const canFin = state.creditScore >= 620 && !state.bankrupt && canPay(down);
   return `<div class="invrow">
     <div class="itop"><span><b>${loc.name} ${t.name}</b>${l.cond < 50 ? ' <span class="tick">FIXER-UPPER</span>' : ''}</span><span class="price">${fmt(l.price)}</span></div>
-    ${housePhoto(l.key, l.id)}<div class="veh-specs">${propDetails(l.key, l.id, l.units, l.cond)}</div>
+    ${propertyArt(l.key, l.id)}<div class="veh-specs">${propDetails(l.key, l.id, l.units, l.cond)}</div>
     <div class="owned">${l.units > 1 ? l.units + ' units · ' : ''}condition ${l.cond}/100 · estimated value ${fmt(l.fair)} <span class="${diff <= 0 ? 'up' : 'down'}">(${Math.abs(Math.round(diff * 100))}% ${diff <= 0 ? 'below' : 'above'})</span><br>
     Rent if fully let: about ${fmt(rent)}/yr (${(rent / l.price * 100).toFixed(1)}% of the price)${loc.storms ? ' · storm risk' : loc.growth > 0 ? ' · values tend to rise faster' : loc.growth < 0 ? ' · values grow slowly' : ''}</div>
     <div class="assetbuy"><button onclick="buyListing('${l.id}')" ${canPay(l.price) ? '' : 'disabled'}>Buy cash</button><button onclick="buyListing('${l.id}',true)" ${canFin ? '' : 'disabled'}>Mortgage (${fmt(down)} down)</button></div>
@@ -4367,194 +4363,989 @@ function assetsYear(a){
 }
 
 // ---------- Pictures of vehicles and property ----------
-// Small hand-built SVG scenes: each vehicle is drawn side-on in its paint color, each property in its setting.
+// Drawings of everything you can own, made from scratch in code (no photos): each vehicle from its real
+// measurements and shape, each home in its setting, showing what you have done to it.
 let artSeq = 0;
 const seedOf = s => { let h = 2166136261; s = String(s); for(let i = 0; i < s.length; i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
 const seeded = s => { let a = seedOf(s); return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
 const VEH_COLORS = [['Pearl White', '#f1f0ea'], ['Jet Black', '#1f2124'], ['Silver', '#b8bdc3'], ['Graphite Gray', '#5b6068'], ['Ruby Red', '#b0212b'], ['Deep Blue', '#1f4d8b'],
   ['Forest Green', '#2f5c3b'], ['Sunset Orange', '#e0662b'], ['Sand Beige', '#cdb99b'], ['Sky Blue', '#6aa5d6'], ['Canary Yellow', '#e7c23c']];
-const VEH_BODY = {ebike:'ebike', scooter:'moped', used:'sedan', motorcycle:'moto', newsed:'sedan', minivan:'minivan', suv:'suv', ev:'ev', pickup:'pickup', classic:'classic',
-  sports:'sports', luxcar:'sedan', rv:'rv', supercar:'supercar', sailboat:'sail', speedboat:'speedboat', yacht:'yacht', jet:'jet'};
-const vehColorPick = key => Math.min(((state.vehColor || {})[key] || 0), VEH_COLORS.length - 1);
-function pickColor(key, i){ (state.vehColor = state.vehColor || {})[key] = Math.max(0, Math.min(VEH_COLORS.length - 1, +i || 0)); renderPanel(); }
-const vehColorOf = x => x.color ? (VEH_COLORS.find(c => c[0] === x.color) || VEH_COLORS[0])[1] : VEH_COLORS[seedOf(x.id || x.key) % VEH_COLORS.length][1];
-
-function artFrame(id, scene, inner, h){
-  const sky = scene === 'sea' || scene === 'air' ? ['#bfe0f5', '#e8f4fb'] : scene === 'dusk' ? ['#f6c79a', '#fbe7cf'] : ['#cfe6f4', '#eef6fa'];
-  let ground = '';
-  if(scene === 'road') ground = '<rect y="112" width="320" height="38" fill="#7d8187"/><rect y="110" width="320" height="4" fill="#a9adb2"/><g fill="#eceae2">' + [10, 70, 130, 190, 250, 310].map(x => `<rect x="${x}" y="134" width="34" height="3" rx="1.5"/>`).join('') + '</g>';
-  else if(scene === 'sea') ground = `<rect y="104" width="320" height="46" fill="url(#${id}w)"/><g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.4" fill="none">` + [[20, 118], [90, 128], [170, 116], [240, 132], [290, 120]].map(([x, y]) => `<path d="M${x},${y} q8,-4 16,0 q8,4 16,0"/>`).join('') + '</g>';
-  else if(scene === 'air') ground = '<g fill="#fff" opacity=".9"><ellipse cx="60" cy="118" rx="38" ry="10"/><ellipse cx="88" cy="112" rx="24" ry="11"/><ellipse cx="250" cy="34" rx="30" ry="8"/><ellipse cx="272" cy="29" rx="18" ry="9"/></g>';
-  else ground = '<rect y="112" width="320" height="38" fill="#8fbf6a"/><rect y="112" width="320" height="5" fill="#7aae58"/>';
-  return `<svg class="art" viewBox="0 0 320 ${h || 150}" role="img" aria-hidden="true"><defs><linearGradient id="${id}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient>` +
-    `<linearGradient id="${id}w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a92c4"/><stop offset="1" stop-color="#2d6a99"/></linearGradient>` +
-    `<linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/></linearGradient></defs>` +
-    `<rect width="320" height="150" fill="url(#${id}s)"/>${ground}${inner}</svg>`;
-}
-const wheel = (x, y, r, white) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#1c1d20"/>${white ? `<circle cx="${x}" cy="${y}" r="${r * 0.72}" fill="#f2f2ee"/>` : ''}<circle cx="${x}" cy="${y}" r="${r * 0.55}" fill="#9aa0a6"/><circle cx="${x}" cy="${y}" r="${r * 0.2}" fill="#5a5f66"/>` +
-  [0, 72, 144, 216, 288].map(a => `<line x1="${x}" y1="${y}" x2="${(x + Math.cos(a * Math.PI / 180) * r * 0.5).toFixed(1)}" y2="${(y + Math.sin(a * Math.PI / 180) * r * 0.5).toFixed(1)}" stroke="#6d737a" stroke-width="1.6"/>`).join('');
-const shadow = (x, w, y) => `<ellipse cx="${x}" cy="${y || 124}" rx="${w}" ry="5" fill="#000" opacity=".22"/>`;
-// one car-shaped body: outline, glass, wheels and lights, with gloss from the shared gradient
-function carBody(id, c, body, glass, wheels, extra){
-  const cd = hexMix(c, '#000000', 0.28);
-  return `<path d="${body}" fill="${c}" stroke="${cd}" stroke-width="1.5"/><path d="${body}" fill="url(#${id}g)"/>` + glass.map(g => `<path d="${g}" fill="#2b3f52" opacity=".88"/>`).join('') +
-    `<path d="${glass[0]}" fill="#fff" opacity=".12"/>` + (extra || '') + wheels.map(([x, r, w]) => wheel(x, 120 - r * 0.15, r, w)).join('');
-}
-function vehicleArt(key, color, scale){
-  const id = 'va' + (++artSeq), c = color || '#b8bdc3', cd = hexMix(c, '#000000', 0.3), body = VEH_BODY[key] || 'sedan';
-  let g = '', scene = 'road';
-  const light = (x, y) => `<rect x="${x}" y="${y}" width="9" height="5" rx="2" fill="#fff6c8"/>`, tail = (x, y) => `<rect x="${x}" y="${y}" width="6" height="6" rx="2" fill="#c8282f"/>`;
-  if(body === 'sedan' || body === 'ev'){
-    g = shadow(165, 128) + carBody(id, c, 'M38,112 L38,94 Q40,84 60,81 L104,78 Q126,56 156,54 L204,54 Q228,57 250,77 L282,82 Q295,86 295,99 L295,112 Z',
-      ['M112,78 Q130,61 156,60 L176,60 L176,78Z', 'M182,60 L203,60 Q222,62 240,78 L182,78Z'], [[86, 18], [248, 18]],
-      `<line x1="178" y1="80" x2="178" y2="108" stroke="${cd}" stroke-width="1.2"/><line x1="120" y1="80" x2="118" y2="106" stroke="${cd}" stroke-width="1.2"/>` + light(282, 88) + tail(38, 88) +
-      (body === 'ev' ? `<path d="M268,96 l-5,8 h5 l-3,7 l8,-10 h-5 l3,-5z" fill="#3fb4e8"/>` : `<rect x="286" y="96" width="8" height="8" rx="1" fill="${cd}"/>`));
-  } else if(body === 'suv'){
-    g = shadow(165, 132) + carBody(id, c, 'M36,112 L36,82 Q38,70 56,68 L96,66 L114,40 L238,40 Q252,42 260,66 L284,70 Q296,74 296,92 L296,112 Z',
-      ['M120,66 L132,46 L178,46 L178,66Z', 'M184,46 L234,46 Q244,48 250,66 L184,66Z', 'M100,66 L116,44 L126,44 L114,66Z'], [[88, 21], [248, 21]],
-      `<rect x="114" y="36" width="122" height="4" rx="2" fill="${cd}"/>` + light(282, 78) + tail(36, 76));
-  } else if(body === 'pickup'){
-    g = shadow(165, 134) + carBody(id, c, 'M32,112 L32,78 L132,76 L140,42 L206,42 Q218,44 224,70 L284,74 Q297,78 297,94 L297,112 Z',
-      ['M146,70 L152,48 L180,48 L180,70Z', 'M186,48 L202,48 Q212,50 216,70 L186,70Z'], [[78, 21], [252, 21]],
-      `<line x1="132" y1="78" x2="132" y2="108" stroke="${cd}" stroke-width="1.6"/><rect x="34" y="74" width="96" height="5" fill="${cd}"/>` + light(283, 82) + tail(32, 82));
-  } else if(body === 'minivan'){
-    g = shadow(165, 134) + carBody(id, c, 'M34,112 L34,72 Q38,46 72,44 L222,44 Q248,46 264,70 L286,74 Q297,80 297,96 L297,112 Z',
-      ['M48,70 Q52,52 74,50 L118,50 L118,70Z', 'M124,50 L184,50 L184,70 L124,70Z', 'M190,50 L220,50 Q240,52 252,70 L190,70Z'], [[84, 19], [250, 19]],
-      `<line x1="121" y1="72" x2="121" y2="106" stroke="${cd}" stroke-width="1.2"/><line x1="187" y1="72" x2="187" y2="106" stroke="${cd}" stroke-width="1.2"/>` + light(284, 84) + tail(34, 80));
-  } else if(body === 'sports' || body === 'supercar'){
-    const sc = body === 'supercar';
-    g = shadow(165, 130) + carBody(id, c, sc ? 'M34,112 L36,100 Q70,94 112,90 Q150,66 192,64 Q232,68 270,88 L300,96 L298,112 Z' : 'M36,112 L38,98 Q60,90 92,86 Q130,64 172,62 L202,62 Q240,66 262,84 L292,90 Q299,96 297,112 Z',
-      sc ? ['M128,88 Q154,70 190,69 L210,72 Q190,82 170,88Z'] : ['M108,86 Q134,68 170,67 L180,67 L180,86Z', 'M186,67 L200,67 Q226,70 244,86 L186,86Z'], [[84, 17], [250, 17]],
-      (sc ? `<path d="M150,96 L200,94 L190,104 L156,104Z" fill="${cd}"/>` : '') + `<path d="M36,92 L58,88 L60,84 L40,86Z" fill="${cd}"/>` + light(286, 94) + tail(38, 96));
-  } else if(body === 'classic'){
-    g = shadow(165, 136) + carBody(id, c, 'M28,112 L28,94 Q32,84 58,84 L138,84 L150,70 L158,84 L272,86 Q298,88 299,100 L299,112 Z',
-      ['M150,72 L157,84 L146,84Z'], [[82, 18, true], [252, 18, true]],
-      `<rect x="26" y="104" width="275" height="5" rx="2.5" fill="#d9dde1"/><path d="M28,94 Q30,80 46,80 L60,84Z" fill="${cd}"/><rect x="96" y="80" width="40" height="5" rx="2" fill="#7a3b2a"/>` + light(288, 92) + tail(28, 90));
-  } else if(body === 'moto'){
-    g = shadow(160, 92) + wheel(98, 112, 24) + wheel(228, 112, 24) + `<path d="M98,112 L140,82 L198,82 L228,112" stroke="#3a3d42" stroke-width="5" fill="none"/><path d="M134,80 Q156,64 190,70 L196,84 L140,86Z" fill="${c}" stroke="${cd}" stroke-width="1.4"/>` +
-      `<path d="M112,80 L150,78 L150,84 L110,86Z" fill="#2b2c30"/><path d="M196,70 L214,60 L220,62 L206,78Z" fill="#3a3d42"/><rect x="214" y="56" width="16" height="4" rx="2" fill="#3a3d42"/>` + light(222, 70) + `<rect x="148" y="90" width="34" height="14" rx="4" fill="#6b7077"/>`;
-  } else if(body === 'moped'){
-    g = shadow(160, 80) + wheel(110, 114, 17) + wheel(214, 114, 17) + `<path d="M104,108 Q108,82 140,84 L178,84 L196,56 L206,58 L196,96 Q210,98 214,108 Z" fill="${c}" stroke="${cd}" stroke-width="1.4"/>` +
-      `<rect x="120" y="76" width="40" height="8" rx="4" fill="#2b2c30"/><rect x="192" y="50" width="22" height="4" rx="2" fill="#3a3d42"/>` + light(204, 62);
-  } else if(body === 'ebike'){
-    g = shadow(160, 86) + wheel(100, 110, 26) + wheel(222, 110, 26) + `<g stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round"><path d="M100,110 L140,72 L198,72 L222,110"/><path d="M140,72 L158,110 L198,72"/><path d="M158,110 L100,110"/><path d="M198,72 L204,54"/></g>` +
-      `<rect x="146" y="76" width="36" height="12" rx="4" fill="#2b2c30"/><rect x="132" y="62" width="22" height="5" rx="2.5" fill="#2b2c30"/><path d="M196,54 L214,52" stroke="#3a3d42" stroke-width="4" stroke-linecap="round"/>`;
-  } else if(body === 'rv'){
-    g = shadow(165, 138) + `<path d="M28,112 L28,40 Q30,30 42,30 L246,30 Q258,30 262,46 L290,76 Q298,82 298,96 L298,112 Z" fill="${hexMix(c, '#ffffff', 0.55)}" stroke="#8a8f96" stroke-width="1.5"/>` +
-      `<rect x="28" y="78" width="270" height="10" fill="${c}"/><rect x="28" y="90" width="270" height="4" fill="${cd}"/>` + [46, 96, 146].map(x => `<rect x="${x}" y="44" width="34" height="20" rx="3" fill="#2b3f52" opacity=".85"/>`).join('') +
-      `<path d="M252,48 L284,78 L252,78Z" fill="#2b3f52" opacity=".85"/><rect x="204" y="42" width="24" height="54" rx="2" fill="#e8e6dd" stroke="#8a8f96"/>` + wheel(78, 114, 18) + wheel(250, 114, 18) + light(288, 86);
-  } else if(body === 'sail'){
-    scene = 'sea';
-    g = `<path d="M60,104 L262,104 L240,124 L84,124 Z" fill="${c}" stroke="${cd}" stroke-width="1.5"/><rect x="60" y="102" width="202" height="4" fill="#f2f2ee"/><line x1="160" y1="14" x2="160" y2="102" stroke="#6d6f72" stroke-width="3"/>` +
-      `<path d="M163,18 L163,98 L238,98 Z" fill="#fbfaf4" stroke="#c9c7bd"/><path d="M157,26 L157,98 L96,98 Z" fill="#f2efe4" stroke="#c9c7bd"/>`;
-  } else if(body === 'speedboat'){
-    scene = 'sea';
-    g = `<path d="M40,98 L250,94 Q290,96 300,104 L270,122 L70,122 Z" fill="${c}" stroke="${cd}" stroke-width="1.5"/><path d="M40,98 L250,94 Q290,96 300,104 L60,108Z" fill="#f2f2ee"/>` +
-      `<path d="M168,94 L190,74 L214,74 L206,94Z" fill="#2b3f52" opacity=".75"/><path d="M20,118 q20,-6 50,0" stroke="#fff" stroke-width="3" fill="none" opacity=".7"/>`;
-  } else if(body === 'yacht'){
-    scene = 'sea';
-    g = `<path d="M24,96 L276,90 Q306,92 312,100 L280,124 L52,124 Z" fill="#f4f4f0" stroke="#8a8f96" stroke-width="1.5"/><rect x="30" y="104" width="250" height="6" fill="${c}"/>` +
-      `<path d="M70,90 L80,66 L230,66 L250,90Z" fill="#f4f4f0" stroke="#8a8f96"/><path d="M110,66 L118,48 L200,48 L212,66Z" fill="#f4f4f0" stroke="#8a8f96"/>` +
-      `<rect x="86" y="72" width="150" height="10" rx="3" fill="#2b3f52" opacity=".85"/><rect x="122" y="52" width="80" height="8" rx="3" fill="#2b3f52" opacity=".85"/>` + [50, 80, 110, 140, 170, 200, 230].map(x => `<circle cx="${x}" cy="98" r="2.5" fill="#2b3f52"/>`).join('');
-  } else if(body === 'jet'){
-    scene = 'air';
-    g = `<path d="M40,80 Q44,66 70,64 L250,62 Q292,64 304,76 Q292,88 250,90 L70,92 Q44,92 40,80Z" fill="#f4f4f0" stroke="#9aa0a6" stroke-width="1.5"/><path d="M60,66 L36,26 L56,26 L94,64Z" fill="${c}"/>` +
-      `<path d="M150,88 L120,128 L146,128 L196,88Z" fill="#d9dde1" stroke="#9aa0a6"/><rect x="70" y="58" width="34" height="12" rx="6" fill="#d9dde1" stroke="#9aa0a6"/><path d="M286,70 Q296,74 300,76 L286,78Z" fill="#2b3f52"/>` +
-      [120, 140, 160, 180, 200, 220, 240].map(x => `<circle cx="${x}" cy="74" r="3" fill="#2b3f52"/>`).join('') + `<rect x="60" y="80" width="230" height="3" fill="${c}"/>`;
+// -1 means the color the maker shows it in
+const vehColorPick = key => { const v = (state.vehColor || {})[key]; return v == null ? -1 : Math.max(-1, Math.min(v, VEH_COLORS.length - 1)); };
+function pickColor(key, i){ (state.vehColor = state.vehColor || {})[key] = Math.max(-1, Math.min(VEH_COLORS.length - 1, Math.round(+i) || 0)); renderPanel(); }
+// ---------- Vehicle drawings ----------
+// Every model is drawn from scratch as a side view: its real length, height, wheelbase and tire size set the
+// proportions, and a handful of shape points (inches from the rear bumper and from the ground) give it the roof,
+// hood and window line of that car. Paint, glass, chrome, tires and lights are then shaded like a showroom shot.
+const DW = 640, DH = 300, DG = 254;
+const r1 = v => Math.round(v * 10) / 10;
+// a polygon with rounded corners; each point is [x, y, radius] and a big radius turns the corner into a smooth curve
+function rpath(pts, closed, open){
+  const n = pts.length; let d = '';
+  for(let i = 0; i < n; i++){
+    const p = pts[i], rad = p[2] || 0, prev = pts[(i - 1 + n) % n], next = pts[(i + 1) % n];
+    if(!rad || (!closed && (i === 0 || i === n - 1))){ d += (i ? 'L' : (open ? 'L' : 'M')) + r1(p[0]) + ',' + r1(p[1]); continue; }
+    const d1 = Math.hypot(p[0] - prev[0], p[1] - prev[1]) || 1, d2 = Math.hypot(next[0] - p[0], next[1] - p[1]) || 1;
+    const a = Math.min(rad, d1 / 2), b = Math.min(rad, d2 / 2);
+    d += (i ? 'L' : (open ? 'L' : 'M')) + r1(p[0] + (prev[0] - p[0]) * a / d1) + ',' + r1(p[1] + (prev[1] - p[1]) * a / d1) + 'Q' + r1(p[0]) + ',' + r1(p[1]) + ' ' + r1(p[0] + (next[0] - p[0]) * b / d2) + ',' + r1(p[1] + (next[1] - p[1]) * b / d2);
   }
-  return artFrame(id, scene, g, scale);
+  return d + (closed ? 'Z' : '');
 }
-
-// ---- property scenes ----
-const tree = (x, y, s) => `<rect x="${x - 2 * s}" y="${y - 14 * s}" width="${4 * s}" height="${14 * s}" fill="#7a5a3a"/><circle cx="${x}" cy="${y - 22 * s}" r="${12 * s}" fill="#5f9a4a"/><circle cx="${x - 7 * s}" cy="${y - 16 * s}" r="${8 * s}" fill="#6aa653"/>`;
-const pine = (x, y, s) => `<rect x="${x - 2 * s}" y="${y - 8 * s}" width="${4 * s}" height="${8 * s}" fill="#6a4a2e"/><path d="M${x},${y - 46 * s} L${x + 14 * s},${y - 8 * s} L${x - 14 * s},${y - 8 * s}Z" fill="#2f6a44"/>`;
-const palm = (x, y, s) => `<path d="M${x},${y} Q${x + 4 * s},${y - 30 * s} ${x - 2 * s},${y - 56 * s}" stroke="#8a6a42" stroke-width="${4 * s}" fill="none"/>` + [[-26, -4], [24, -2], [-18, 10], [20, 12], [0, -16]].map(([dx, dy]) => `<path d="M${x - 2 * s},${y - 56 * s} q${dx * s / 2},${(dy - 10) * s} ${dx * s},${dy * s}" stroke="#3f8a4a" stroke-width="${4 * s}" fill="none" stroke-linecap="round"/>`).join('');
-const winGrid = (x, y, cols, rows, w, h, gx, gy, lit) => { let o = ''; for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++) o += `<rect x="${x + c * (w + gx)}" y="${y + r * (h + gy)}" width="${w}" height="${h}" rx="1" fill="${lit && lit(r, c) ? '#ffd877' : '#3d5873'}" opacity=".9"/>`; return o; };
-const door = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1.5" fill="${c || '#7a4a2e'}"/><circle cx="${x + w - 4}" cy="${y + h / 2}" r="1.3" fill="#e8d28a"/>`;
-// a pitched-roof house; x,y is the bottom-left corner
-function house(x, y, w, h, wall, roof, o){
-  o = o || {};
-  const rh = o.roofH || h * 0.55;
-  let s = (o.chimney ? `<rect x="${x + w * 0.7}" y="${y - h - rh * 0.8}" width="10" height="${rh * 0.6}" fill="#8a5a46"/>` : '') +
-    `<rect x="${x}" y="${y - h}" width="${w}" height="${h}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><path d="M${x - 8},${y - h} L${x + w / 2},${y - h - rh} L${x + w + 8},${y - h}Z" fill="${roof}"/>`;
-  if(o.floors === 2){ s += winGrid(x + 10, y - h + 10, Math.max(2, Math.floor((w - 20) / 26)), 2, 16, 14, 10, 12); }
-  else s += winGrid(x + 10, y - h + 12, 1, 1, 18, 16, 0, 0) + winGrid(x + w - 28, y - h + 12, 1, 1, 18, 16, 0, 0);
-  if(!o.noDoor) s += door(x + w / 2 - 7, y - 26, 14, 26, o.door);
-  if(o.garage) s += `<rect x="${x + w}" y="${y - h * 0.62}" width="${o.garage}" height="${h * 0.62}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><rect x="${x + w + 6}" y="${y - h * 0.5}" width="${o.garage - 12}" height="${h * 0.5}" fill="#d9dde1"/>` + [1, 2, 3].map(i => `<line x1="${x + w + 6}" x2="${x + w + o.garage - 6}" y1="${y - h * 0.5 + i * h * 0.12}" y2="${y - h * 0.5 + i * h * 0.12}" stroke="#b9bec4"/>`).join('');
+const RIMS = {silver:['#eef0f2', '#a3a9b0', '#7d848c'], black:['#4a4d52', '#1d1e21', '#111214'], gunmetal:['#9aa0a7', '#4b5056', '#33373c'], chrome:['#ffffff', '#c3c9cf', '#8e959c'],
+  bronze:['#d8b47a', '#8a6634', '#5e4422'], machined:['#f4f5f6', '#b9bec4', '#1d1e21'], white:['#ffffff', '#dcdfe2', '#a9aeb3'], gold:['#e8cf86', '#a8873e', '#6e5726']};
+// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style, n: spokes, fin: finish, cal: caliper color, ww: whitewall}
+function drawWheel(id, cx, cy, R, rr, w){
+  w = w || {}; const fin = RIMS[w.fin || 'silver'], n = w.n || 5, t = w.t || 'split', gid = id + 'r' + Math.round(cx);
+  const pt = (a, rad) => r1(cx + Math.cos(a) * rad) + ',' + r1(cy + Math.sin(a) * rad);
+  let s = `<radialGradient id="${gid}" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="${fin[0]}"/><stop offset=".55" stop-color="${fin[1]}"/><stop offset="1" stop-color="${fin[2]}"/></radialGradient>`;
+  s = `<defs>${s}</defs><circle cx="${cx}" cy="${cy}" r="${r1(R)}" fill="#161719"/><circle cx="${cx}" cy="${cy}" r="${r1((R + rr) / 2)}" fill="none" stroke="#25262a" stroke-width="${r1((R - rr) * 0.62)}"/>` +
+    `<path d="M${pt(3.6, R * 0.97)} A${r1(R * 0.97)},${r1(R * 0.97)} 0 0 1 ${pt(5.4, R * 0.97)}" fill="none" stroke="#45474c" stroke-width="1.3" stroke-linecap="round"/>`;
+  if(w.ww) s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr + (R - rr) * (w.ww === 2 ? 0.55 : 0.42))}" fill="none" stroke="#f3f1ea" stroke-width="${r1((R - rr) * (w.ww === 2 ? 0.55 : 0.32))}"/>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr)}" fill="url(#${gid})"/><circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.9)}" fill="#2a2c30"/>`;
+  if(t !== 'disc' && t !== 'steel' && t !== 'hubcap') s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.66)}" fill="#8b9097"/><circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.66)}" fill="none" stroke="#6c7177" stroke-width="${r1(rr * 0.08)}"/>` +
+    (w.cal ? `<path d="M${pt(2.55, rr * 0.6)} A${r1(rr * 0.6)},${r1(rr * 0.6)} 0 0 1 ${pt(3.65, rr * 0.6)}" fill="none" stroke="${w.cal}" stroke-width="${r1(rr * 0.2)}" stroke-linecap="round"/>` : '');
+  const spoke = (a, wi, wo, ri, ro) => `M${pt(a - wi, ri)} L${pt(a - wo, ro)} L${pt(a + wo, ro)} L${pt(a + wi, ri)}Z`;
+  let p = '';
+  const st = (w.rot || 0) - Math.PI / 2;
+  if(t === 'split') for(let i = 0; i < n; i++){ const a = st + i * 2 * Math.PI / n; p += spoke(a - 0.1, 0.09, 0.05, rr * 0.2, rr * 0.92) + spoke(a + 0.1, 0.09, 0.05, rr * 0.2, rr * 0.92); }
+  else if(t === 'y') for(let i = 0; i < n; i++){ const a = st + i * 2 * Math.PI / n; p += spoke(a, 0.2, 0.08, rr * 0.2, rr * 0.55) + spoke(a - 0.16, 0.05, 0.05, rr * 0.5, rr * 0.92) + spoke(a + 0.16, 0.05, 0.05, rr * 0.5, rr * 0.92); }
+  else if(t === 'mesh'){ for(let i = 0; i < n * 2; i++){ const a = st + i * Math.PI / n; p += spoke(a, 0.08, 0.035, rr * 0.2, rr * 0.92); } p += `M${pt(0, rr * 0.5)} A${r1(rr * 0.5)},${r1(rr * 0.5)} 0 1 1 ${pt(3.14159, rr * 0.5)} A${r1(rr * 0.5)},${r1(rr * 0.5)} 0 1 1 ${pt(0, rr * 0.5)}Z M${pt(0, rr * 0.44)} A${r1(rr * 0.44)},${r1(rr * 0.44)} 0 1 0 ${pt(3.14159, rr * 0.44)} A${r1(rr * 0.44)},${r1(rr * 0.44)} 0 1 0 ${pt(0, rr * 0.44)}Z`; }
+  else if(t === 'turbine') for(let i = 0; i < n; i++){ const a = st + i * 2 * Math.PI / n; p += `M${pt(a - 0.12, rr * 0.2)} Q${pt(a + 0.25, rr * 0.55)} ${pt(a + 0.38, rr * 0.92)} L${pt(a + 0.62, rr * 0.92)} Q${pt(a + 0.38, rr * 0.5)} ${pt(a + 0.14, rr * 0.2)}Z`; }
+  else if(t === 'star') for(let i = 0; i < n; i++){ const a = st + i * 2 * Math.PI / n; p += spoke(a, 0.3, 0.14, rr * 0.2, rr * 0.92); }
+  else if(t === 'blade') for(let i = 0; i < n; i++){ const a = st + i * 2 * Math.PI / n; p += spoke(a, 0.22, 0.24, rr * 0.2, rr * 0.92); }
+  else if(t === 'wire'){ for(let i = 0; i < 36; i++){ const a = i * Math.PI / 18; s += `<line x1="${pt(a, rr * 0.22).replace(',', '" y1="')}" x2="${pt(a + 0.5, rr * 0.9).replace(',', '" y2="')}" stroke="#d7dbe0" stroke-width=".7"/>`; } }
+  if(p) s += `<path d="${p}" fill="url(#${gid})" stroke="${fin[2]}" stroke-width=".5"/>`;
+  if(t === 'disc') s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.9)}" fill="url(#${gid})"/>` + Array.from({length:n}, (_, i) => { const a = st + i * 2 * Math.PI / n; return `<path d="M${pt(a - 0.18, rr * 0.62)} A${r1(rr * 0.62)},${r1(rr * 0.62)} 0 0 1 ${pt(a + 0.18, rr * 0.62)} L${pt(a + 0.12, rr * 0.82)} A${r1(rr * 0.82)},${r1(rr * 0.82)} 0 0 0 ${pt(a - 0.12, rr * 0.82)}Z" fill="#26282c"/>`; }).join('');
+  if(t === 'steel') s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.9)}" fill="url(#${gid})"/>` + Array.from({length:n}, (_, i) => { const a = st + i * 2 * Math.PI / n; return `<circle cx="${pt(a, rr * 0.62).split(',')[0]}" cy="${pt(a, rr * 0.62).split(',')[1]}" r="${r1(rr * 0.11)}" fill="#2a2c30"/>`; }).join('');
+  if(t === 'hubcap') s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.92)}" fill="url(#${gid})"/>` + Array.from({length:n}, (_, i) => { const a = i * 2 * Math.PI / n; return `<line x1="${pt(a, rr * 0.3).replace(',', '" y1="')}" x2="${pt(a, rr * 0.85).replace(',', '" y2="')}" stroke="${fin[2]}" stroke-width=".9"/>`; }).join('') + `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.42)}" fill="${fin[0]}" stroke="${fin[2]}" stroke-width=".8"/>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="${r1(rr * 0.17)}" fill="url(#${gid})" stroke="${fin[2]}" stroke-width=".6"/><circle cx="${cx}" cy="${cy}" r="${r1(rr)}" fill="none" stroke="${fin[0]}" stroke-width="1" opacity=".8"/>`;
   return s;
 }
-function tower(x, y, w, floors, wall, o){
-  o = o || {};
-  const fh = o.fh || 13, h = floors * fh + 10, cols = Math.max(2, Math.floor((w - 10) / 14));
-  return `<rect x="${x}" y="${y - h}" width="${w}" height="${h}" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/>` + winGrid(x + 6, y - h + 6, cols, floors, 9, fh - 5, (w - 12 - cols * 9) / Math.max(1, cols - 1), 5, o.lit) +
-    (o.roof ? `<rect x="${x - 3}" y="${y - h - 4}" width="${w + 6}" height="5" fill="${hexMix(wall, '#000000', 0.3)}"/>` : '');
+// the studio: a soft wall and floor behind the vehicle, and its shadow
+function studio(id, cx, half, dark){
+  return `<defs><linearGradient id="${id}bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${dark ? '#dfe4ea' : '#f4f6f8'}"/><stop offset=".72" stop-color="#e3e7eb"/><stop offset=".72" stop-color="#d4d9de"/><stop offset="1" stop-color="#eceef1"/></linearGradient>` +
+    `<radialGradient id="${id}sp" cx=".5" cy=".55" r=".55"><stop offset="0" stop-color="#fff" stop-opacity=".85"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>` +
+    `<filter id="${id}bl" x="-20%" y="-200%" width="140%" height="500%"><feGaussianBlur stdDeviation="5"/></filter></defs>` +
+    `<rect width="${DW}" height="${DH}" fill="url(#${id}bg)"/><ellipse cx="${DW / 2}" cy="${DG - 50}" rx="300" ry="120" fill="url(#${id}sp)"/>` +
+    `<ellipse cx="${cx}" cy="${DG + 2}" rx="${r1(half * 1.02)}" ry="9" fill="#1d2126" opacity=".42" filter="url(#${id}bl)"/>`;
 }
-const WALLS = ['#f2e6cf', '#e9dcc3', '#dfe5e8', '#f4efe6', '#d9c6a8', '#cfd8c4', '#e8d0c0', '#c9d6e2'], ROOFS = ['#7a3b2e', '#5a5f66', '#3f4a5a', '#8a5a3a', '#4a5a3a'];
-function propertyArt(key, seed){
-  const id = 'pa' + (++artSeq), r = seeded(seed || key), wall = WALLS[Math.floor(r() * WALLS.length)], roof = ROOFS[Math.floor(r() * ROOFS.length)];
-  let g = '', scene = 'grass';
-  const sun = '<circle cx="286" cy="26" r="12" fill="#ffe08a" opacity=".9"/>';
-  switch(key){
-    case 'cabin':
-      g = `<path d="M0,112 L60,52 L120,112Z" fill="#9fb3c4"/><path d="M90,112 L170,40 L250,112Z" fill="#8aa1b6"/><path d="M160,48 L170,40 L180,48 L176,52 L164,52Z" fill="#f4f6f8"/>` +
-        `<rect x="104" y="72" width="104" height="40" fill="#8a5a36"/>` + [76, 84, 92, 100, 108].map(y => `<line x1="104" x2="208" y1="${y}" y2="${y}" stroke="#6a4226" stroke-width="1.2"/>`).join('') +
-        `<path d="M96,72 L156,42 L216,72Z" fill="#4a3a2e"/>` + door(150, 86, 14, 26, '#4a2e1c') + winGrid(118, 82, 1, 1, 18, 14, 0, 0, () => true) + winGrid(178, 82, 1, 1, 18, 14, 0, 0, () => true) + pine(40, 114, 1) + pine(66, 116, 0.8) + pine(256, 114, 1.1) + pine(290, 116, 0.9);
-      break;
-    case 'condo': case 'condo-rental':
-      g = sun + tower(96, 112, 120, 6, wall, {roof:true, lit:(a, b) => r() < 0.2}) + `<rect x="140" y="92" width="32" height="20" fill="#3d5873"/><rect x="132" y="88" width="48" height="4" fill="${roof}"/>` + tree(60, 114, 1) + tree(258, 114, 0.9);
-      break;
-    case 'starter': case 'sfr': case 'familyhome':
-      g = sun + house(110, 112, 100, 46, wall, roof, {chimney: r() < 0.5}) + `<g stroke="#f4f4f0" stroke-width="2">` + Array.from({length:9}, (_, i) => `<line x1="${20 + i * 9}" y1="102" x2="${20 + i * 9}" y2="114"/>`).join('') + '<line x1="18" x2="96" y1="106" y2="106"/></g>' + tree(250, 114, 1.1) + `<rect x="148" y="112" width="24" height="38" fill="#c9c2b2"/>`;
-      break;
-    case 'suburb':
-      g = sun + house(70, 112, 120, 64, wall, roof, {floors:2, garage:58, roofH:30}) + tree(32, 114, 1) + tree(282, 114, 1.2) + `<rect x="190" y="112" width="58" height="38" fill="#b9b4a6"/>`;
-      break;
-    case 'lux':
-      g = sun + `<rect x="60" y="56" width="200" height="56" fill="#f4f4f0" stroke="#c9c7bd"/><rect x="40" y="50" width="160" height="6" fill="#3a3d42"/><rect x="150" y="70" width="104" height="38" fill="#7fb0d0" opacity=".85"/>` +
-        `<rect x="70" y="66" width="70" height="42" fill="#3d5873" opacity=".85"/><rect x="194" y="40" width="70" height="16" fill="#e9e6dc" stroke="#c9c7bd"/><rect x="60" y="114" width="150" height="14" rx="3" fill="#5fb6e0"/>` + palm(286, 116, 0.9) + palm(28, 116, 0.8);
-      break;
-    case 'mansion':
-      g = `<path d="M0,112 Q160,82 320,112Z" fill="#7aae58"/>` + `<rect x="50" y="56" width="220" height="56" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><path d="M40,56 L160,28 L280,56Z" fill="${roof}"/>` +
-        `<path d="M126,56 L160,40 L194,56Z" fill="#f4f4f0"/>` + [132, 146, 160, 174, 188].map(x => `<rect x="${x - 2}" y="58" width="5" height="54" fill="#f4f4f0"/>`).join('') + winGrid(60, 64, 3, 2, 14, 14, 8, 10) + winGrid(212, 64, 3, 2, 14, 14, 8, 10) +
-        door(152, 86, 16, 26, '#5a3420') + pine(26, 114, 1.1) + pine(296, 114, 1.1);
-      break;
-    case 'beach': case 'vacation':
-      scene = 'beach';
-      g = sun + `<rect y="98" width="320" height="18" fill="#4a92c4"/><rect y="112" width="320" height="38" fill="#eeddb0"/>` + [96, 120, 196, 220].map(x => `<rect x="${x}" y="96" width="5" height="18" fill="#8a6a42"/>`).join('') +
-        house(88, 98, 140, 40, wall, '#3f8aa8', {roofH:22}) + `<rect x="80" y="96" width="156" height="4" fill="#8a6a42"/>` + palm(40, 118, 1) + palm(276, 118, 0.9);
-      break;
-    case 'ranch':
-      g = sun + `<rect y="96" width="320" height="16" fill="#c9b46a" opacity=".6"/>` + house(40, 112, 100, 40, '#f4efe6', '#5a5f66', {roofH:24}) + `<rect x="188" y="62" width="80" height="50" fill="#a8322a"/><path d="M182,62 L228,32 L274,62Z" fill="#6a2a22"/>` +
-        `<rect x="214" y="84" width="28" height="28" fill="#f4efe6"/><path d="M214,84 L242,112 M242,84 L214,112" stroke="#a8322a" stroke-width="3"/><g stroke="#f4efe6" stroke-width="2.5">` + Array.from({length:14}, (_, i) => `<line x1="${8 + i * 22}" y1="112" x2="${8 + i * 22}" y2="126"/>`).join('') + '<line x1="0" x2="320" y1="117" y2="117"/></g>';
-      break;
-    case 'penthouse':
-      g = tower(20, 112, 54, 5, '#c9d0d6') + tower(244, 112, 60, 6, '#b9c2ca') + tower(108, 112, 104, 7, '#dde3e7', {roof:true, fh:13, lit:(a) => a === 0}) + `<rect x="118" y="12" width="14" height="3" fill="#5fa04a"/><rect x="184" y="12" width="14" height="3" fill="#5fa04a"/>`;
-      break;
-    case 'duplex':
-      g = sun + house(60, 112, 200, 50, wall, roof, {roofH:28, noDoor:true}) + door(110, 86, 14, 26) + door(196, 86, 14, 26, '#3f4a5a') + `<line x1="160" y1="62" x2="160" y2="112" stroke="${hexMix(wall, '#000000', 0.25)}" stroke-width="2"/>` + tree(26, 114, 0.9) + tree(296, 114, 0.9);
-      break;
-    case 'commercial':
-      g = `<rect y="112" width="320" height="38" fill="#9a9ea4"/>` + `<rect x="50" y="40" width="220" height="72" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/><rect x="62" y="48" width="196" height="16" rx="2" fill="#3a3d42"/>` +
-        `<text x="160" y="60" font-size="11" font-weight="700" text-anchor="middle" fill="#f4e6c8" font-family="Arial,sans-serif">FOR LEASE · RETAIL</text>` +
-        `<path d="M58,70 L262,70 L254,82 L66,82Z" fill="#c43a3a"/>` + [0, 1, 2, 3, 4, 5, 6].map(i => `<path d="M${66 + i * 27},70 l14,0 l-3,12 l-14,0Z" fill="#f4f4f0"/>`).join('') + `<rect x="70" y="86" width="120" height="26" fill="#7fb0d0" opacity=".85"/>` + door(206, 86, 22, 26, '#3a3d42');
-      break;
-    case 'apt4':
-      g = sun + tower(96, 112, 128, 3, '#b0543a', {fh:20, roof:true}) + `<rect x="148" y="92" width="24" height="20" fill="#3a3d42"/>` + tree(56, 114, 1) + tree(266, 114, 1);
-      break;
-    case 'student':
-      g = sun + tower(70, 112, 180, 4, '#c9b48a', {fh:16, roof:true}) + `<rect x="120" y="34" width="80" height="12" fill="#2f5f8a"/><text x="160" y="43" font-size="8" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif">CAMPUS LIVING</text>` + tree(36, 114, 1) + tree(284, 114, 1);
-      break;
-    case 'apt12':
-      g = tower(30, 112, 260, 6, wall, {fh:14, roof:true, lit:() => r() < 0.15}) + `<rect x="140" y="92" width="40" height="20" fill="#3a3d42"/>`;
-      break;
-    case 'stripmall':
-      g = `<rect y="112" width="320" height="38" fill="#8a8e94"/><g stroke="#f4f4f0" stroke-width="2">` + Array.from({length:12}, (_, i) => `<line x1="${14 + i * 26}" y1="122" x2="${22 + i * 26}" y2="146"/>`).join('') + '</g>' +
-        `<rect x="10" y="62" width="300" height="50" fill="${wall}" stroke="${hexMix(wall, '#000000', 0.2)}"/>` + ['#c43a3a', '#2f6db0', '#e0a03a', '#3f8a4a', '#7a4a8a', '#c4683a'].map((cc, i) => `<rect x="${16 + i * 49}" y="68" width="43" height="9" fill="${cc}"/><rect x="${20 + i * 49}" y="82" width="35" height="30" fill="#7fb0d0" opacity=".85"/>`).join('');
-      break;
-    default:
-      g = sun + house(110, 112, 100, 46, wall, roof);
-  }
-  return artFrame(id, scene === 'beach' ? 'day' : scene, g);
+const VEH_SPECS = {};
+// shape points for a car (all in inches; x runs from the rear bumper forward, y up from the ground)
+function carShape(p){
+  if(p.pts) return p.pts;
+  const L = p.L, H = p.H, cr = p.cr || 11, tb = p.tb || p.tail[1] - 9, cf = p.cf || 8;
+  const pts = p.rearBot || [[5, cr, 0], [0.8, cr + 2.5, 4], [0, (tb + cr) / 2, 12], [0.2, tb, 4]];
+  pts.push([p.tail[0], p.tail[1], p.tailR || 3]);
+  if(p.deck) pts.push([(p.tail[0] + p.deck[0]) / 2, (p.tail[1] + p.deck[1]) / 2 + (p.deckCrown || 0.6), 12], [p.deck[0], p.deck[1], p.deckR || 7]);
+  (p.rearPts || []).forEach(q => pts.push(q));
+  const top = p.rf[0] - p.rr[0] > 12 ? [[p.rr[0], p.rr[1], p.rrR || 16], [(p.rr[0] + p.rf[0]) / 2 + (p.peak || 0), H, 40], [p.rf[0], p.rf[1], p.rfR || 9]] : [[p.rr[0], p.rr[1], 10], [p.rf[0], p.rf[1], 9]];
+  pts.push(...top, [p.cowl[0], p.cowl[1], p.cowlR || 4]);
+  (p.hoodPts || [[(p.cowl[0] + p.hood[0]) / 2, (p.cowl[1] + p.hood[1]) / 2 + (p.crown || 0.9), 30]]).forEach(q => pts.push(q));
+  pts.push([p.hood[0], p.hood[1], p.hoodR || 5], ...(p.frontPts || (p.low ? [[L - 1.5, p.nose, 10], [L, p.low, 8], [L - 2.5, cf + 1.5, 3], [L - 9, cf, 0]] : [[L - 0.3, p.nose, p.noseR || 6], [L, (p.nose + cf) / 2 + 1, 12], [L - 2.2, cf + 2.2, 4], [L - 6, cf, 0]])));
+  return pts;
+}
+function dloShape(p){
+  if(p.w) return p.w;
+  const t = p.dt || 1.25, [br, bf] = p.belt, [xr, xf] = p.dlo, rr = p.rr, rf = p.rf, H = p.H;
+  const rearTop = p.dloR || [rr[0] + (p.cIn || 6), rr[1] - t - 0.6], frontTop = [rf[0] - (p.aIn || 3), rf[1] - t];
+  const pts = [[xr, br, p.tipR || 1.5]];
+  (p.cPts || []).forEach(q => pts.push(q));
+  pts.push([rearTop[0], rearTop[1], p.dloRR || 10], [(rearTop[0] + frontTop[0]) / 2 + (p.peak || 0), H - t, 40], [frontTop[0], frontTop[1], 4], [xf, bf, 1.5]);
+  return pts;
+}
+// p: the car's spec; c: paint color
+function drawCar(p, c, id){
+  const L = p.L, s = Math.min(580 / L, 150 / p.H), x0 = (DW - L * s) / 2, X = x => r1(x0 + x * s), Y = y => r1(DG - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const fx = L - p.FO, rx = fx - p.WB, wr = p.TD / 2, ar = wr + (p.gap || 1.6), sill = p.sill || 8.5;
+  const dx = Math.sqrt(Math.max(1, ar * ar - (wr - sill) * (wr - sill)));
+  const top = P(carShape(p)), big = wr > sill ? 1 : 0;
+  const body = rpath(top, false) + `L${X(fx + dx)},${Y(sill)} A${r1(ar * s)},${r1(ar * s)} 0 ${big} 0 ${X(fx - dx)},${Y(sill)} L${X(rx + dx)},${Y(sill)} A${r1(ar * s)},${r1(ar * s)} 0 ${big} 0 ${X(rx - dx)},${Y(sill)}Z`;
+  const cd = hexMix(c, '#000000', 0.55), belt = (p.belt[0] + p.belt[1]) / 2, sh0 = p.lines && p.lines[0] ? p.lines[0].reduce((t, q) => t + q[1], 0) / p.lines[0].length : belt - 3.5;
+  const sh = p.sh || sh0, hor = p.hor || sill + (sh - sill) * (p.hz || 0.48);
+  const yT = DG - p.H * s, yB = DG - sill * s, o = y => Math.max(0, Math.min(1, (DG - y * s - yT) / (yB - yT))).toFixed(3);
+  const lum = parseInt(c.slice(1, 3), 16) * 0.3 + parseInt(c.slice(3, 5), 16) * 0.59 + parseInt(c.slice(5, 7), 16) * 0.11, dk = lum < 70, lt = lum > 200;
+  const W = t => hexMix(c, '#ffffff', t), K = t => hexMix(c, '#000000', t);
+  let g = `<defs><linearGradient id="${id}p" gradientUnits="userSpaceOnUse" x1="0" y1="${r1(yT)}" x2="0" y2="${r1(yB)}">` +
+    `<stop offset="0" stop-color="${W(dk ? 0.38 : lt ? 0.45 : 0.32)}"/><stop offset="${o(sh + 1)}" stop-color="${W(dk ? 0.2 : lt ? 0.2 : 0.12)}"/><stop offset="${o(sh - 0.4)}" stop-color="${W(dk ? 0.42 : lt ? 0.6 : 0.4)}"/>` +
+    `<stop offset="${o(sh - 3.5)}" stop-color="${W(dk ? 0.12 : 0.1)}"/><stop offset="${o(hor + 0.4)}" stop-color="${lt ? K(0.04) : c}"/><stop offset="${o(hor - 0.4)}" stop-color="${K(dk ? 0.55 : lt ? 0.3 : 0.42)}"/>` +
+    `<stop offset="${o(hor - 5)}" stop-color="${K(dk ? 0.35 : lt ? 0.16 : 0.24)}"/><stop offset="${o(sill + 3)}" stop-color="${K(dk ? 0.15 : 0.08)}"/><stop offset="1" stop-color="${K(0.5)}"/></linearGradient>` +
+    `<linearGradient id="${id}e" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".42"/><stop offset=".025" stop-color="#000" stop-opacity=".2"/><stop offset=".09" stop-color="#000" stop-opacity="0"/><stop offset=".9" stop-color="#000" stop-opacity="0"/><stop offset=".975" stop-color="#000" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>` +
+    `<linearGradient id="${id}gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a9bab" stop-opacity=".85"/><stop offset=".38" stop-color="#3a4856" stop-opacity=".7"/><stop offset="1" stop-color="#1a2129" stop-opacity=".8"/></linearGradient>` +
+    `<clipPath id="${id}cb"><path d="${body}"/></clipPath></defs>`;
+  g += studio(id, (X(0) + X(L)) / 2, L * s / 2);
+  // wheel wells (with the far-side liner), then the body over them
+  [fx, rx].forEach(x => { g += `<circle cx="${X(x)}" cy="${Y(wr)}" r="${r1(ar * s)}" fill="#0c0d0f"/><circle cx="${X(x)}" cy="${Y(wr) - 2}" r="${r1(ar * s - 2)}" fill="#1b1d20"/>`; });
+  g += `<path d="${body}" fill="url(#${id}p)"/><path d="${body}" fill="url(#${id}e)"/>`;
+  g += `<g clip-path="url(#${id}cb)">`;
+  // surfaces above the shoulder crease face the sky, so they read lighter
+  if(p.lines && p.lines[0]){ const ln = P(p.lines[0]); g += `<path d="${rpath(ln, false)} L${ln[ln.length - 1][0]},0 L${ln[0][0]},0Z" fill="#fff" opacity="${dk ? 0.1 : 0.14}"/>`; }
+  if(p.roof) g += `<path d="${rpath(P(p.roof), true)}" fill="${p.roofC || '#17191c'}"/>`;
+  if(p.under) g += p.under(X, Y, s, c);
+  // the glass: dark cabin, seat headrests, then tinted glass with sky reflections
+  const dlo = p.noDlo ? 'M0,0' : rpath(P(dloShape(p)), true), bp = (p.pil && p.pil[0]) ? p.pil[0][0] : p.dlo ? (p.dlo[0] + p.dlo[1]) / 2 : (p.w ? (p.w[0][0] + p.w[p.w.length - 1][0]) / 2 : p.L / 2);
+  if(!p.noDlo) g += `<clipPath id="${id}cg"><path d="${dlo}"/></clipPath><path d="${dlo}" fill="#0e1013"/><g clip-path="url(#${id}cg)">` +
+    (p.seats || [bp + 10, bp - 26]).map(x => `<rect x="${X(x - 4)}" y="${Y(belt + 10.5)}" width="${r1(7 * s)}" height="${r1(6.5 * s)}" rx="${r1(2.5 * s)}" fill="#2b2f35"/><rect x="${X(x - 1)}" y="${Y(belt + 5)}" width="${r1(2 * s)}" height="${r1(5 * s)}" fill="#22262b"/>`).join('') +
+    (p.glass ? p.glass.map(gp => `<path d="${rpath(P(gp), true)}" fill="url(#${id}gl)"/>`).join('') : `<path d="${dlo}" fill="url(#${id}gl)"/>`) +
+    `<path d="M${X(L * 0.22)},${Y(p.H + 4)} l${r1(36)},0 l-${r1(60)},${r1(40 * s)} l-30,0Z" fill="#fff" opacity=".13"/><path d="M${X(L * 0.56)},${Y(p.H + 4)} l14,0 l-${r1(46)},${r1(40 * s)} l-12,0Z" fill="#fff" opacity=".1"/>` +
+    `<rect x="0" y="${Y(belt + 2.2)}" width="${DW}" height="${r1(2.2 * s)}" fill="#000" opacity=".25"/></g>`;
+  (p.pil || []).forEach(q => { g += `<path d="M${X(q[0] - q[1] / 2)},${Y(p.H + 2)} L${X(q[0] + q[1] / 2)},${Y(p.H + 2)} L${X(q[0] + q[1] / 2 + (q[2] || 0))},${Y(0)} L${X(q[0] - q[1] / 2 + (q[2] || 0))},${Y(0)}Z" fill="${q[3] || '#111316'}" clip-path="url(#${id}cg)"/>`; });
+  if(!p.noDlo) g += `<path d="${dlo}" fill="none" stroke="#0b0c0e" stroke-width="${r1(0.9 * s)}"/>`;
+  if(p.chromeDlo) g += `<path d="${dlo}" fill="none" stroke="#eef1f3" stroke-width="${r1(0.45 * s)}" transform="translate(0,${r1(-0.25 * s)})"/>`;
+  // door gaps, handles, creases, rocker
+  (p.doors || []).forEach(x => { const b = belt - 0.6; g += `<path d="M${X(x)},${Y(b)} L${X(x - (p.lean || 1))},${Y(sill + 2)}" stroke="${K(0.7)}" stroke-width="1.1" opacity=".8"/><path d="M${X(x) + 1.1},${Y(b)} L${X(x - (p.lean || 1)) + 1.1},${Y(sill + 2)}" stroke="#fff" stroke-width=".6" opacity=".25"/>`; });
+  (p.handles || []).forEach(x => { g += `<rect x="${X(x)}" y="${Y(belt - (p.hy || 3.2))}" width="${r1(6.5 * s)}" height="${r1(1.3 * s)}" rx="${r1(0.6 * s)}" fill="${p.flush ? K(0.3) : W(0.35)}" stroke="${K(0.55)}" stroke-width=".6"/><rect x="${X(x) + 1}" y="${r1(Y(belt - (p.hy || 3.2)) + 1.3 * s)}" width="${r1(5 * s)}" height="${r1(0.5 * s)}" fill="#000" opacity=".25"/>`; });
+  (p.lines || []).forEach(ln => { const d = rpath(P(ln), false); g += `<path d="${d}" fill="none" stroke="#ffffff" stroke-opacity="${lt ? 0.9 : 0.6}" stroke-width="1.2" transform="translate(0,-.9)"/><path d="${d}" fill="none" stroke="${K(0.6)}" stroke-opacity=".5" stroke-width="1"/>`; });
+  if(p.clad) g += `<rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="${r1((p.clad.r || 4) * s)}" fill="#1e2023"/><rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="1" fill="#fff" opacity=".2"/>`;
+  else g += `<rect x="${X(rx)}" y="${Y(sill + 2.2)}" width="${r1((fx - rx) * s)}" height="${r1(2.2 * s)}" fill="${K(0.5)}" opacity=".55"/><rect x="${X(rx)}" y="${Y(sill + 2.4)}" width="${r1((fx - rx) * s)}" height="1" fill="#fff" opacity=".3"/>`;
+  if(p.chrome) p.chrome.forEach(ln => { g += `<path d="${rpath(P(ln), false)}" fill="none" stroke="#f2f4f6" stroke-width="${r1((ln.w || 0.8) * s)}" stroke-linecap="round"/><path d="${rpath(P(ln), false)}" fill="none" stroke="#9aa1a8" stroke-width="${r1(0.3 * s)}" transform="translate(0,${r1(0.3 * s)})" stroke-linecap="round"/>`; });
+  // bumper details: lower intakes, reflectors and side markers
+  const cf = p.cf || 8, cr = p.cr || 11;
+  if(!p.noTrim) g += `<path d="${rpath(P([[L + 1, cf - 1, 0], [L - 14, cf - 1, 0], [L - 13, cf + 2.2, 2], [L - 2, cf + 3.2, 2], [L + 1, cf + 6, 0]]), true)}" fill="#141517" opacity=".85"/>` +
+    `<path d="${rpath(P([[-1, cr - 1, 0], [12, cr - 1, 0], [11, cr + 2, 2], [1, cr + 2.5, 0]]), true)}" fill="#141517" opacity=".8"/>` +
+    `<rect x="${X(L - 9)}" y="${Y(p.nose - 5)}" width="${r1(4 * s)}" height="${r1(1.2 * s)}" rx="1" fill="#e89a2c" opacity=".9"/><rect x="${X(2)}" y="${Y(cr + 7)}" width="${r1(4 * s)}" height="${r1(1.2 * s)}" rx="1" fill="#b3141f" opacity=".9"/>`;
+  // lights
+  if(p.hl) g += `<path d="${rpath(P(p.hl), true)}" fill="#c9d2da" stroke="#4f5862" stroke-width=".8"/><path d="${rpath(P(p.hl), true)}" fill="#fff" opacity=".55" transform="translate(0,-1.2)"/>`;
+  if(p.drl) g += `<path d="${rpath(P(p.drl), false)}" fill="none" stroke="#ffffff" stroke-width="${r1(0.7 * s)}" stroke-linecap="round"/>`;
+  if(p.tl) g += `<path d="${rpath(P(p.tl), true)}" fill="#a3121c" stroke="#4e080d" stroke-width=".8"/><path d="${rpath(P(p.tl), true)}" fill="#ff7a7a" opacity=".3" transform="translate(1,-1.2)"/>`;
+  (p.shapes || []).forEach(sh => { g += `<path d="${rpath(P(sh.p), !sh.open)}" fill="${sh.open ? 'none' : sh.f || '#121315'}" ${sh.open ? `stroke="${sh.f || '#121315'}" stroke-width="${r1((sh.w || 0.6) * s)}" stroke-linecap="round"` : ''} opacity="${sh.o || 1}"/>`; });
+  if(p.extra) g += p.extra(X, Y, s, c, cd);
+  g += '</g>';
+  // arch lips
+  [fx, rx].forEach(x => { const a = r1(ar * s); g += `<path d="M${X(x + dx)},${Y(sill)} A${a},${a} 0 ${big} 0 ${X(x - dx)},${Y(sill)}" fill="none" stroke="${p.clad ? '#1e2023' : K(0.35)}" stroke-width="${p.clad ? r1(2.4 * s) : 1.4}"/>`; });
+  if(p.mirror){ const [mx, my] = p.mirror; g += `<path d="${rpath(P([[mx - 2, my - 1.5, 0], [mx + 3, my - 1.5, 0], [mx + 1, my + 1.5, 0], [mx - 3, my + 1.5, 0]]), true)}" fill="#141517"/>` +
+    `<path d="${rpath(P([[mx - 7.5, my + 0.5, 1.5], [mx - 6.5, my + 5, 2.2], [mx + 0.5, my + 4.6, 1.8], [mx + 0.2, my + 0.2, 1]]), true)}" fill="${p.mirrorC || W(0.12)}" stroke="${K(0.55)}" stroke-width=".7"/>` +
+    `<path d="${rpath(P([[mx - 7.2, my + 1.6, 1], [mx - 0.2, my + 1.2, 1]]), false)}" stroke="#000" stroke-opacity=".25" stroke-width="1" fill="none"/>`; }
+  // open-top cars: seat backs, a steering wheel and the windshield
+  if(p.ws){ const [b, t, w] = p.ws;
+    (p.cseats || []).forEach(x => { g += `<path d="${rpath(P([[x - 9, belt - 1, 0], [x - 8, belt + 4.5, 2.5], [x + 1, belt + 6, 2.5], [x + 2, belt - 1, 0]]), true)}" fill="${p.leather || '#2b2523'}"/>`; });
+    if(p.cseats) g += `<path d="M${X(b[0] - 18)},${Y(belt + 2)} L${X(b[0] - 14)},${Y(belt + 6.5)}" stroke="#1a1a1a" stroke-width="${r1(1.4 * s)}" stroke-linecap="round"/>`;
+    const wsp = P([[b[0], b[1], 0.5], [t[0], t[1], 0.8], [t[0] - 2.2, t[1], 0.8], [b[0] - 2.6, b[1], 0.5]]);
+    g += `<path d="${rpath(wsp, true)}" fill="#9fb4c6" fill-opacity=".35" stroke="#e8ecef" stroke-width="${r1(0.8 * s)}"/><path d="M${X(t[0] - w * 0.2)},${Y(t[1] - 1)} l-${r1(4 * s)},${r1(8 * s)}" stroke="#fff" stroke-opacity=".5" stroke-width="2"/>`; }
+  if(p.rails) g += `<rect x="${X(p.rails[0])}" y="${Y(p.H + 1.4)}" width="${r1((p.rails[1] - p.rails[0]) * s)}" height="${r1(1.5 * s)}" rx="${r1(0.7 * s)}" fill="#1c1e21"/>` + [p.rails[0] + 2, p.rails[1] - 4].map(x => `<rect x="${X(x)}" y="${Y(p.H + 0.6)}" width="${r1(2 * s)}" height="${r1(0.9 * s)}" fill="#1c1e21"/>`).join('');
+  if(p.steps) g += `<rect x="${X(rx + ar + 1)}" y="${Y(sill - 0.5)}" width="${r1((fx - rx - 2 * ar - 2) * s)}" height="${r1(2.2 * s)}" rx="${r1(0.8 * s)}" fill="#1b1c1f"/><rect x="${X(rx + ar + 1)}" y="${Y(sill - 0.5)}" width="${r1((fx - rx - 2 * ar - 2) * s)}" height="1" fill="#fff" opacity=".25"/>`;
+  if(p.wing){ const [a, b2, y] = p.wing; g += `<rect x="${X(a + 3)}" y="${Y(y)}" width="${r1(1.4 * s)}" height="${r1((y - p.tail[1]) * s)}" fill="#151618"/><rect x="${X(b2 - 5)}" y="${Y(y)}" width="${r1(1.4 * s)}" height="${r1((y - p.tail[1]) * s)}" fill="#151618"/><path d="${rpath(P([[a, y, 0], [b2, y + 0.8, 1], [b2, y + 2.2, 1], [a - 1, y + 1.6, 0]]), true)}" fill="#151618"/>`; }
+  if(p.bed){ const [bx, by] = p.bed; g += `<path d="M${X(0.6)},${Y(by)} L${X(bx)},${Y(by)}" stroke="#16171a" stroke-width="${r1(1.4 * s)}"/><path d="M${X(bx + 0.6)},${Y(by)} L${X(bx + 0.6)},${Y(sill + 2)}" stroke="${K(0.7)}" stroke-width="1.2"/><path d="M${X(1.4)},${Y(by - 1)} L${X(1.4)},${Y(p.tb || 36)}" stroke="${K(0.6)}" stroke-width="1"/>`; }
+  if(p.over) g += p.over(X, Y, s, c, cd);
+  g += `<path d="${body}" fill="none" stroke="${K(0.65)}" stroke-width=".9" stroke-opacity=".75"/>`;
+  [fx, rx].forEach(x => { g += drawWheel(id, X(x), Y(wr), wr * s, (p.rim / 2) * s, Object.assign({cal:'#3d4248'}, p.wheel)); });
+  g += `<ellipse cx="${X(fx)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/><ellipse cx="${X(rx)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/>`;
+  return g;
+}
+// shape specs for every car model (see carShape / dloShape for what each field means)
+Object.assign(VEH_SPECS, {
+  'Toyota|Corolla|old':{L:182.6, H:57.3, WB:106.3, FO:36.2, TD:25.5, rim:16, cr:12, cf:7, tail:[1.5, 39.5], tb:31, deck:[30, 41], rr:[62, 55.6], rf:[112, 56], cowl:[139, 39.5], hood:[176, 34], nose:29,
+    belt:[40.5, 38], dlo:[35, 136], pil:[[96, 3, 0.5], [52, 1.5, 1]], doors:[137, 97, 58], lines:[[[2, 36.5], [80, 37.5, 60], [175, 33]]],
+    hl:[[182.3, 32.5, 1], [170, 34, 2], [172, 31, 1], [182.5, 29.5, 1]], tl:[[0.3, 38, 1], [13, 39, 1], [11, 35.5, 1], [0.3, 34.5, 1]], wheel:{t:'y', n:5, fin:'silver'}, col:'#b9bec4'},
+  'Honda|Civic|old':{L:182.7, H:55.7, WB:106.3, FO:36.5, TD:25.9, rim:17, tail:[1.5, 41], tb:32, deck:[16, 41.2], rr:[56, 54], rf:[108, 55], cowl:[140, 38.5], hood:[177, 32.5], nose:27.5,
+    belt:[41.5, 37.5], dlo:[33, 137], pil:[[96, 3, 0.6], [50, 1.5, 1]], doors:[136, 97, 57], lines:[[[2, 38], [60, 40, 50], [176, 32]], [[28, 20], [150, 17]]],
+    hl:[[182.4, 30.5, 1], [165, 33, 2], [168, 29.5, 1], [182.5, 28, 1]], tl:[[0.3, 39.5, 1], [16, 40.5, 1], [10, 36, 1], [0.3, 35.5, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#2b4c7e'},
+  'Ford|Focus':{L:178.5, H:58.2, WB:104.3, FO:36, TD:25.5, rim:16, tail:[1.5, 40], tb:31.5, deck:[26, 41.5], rr:[60, 56.8], rf:[109, 57.4], cowl:[138, 39], hood:[173, 34], nose:29.5,
+    belt:[41, 38], dlo:[34, 134], pil:[[94, 3, 0.6], [49, 1.5, 1]], doors:[133, 95, 56], lines:[[[2, 37], [90, 38, 60], [172, 33.5]]],
+    hl:[[178.2, 33, 1], [160, 35.5, 2], [164, 31.5, 1], [178.3, 30, 1]], tl:[[0.3, 38.5, 1], [14, 39.5, 1], [12, 35, 1], [0.3, 34, 1]], wheel:{t:'y', n:5, fin:'silver'}, col:'#7a1f22'},
+  'Hyundai|Elantra':{L:184.1, H:55.7, WB:107.1, FO:36, TD:26, rim:17, tail:[1.5, 41.5], tb:33, deck:[14, 42], rr:[52, 53.5], rf:[108, 55.2], cowl:[142, 38.5], hood:[180, 32.5], nose:27.5,
+    belt:[42, 37.5], dlo:[28, 138], pil:[[98, 3, 0.6], [46, 1.4, 1.5]], doors:[137, 99, 57], lines:[[[2, 38], [70, 37, 0], [148, 21]], [[42, 23], [118, 29, 0], [178, 33]]],
+    hl:[[183.8, 31, 1], [168, 33, 2], [170, 30.5, 1], [184, 29, 1]], tl:[[0.3, 40.5, 1], [10, 41.5, 1], [9, 38.5, 1], [0.3, 37.5, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#2b4f9e'},
+  'Toyota|Corolla':{L:182.3, H:56.5, WB:106.3, FO:36.6, TD:25.9, rim:17, tail:[1.5, 40], tb:31, deck:[27, 41], rr:[60, 55], rf:[111, 55.6], cowl:[140, 38.5], hood:[177, 33], nose:28,
+    belt:[41, 37.5], dlo:[33, 136], pil:[[96, 3, 0.6], [50, 1.5, 1]], doors:[135, 97, 57], lines:[[[2, 37], [90, 37.8, 60], [176, 32.5]]],
+    hl:[[182, 31.5, 1], [168, 33.2, 2], [171, 30, 1], [182.2, 28.6, 1]], tl:[[0.3, 38.5, 1], [14, 39.6, 1], [12, 36, 1], [0.3, 35, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#b3141c'},
+  'Mazda|Mazda3':{L:183.5, H:56.9, WB:107.3, FO:35.5, TD:26.4, rim:18, tail:[1.5, 41.5], tb:33, deck:[24, 42.3], rr:[64, 55.7], rf:[108, 56.3], cowl:[139, 40], hood:[180, 34.5], nose:29.5,
+    belt:[42, 38.5], dlo:[36, 135], pil:[[97, 3, 0.6], [52, 1.5, 1]], doors:[134, 98, 59], lines:[[[40, 23], [150, 20, 0]]],
+    hl:[[183.2, 32.5, 1], [169, 34.3, 2], [172, 31.5, 1], [183.4, 30, 1]], tl:[[0.3, 39.5, 1], [11, 40.8, 1], [10, 37.5, 1], [0.3, 36.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#a3121c'},
+  'Honda|Civic':{L:184, H:55.7, WB:107.7, FO:36.3, TD:26, rim:18, tail:[1.5, 40], tb:31, deck:[18, 40.6], rr:[55, 54.2], rf:[109, 55.4], cowl:[142, 38], hood:[180, 32.2], nose:27.5,
+    belt:[39, 37], dlo:[30, 138], pil:[[99, 3, 0.6], [48, 1.4, 1.5]], doors:[137, 100, 57], lines:[[[2, 36.5], [100, 37, 60], [180, 32]]],
+    hl:[[183.8, 30.5, 1], [167, 32, 2], [169, 29.5, 1], [184, 28, 1]], tl:[[0.3, 38.5, 1], [17, 39.2, 1], [15, 36.2, 1], [0.3, 35.2, 1]], wheel:{t:'split', n:5, fin:'black'}, col:'#5b6067'},
+  'Nissan|Altima':{L:192.9, H:56.8, WB:111.2, FO:38, TD:26.6, rim:19, tail:[1.5, 41], tb:32, deck:[28, 42], rr:[64, 55.5], rf:[115, 55.7], cowl:[146, 39], hood:[186, 33.3], nose:28,
+    belt:[42, 38.5], dlo:[34, 142], pil:[[101, 3, 0.6]], roof:[[28, 43, 1], [62, 55.6, 10], [84, 57, 0], [84, 53.2, 0], [48, 52.8, 6], [38, 44, 1]], doors:[140, 101, 62],
+    lines:[[[2, 38], [100, 38.5, 60], [186, 33]], [[30, 22], [150, 19]]], hl:[[192.6, 31.5, 1], [176, 33.4, 2], [178, 30.5, 1], [192.8, 28.8, 1]], tl:[[0.3, 39.5, 1], [15, 40.7, 1], [13, 37, 1], [0.3, 36, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#eceeef'},
+  'Honda|Accord':{L:195.7, H:57.1, WB:111.4, FO:39, TD:26.6, rim:19, tail:[1.5, 41.5], tb:32.5, deck:[17, 42], rr:[57, 55.4], rf:[117, 56.2], cowl:[147, 39.5], hood:[189, 33.8], nose:28.5,
+    belt:[41, 38.5], dlo:[30, 143], pil:[[102, 3, 0.6], [49, 1.5, 1.5]], doors:[141, 103, 60], lines:[[[2, 38.2], [100, 38.8, 60], [188, 34]]],
+    hl:[[195.4, 31.5, 1], [176, 33.2, 2], [178, 30.5, 1], [195.6, 29, 1]], tl:[[0.3, 39.5, 1], [12, 40.8, 1], [11, 37.8, 1], [0.3, 37, 1]], wheel:{t:'y', n:5, fin:'gunmetal'}, col:'#3c5872'},
+  'Toyota|Camry':{L:193.5, H:56.9, WB:111.2, FO:38.5, TD:26.3, rim:18, cr:12, cf:7.5, tail:[2, 40.5], tb:31, deck:[30, 42], rr:[64, 55.3], rf:[117, 55.4], cowl:[146, 39.5], hood:[188, 33.5], nose:28.5,
+    belt:[41.5, 38.5], dlo:[36, 142], cIn:4, aIn:4, pil:[[100, 3, 0.6]], doors:[140, 100, 61], lines:[[[2, 37.5], [70, 38.4, 60], [160, 36.4, 60], [186, 33]], [[25, 22], [120, 19, 50], [168, 21]]],
+    hl:[[193, 31, 1], [176, 32.3, 2], [178, 29.8, 1], [193, 28.6, 1]], tl:[[0.4, 38.6, 1], [15, 39.8, 1], [13, 36.6, 1], [0.3, 35.2, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#9aa3ab'},
+  'Lexus|LS 500':{L:206.1, H:57.1, WB:123, FO:38.5, TD:27.5, rim:20, tail:[1.5, 42], tb:33, deck:[20, 43], rr:[62, 55.6], rf:[129, 56.9], cowl:[158, 40.5], hood:[200, 34.5], nose:29,
+    belt:[43, 39.5], dlo:[33, 154], pil:[[110, 3, 0.6], [50, 1.5, 1.5]], chromeDlo:1, doors:[152, 111, 66], lines:[[[2, 39], [110, 39.5, 60], [199, 34.5]]],
+    hl:[[205.8, 32.5, 1], [188, 34.2, 2], [190, 31, 1], [206, 29.5, 1]], tl:[[0.3, 40.5, 1], [14, 41.5, 1], [12, 38, 1], [0.3, 37, 1]], wheel:{t:'mesh', n:10, fin:'silver'}, col:'#cfd2d6'},
+  'Genesis|G90':{L:207.7, H:58.9, WB:125.2, FO:37, TD:28, rim:20, tail:[1.5, 43], tb:34, deck:[22, 44], rr:[66, 57.8], rf:[132, 58.6], cowl:[161, 41.5], hood:[203, 35.5], nose:30,
+    belt:[44, 40.5], dlo:[36, 156], pil:[[113, 3, 0.6], [54, 1.5, 1.5]], chromeDlo:1, chrome:[[[8, 40], [110, 40.6, 60], [200, 36]]], doors:[155, 114, 68],
+    hl:[[207.4, 33.5, 1], [190, 35, 2], [192, 32.5, 1], [207.6, 31, 1]], tl:[[0.3, 41.5, 1], [10, 42.6, 1], [9, 39.5, 1], [0.3, 38.5, 1]], wheel:{t:'mesh', n:12, fin:'chrome'}, col:'#2a2f35'},
+  'Audi|A8':{L:208.7, H:58.3, WB:123.1, FO:39.5, TD:28, rim:20, tail:[1.5, 42.5], tb:33.5, deck:[22, 43.5], rr:[66, 57.3], rf:[129, 58], cowl:[158, 41], hood:[204, 35.5], nose:30.5,
+    belt:[43.5, 40], dlo:[35, 154], pil:[[112, 3, 0.6], [52, 1.5, 1.5]], chromeDlo:1, doors:[152, 113, 67], lines:[[[2, 39.5], [60, 40, 40], [110, 39.8, 40], [203, 35.5]], [[40, 25], [160, 24]]],
+    hl:[[208.4, 33, 1], [190, 34.8, 2], [193, 31.5, 1], [208.6, 30, 1]], tl:[[0.3, 41, 1], [16, 42.2, 1], [14, 38.5, 1], [0.3, 37.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#55595f'},
+  'BMW|7 Series':{L:212.2, H:60.8, WB:126.6, FO:40, TD:29, rim:20, tail:[1.5, 45], tb:35, deck:[24, 46], rr:[70, 59.5], rf:[133, 60.6], cowl:[162, 43.5], hood:[208, 39], nose:34,
+    belt:[46.5, 43], dlo:[46, 158], cPts:[[42, 49, 1]], pil:[[116, 3, 0.6], [58, 1.5, 1.5]], chromeDlo:1, doors:[157, 117, 72], lines:[[[2, 42], [115, 42.5, 60], [207, 39]], [[40, 26], [170, 25]]],
+    hl:[[211.9, 37, 1], [194, 38.8, 2], [196, 35.5, 1], [212.1, 34, 1]], tl:[[0.3, 43.5, 1], [14, 44.6, 1], [12, 41, 1], [0.3, 40, 1]], wheel:{t:'split', n:6, fin:'gunmetal'}, col:'#1e2a3a'},
+  'Mercedes-Benz|S-Class':{L:208.2, H:59.2, WB:124.6, FO:38.5, TD:28.5, rim:20, tail:[1.5, 43.5], tb:34, deck:[22, 44.5], rr:[68, 58], rf:[129, 59], cowl:[159, 42], hood:[203, 36.5], nose:31.5,
+    belt:[44.5, 40.5], dlo:[36, 155], pil:[[114, 3, 0.6], [54, 1.5, 1.5]], chromeDlo:1, flush:1, doors:[154, 115, 69], lines:[[[2, 40], [115, 40.5, 60], [202, 36]], [[40, 25], [165, 23]]],
+    hl:[[207.9, 34, 1], [191, 35.8, 2], [193, 32.5, 1], [208.1, 31, 1]], tl:[[0.3, 42, 1], [16, 43.3, 1], [14, 39.5, 1], [0.3, 38.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#1b1d21'},
+  // ---- SUVs ----
+  'Toyota|RAV4':{L:180.9, H:67, WB:105.9, FO:37, TD:28.5, rim:18, cr:15, cf:12, sill:12, tail:[2.5, 62], tb:40, rr:[8, 66.5], rrR:4, rf:[111, 66.7], rfR:6, cowl:[139, 45], hood:[176, 41], nose:36.5,
+    belt:[47, 45.5], dlo:[9, 136], cIn:2, aIn:3.5, pil:[[94, 3.2, 0.6], [52, 3, 0.4]], doors:[134, 95, 54], clad:{r:4}, rails:[20, 105], lines:[[[3, 44], [90, 45, 60], [176, 40.5]]],
+    hl:[[180.6, 39.5, 1], [166, 41, 2], [168, 37, 1], [180.8, 36, 1]], tl:[[0.4, 48, 1], [9, 48.6, 1], [8, 44, 1], [0.3, 43.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#8a8d84'},
+  'Honda|CR-V':{L:184.8, H:66.5, WB:106.3, FO:38.5, TD:28.6, rim:18, cr:14.5, cf:12, sill:11.5, tail:[2.5, 61], tb:39, rr:[9, 65.5], rrR:5, rf:[113, 66.2], rfR:7, cowl:[142, 44.5], hood:[181, 40.5], nose:36,
+    belt:[46.5, 45], dlo:[9, 138], cIn:2, aIn:3.5, pil:[[96, 3.2, 0.6], [55, 3, 0.4]], doors:[136, 97, 57], clad:{r:3}, lines:[[[3, 43.5], [100, 44.2, 60], [180, 40]]],
+    hl:[[184.5, 39, 1], [169, 40.5, 2], [171, 37, 1], [184.7, 35.5, 1]], tl:[[0.4, 50, 1], [4, 50.5, 1], [3.5, 40, 1], [0.3, 39.5, 1]], wheel:{t:'split', n:5, fin:'black'}, col:'#6b6e72'},
+  'Jeep|Grand Cherokee':{L:193.5, H:70.8, WB:116.7, FO:36, TD:30, rim:20, cr:15, cf:12.5, sill:12, tail:[2, 66], tb:41, rr:[8, 70.3], rrR:4, rf:[122, 70.6], rfR:6, cowl:[150, 47.5], hood:[190, 44], nose:39,
+    belt:[49, 48], dlo:[10, 146], cIn:2, aIn:3.5, roof:[[2, 61, 0], [8, 71, 0], [30, 71.5, 0], [30, 66, 0], [12, 63.5, 0]], pil:[[103, 3.2, 0.6], [60, 3, 0.4]], doors:[145, 104, 62], clad:{r:3.5}, rails:[22, 115],
+    lines:[[[3, 46], [100, 46.6, 60], [190, 43.5]]], hl:[[193.2, 43, 1], [178, 44.5, 2], [180, 41, 1], [193.4, 39.5, 1]], tl:[[0.4, 52, 1], [10, 52.5, 1], [9, 48, 1], [0.3, 47.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#6b1220'},
+  'Ford|Explorer':{L:198.8, H:69.9, WB:119.1, FO:38, TD:29.5, rim:20, cr:15, cf:12.5, sill:12, tail:[2, 65.5], tb:40, rr:[8, 69.4], rrR:4, rf:[125, 69.8], rfR:6, cowl:[154, 46.5], hood:[194, 43], nose:38.5,
+    belt:[48.5, 47], dlo:[10, 150], cIn:2, aIn:3.5, roof:[[2, 60, 0], [8, 70, 0], [24, 70.5, 0], [24, 64, 0], [11, 62, 0]], pil:[[106, 3.2, 0.6], [62, 3, 0.4]], doors:[148, 107, 63], clad:{r:3}, rails:[22, 118],
+    lines:[[[3, 45.5], [110, 46, 60], [194, 42.5]]], hl:[[198.5, 42, 1], [183, 43.5, 2], [185, 40, 1], [198.7, 38.5, 1]], tl:[[0.4, 51, 1], [4, 51.5, 1], [3.5, 44, 1], [0.3, 43.5, 1]], wheel:{t:'y', n:5, fin:'machined'}, col:'#1d3554'},
+  'Chevrolet|Tahoe':{L:210.7, H:75.9, WB:120.9, FO:38, TD:31.5, rim:20, cr:16, cf:14, sill:14, tail:[1.5, 73.5], tb:45, rr:[5, 75.6], rrR:3, rf:[136, 75.9], rfR:5, cowl:[163, 52], hoodPts:[[185, 51.2, 30]], hood:[206, 50], hoodR:3, nose:45, noseR:3,
+    belt:[53, 52], dlo:[6, 158], cIn:1.5, aIn:3.5, pil:[[115, 3.4, 0.4], [70, 3.4, 0.2]], chromeDlo:1, doors:[158, 116, 71], steps:1, rails:[20, 125], lines:[[[3, 49], [110, 49.5, 60], [206, 47.5]]],
+    hl:[[210.4, 48, 1], [197, 49, 2], [198, 45.5, 1], [210.6, 44.5, 1]], tl:[[0.3, 62, 1], [3.5, 62.5, 1], [3, 48, 1], [0.3, 47.5, 1]], wheel:{t:'split', n:6, fin:'machined'}, col:'#1a1c1f'},
+  'BMW|X5':{L:194.3, H:69, WB:117.1, FO:36, TD:30.5, rim:21, cr:15, cf:12, sill:12, tail:[3, 64], tb:40, rr:[11, 68.5], rrR:5, rf:[121, 69], rfR:7, cowl:[149, 46.5], hood:[190, 43], nose:38,
+    belt:[49, 47], dlo:[17, 145], cPts:[[13, 51, 1]], cIn:3, aIn:3.5, pil:[[103, 3.2, 0.6], [60, 2.6, 0.4]], chromeDlo:1, doors:[143, 104, 62], rails:[24, 116],
+    lines:[[[3, 45.5], [110, 46.5, 60], [190, 42.5]], [[40, 28], [150, 27]]], hl:[[194, 42.5, 1], [178, 44, 2], [180, 40.5, 1], [194.2, 39, 1]], tl:[[0.4, 50.5, 1], [14, 51, 1], [12, 47, 1], [0.3, 46.5, 1]], wheel:{t:'y', n:5, fin:'gunmetal'}, col:'#2e4a6b'},
+  // ---- electric ----
+  'Chevrolet|Equinox EV':{L:190.6, H:64.3, WB:116.3, FO:36, TD:29, rim:19, cr:14, cf:11, sill:11.5, tail:[3, 57], tb:38, rearPts:[[8, 60, 6]], rr:[18, 62.8], rf:[117, 64], cowl:[148, 43.5], hood:[186, 39], nose:34,
+    belt:[47, 44], dlo:[16, 145], cIn:3, roof:[[8, 61.5, 0], [20, 64, 0], [125, 65, 0], [120, 62.2, 0], [22, 60.5, 0]], pil:[[100, 3.2, 0.6], [58, 3, 0.5]], doors:[142, 101, 60], clad:{r:4}, flush:1,
+    lines:[[[3, 44], [100, 45, 60], [186, 38.5]]], hl:[[190.3, 37, 1], [175, 38.5, 2], [177, 36, 1], [190.5, 35, 1]], tl:[[0.4, 46, 1], [12, 47, 1], [11, 43.5, 1], [0.3, 43, 1]], wheel:{t:'turbine', n:5, fin:'machined'}, col:'#2c6a9e'},
+  'Ford|Mustang Mach-E':{L:186, H:63.5, WB:117.5, FO:37, TD:29, rim:19, cr:13, cf:10.5, sill:11, tail:[3, 51], tb:36, rearPts:[[16, 55, 12]], rr:[42, 61.2], rrR:18, rf:[113, 63.3], cowl:[141, 42], hood:[181, 37], nose:31.5,
+    belt:[46, 43], dlo:[26, 138], cIn:6, roof:[[20, 58, 0], [44, 61.8, 0], [118, 64, 0], [112, 61.2, 0], [44, 59.6, 0]], pil:[[96, 3.2, 0.6]], doors:[134, 98, 58], handles:[],
+    lines:[[[3, 46], [40, 47, 30], [100, 43, 60], [181, 37.5]]], hl:[[185.7, 35.5, 1], [171, 37, 2], [173, 34, 1], [185.9, 33, 1]], tl:[[0.4, 48, 1], [8, 49, 1], [7, 44, 1], [0.3, 43.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#2457a8'},
+  'Tesla|Model 3':{L:185.8, H:56.7, WB:113.2, FO:33.5, TD:26.5, rim:18, cr:11, cf:7, sill:8.5, tail:[1.5, 40.5], tb:31, rearPts:[[10, 43, 10]], rr:[50, 55.2], rrR:20, rf:[104, 56.5], cowl:[139, 37.5], hood:[182, 30], nose:25.5,
+    belt:[42.5, 38.5], dlo:[33, 136], cIn:6, roof:[[36, 49, 0], [50, 55.6, 0], [106, 57, 0], [104, 54.8, 0], [52, 53.6, 0]], pil:[[99, 3, 0.6]], doors:[134, 100, 60], flush:1, noTrim:0,
+    lines:[[[2, 38], [90, 39, 60], [182, 30.5]]], hl:[[185.5, 29.5, 1], [170, 31.5, 2], [172, 28.5, 1], [185.7, 27, 1]], tl:[[0.4, 39, 1], [12, 40, 1], [11, 37, 1], [0.3, 36.5, 1]], wheel:{t:'turbine', n:10, fin:'gunmetal'}, col:'#4a4e54'},
+  'Hyundai|Ioniq 5':{L:182.5, H:63.2, WB:118.1, FO:31, TD:29.5, rim:20, cr:13, cf:10, sill:10.5, tail:[1.5, 58.5], tb:38, rr:[7, 62.8], rrR:4, rf:[117, 63.1], rfR:6, cowl:[146, 41.5], hood:[179, 37.5], nose:30.5,
+    belt:[44.5, 43.5], dlo:[8, 140], cIn:1.5, aIn:3.5, pil:[[96, 3.2, 0.4], [52, 3.4, 0.2, '#9aa1a8']], doors:[136, 98, 54], flush:1, lines:[[[148, 17], [55, 33]]], sh:41,
+    hl:[[182.2, 37, 0.5], [175, 37.5, 0.5], [175, 34, 0.5], [182.4, 33.5, 0.5]], tl:[[0.4, 52, 0.5], [6, 52.5, 0.5], [6, 46, 0.5], [0.3, 45.5, 0.5]], wheel:{t:'mesh', n:10, fin:'machined'}, col:'#3e6b6a'},
+  'Tesla|Model Y':{L:187, H:63.9, WB:113.8, FO:34, TD:29.5, rim:19, cr:13, cf:9.5, sill:10.5, tail:[2.5, 46], tb:35, rearPts:[[12, 51, 10]], rr:[42, 62], rrR:20, rf:[108, 63.8], cowl:[141, 41.5], hood:[183, 33.5], nose:28,
+    belt:[45, 42], dlo:[30, 138], cIn:6, roof:[[28, 57, 0], [44, 62.4, 0], [112, 64.3, 0], [106, 61.4, 0], [46, 60.2, 0], [32, 56, 0]], pil:[[100, 3, 0.6]], doors:[134, 101, 60], flush:1,
+    lines:[[[2, 43], [90, 44, 60], [183, 34]]], hl:[[186.7, 32.5, 1], [172, 34.5, 2], [174, 31.5, 1], [186.9, 30, 1]], tl:[[0.4, 44, 1], [12, 45, 1], [11, 41.5, 1], [0.3, 41, 1]], wheel:{t:'turbine', n:5, fin:'gunmetal'}, col:'#e9ebec'},
+  'Rivian|R1S':{L:200.8, H:71.5, WB:121.1, FO:36, TD:32.5, rim:21, cr:16, cf:13, sill:13, tail:[1.5, 69], tb:44, rr:[4, 71.3], rrR:4, rf:[133, 71.4], rfR:6, cowl:[160, 48.5], hood:[197, 45], nose:40.5,
+    belt:[50, 49], dlo:[6, 154], cIn:1.5, aIn:3.5, pil:[[110, 3.2, 0.6], [66, 3.2, 0.4]], doors:[152, 111, 67], flush:1, clad:{r:3}, rails:[20, 125], lines:[[[3, 47], [100, 47.5, 60], [197, 45]]],
+    hl:[[200.6, 44.5, 2], [197, 44.8, 2], [197, 40, 2], [200.7, 39.8, 2]], tl:[[0.4, 60, 1], [6, 60.4, 1], [5.5, 57.5, 1], [0.3, 57.2, 1]], wheel:{t:'turbine', n:5, fin:'black'}, col:'#2f4a3b'},
+  // ---- minivans ----
+  'Kia|Carnival':{L:203.7, H:69.9, WB:121.7, FO:39, TD:28.6, rim:19, cr:14, cf:11, sill:11, tail:[2, 66], tb:41, rr:[6, 69.5], rrR:4, rf:[136, 69.9], rfR:7, cowl:[166, 46], hood:[199, 41.5], nose:36,
+    belt:[46, 45.5], dlo:[8, 160], cIn:1.5, aIn:3.5, roof:[[2, 58, 0], [6, 70, 0], [22, 70.5, 0], [26, 58, 0]], roofC:'#b8bec4', pil:[[116, 3.2, 0.6], [70, 3.2, 0.2]], doors:[158, 117, 70], lines:[[[3, 43.5], [110, 44, 60], [199, 41]]],
+    hl:[[203.4, 40.5, 1], [188, 42, 2], [190, 38.5, 1], [203.6, 37, 1]], tl:[[0.4, 50, 1], [8, 50.5, 1], [7, 46, 1], [0.3, 45.5, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#2b2e33'},
+  'Toyota|Sienna':{L:203.5, H:68.5, WB:120.5, FO:40, TD:28, rim:18, cr:14, cf:11, sill:11, tail:[2, 64.5], tb:40, rr:[6, 68.2], rrR:4, rf:[136, 68.4], rfR:7, cowl:[165, 44.5], hood:[199, 39], nose:34,
+    belt:[45.5, 44], dlo:[8, 160], cIn:1.5, aIn:3.5, pil:[[116, 3.2, 0.6], [66, 3.2, 0.2]], doors:[158, 117, 66], lines:[[[3, 42], [30, 48, 10], [52, 44, 20], [110, 43, 60], [199, 39]]],
+    hl:[[203.2, 38, 1], [186, 40, 2], [188, 36, 1], [203.4, 35, 1]], tl:[[0.4, 47, 1], [10, 47.5, 1], [9, 43.5, 1], [0.3, 43, 1]], wheel:{t:'y', n:5, fin:'silver'}, col:'#8e9195'},
+  'Honda|Odyssey':{L:205.2, H:69.6, WB:118.1, FO:40.5, TD:28, rim:19, cr:14, cf:11, sill:11, tail:[2, 65.5], tb:40.5, rr:[6, 69.2], rrR:4, rf:[141, 69.5], rfR:7, cowl:[166, 45], hood:[200, 40], nose:34.5,
+    belt:[45, 44.5], w:[[9, 42, 1], [8, 66, 3], [16, 67.8, 8], [100, 68, 30], [137, 67.6, 4], [161, 44.5, 1], [70, 46, 1], [64, 42.3, 1]], pil:[[116, 3.2, 0.6], [68, 3.2, 0.2]], doors:[158, 117, 68],
+    lines:[[[3, 40], [64, 40.5, 4], [70, 44, 4], [200, 40]]], hl:[[204.9, 38.5, 1], [188, 40.5, 2], [190, 36.5, 1], [205.1, 35.5, 1]], tl:[[0.4, 47, 1], [10, 47.5, 1], [9, 43.5, 1], [0.3, 43, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#3e4b5c'},
+  'Chrysler|Pacifica':{L:204.3, H:69.9, WB:121.6, FO:39, TD:28.6, rim:18, cr:14, cf:11, sill:11, tail:[2, 66.5], tb:41, rr:[7, 69.5], rrR:5, rf:[138, 69.9], rfR:7, cowl:[166, 45.5], hood:[200, 39], nose:33.5,
+    belt:[46, 45], dlo:[9, 160], cIn:2, aIn:3.5, pil:[[117, 3.2, 0.6], [69, 3.2, 0.2]], chromeDlo:1, doors:[158, 118, 69], lines:[[[3, 43], [110, 43.5, 60], [200, 39]]],
+    hl:[[204, 37.5, 1], [188, 39.5, 2], [190, 35.5, 1], [204.2, 34.5, 1]], tl:[[0.4, 48, 1], [14, 48.5, 1], [13, 45, 1], [0.3, 44.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#e8e9ea'},
+  // ---- sports cars ----
+  'Nissan|Z':{low:17, L:172.4, H:51.8, WB:100.4, FO:35, TD:26, rim:19, cr:10, cf:6, sill:7.5, tail:[2, 37.5], tb:30, rearPts:[[12, 39.5, 8]], rr:[38, 49.5], rrR:12, rf:[88, 51.6], cowl:[117, 35.5], hood:[166, 30], nose:25.5,
+    belt:[39, 36], dlo:[18, 113], cIn:6, doors:[113, 70], chrome:[[[19, 40.2], [40, 48.6, 8], [62, 50.1, 20], [88, 50.1]]], lines:[[[2, 35], [60, 36.5, 40], [166, 30]]],
+    hl:[[172.1, 29, 1], [158, 31.5, 2], [160, 28, 1], [172.3, 26.5, 1]], tl:[[0.4, 36, 1], [10, 37, 1], [9, 34, 1], [0.3, 33.5, 1]], wheel:{t:'split', n:6, fin:'black', cal:'#c4282f'}, col:'#e8b81f'},
+  'Ford|Mustang GT':{low:19, L:189.4, H:54.3, WB:107, FO:38, TD:26.4, rim:19, cr:10.5, cf:6.5, sill:8, tail:[2, 39], tb:30, rearPts:[[16, 41.5, 10]], rr:[48, 51.5], rrR:12, rf:[97, 54.1], cowl:[131, 38.5], hood:[183, 34], nose:29,
+    belt:[42, 38.5], dlo:[30, 127], cIn:8, pil:[[56, 2, 1.5]], doors:[127, 78], lines:[[[2, 38], [50, 39.5, 20], [90, 36.5, 40], [183, 33.5]]],
+    hl:[[189.1, 32, 1], [173, 34, 2], [175, 30.5, 1], [189.3, 29, 1]], tl:[[0.4, 37, 1], [6, 37.5, 1], [6, 33, 1], [0.3, 32.5, 1]], wheel:{t:'split', n:5, fin:'black', cal:'#c4282f'}, col:'#b0121b'},
+  'Chevrolet|Corvette Stingray':{gap:1, low:15, L:182.3, H:48.6, WB:107.2, FO:41, TD:26.5, rim:20, cr:8, cf:5, sill:7, tail:[1, 40], tb:31, deck:[52, 42], rr:[72, 47.5], rrR:6, rf:[102, 48.4], cowl:[128, 35], hood:[176, 26.5], nose:22.5,
+    belt:[37, 35], w:[[82, 38.5, 1], [78, 45.5, 2], [100, 47.1, 8], [125, 36, 1]], doors:[126, 80], shapes:[{p:[[48, 23, 2], [78, 37, 3], [92, 33, 2], [64, 19, 2]], f:'#141517'}],
+    lines:[[[2, 36], [60, 38, 30], [126, 32, 40], [176, 28.5]]], hl:[[182, 28, 1], [166, 30, 2], [168, 27, 1], [182.2, 25.5, 1]], tl:[[0.3, 37, 1], [10, 38, 1], [9, 35, 1], [0.3, 34.5, 1]], wheel:{t:'split', n:5, fin:'black', cal:'#d8b31f'}, col:'#1f6fd0'},
+  'BMW|M4':{low:18, L:189.1, H:54.8, WB:112.5, FO:34, TD:26.4, rim:19, cr:10.5, cf:6.5, sill:8, tail:[2, 40.5], tb:31, deck:[18, 41.5], rr:[50, 53], rf:[101, 54.6], cowl:[134, 38], hood:[184, 33], nose:28,
+    belt:[43, 39], dlo:[26, 131], cPts:[[21, 44.5, 1]], cIn:6, chromeDlo:1, doors:[131, 80], shapes:[{p:[[152, 31.5, 0.5], [143, 31.8, 0.5], [143, 30.6, 0.5]], f:'#121315'}],
+    lines:[[[2, 38.5], [100, 39, 60], [184, 33]], [[40, 22], [150, 21]]], hl:[[188.8, 31.5, 1], [172, 33.5, 2], [174, 30, 1], [189, 28.5, 1]], tl:[[0.4, 39.5, 1], [14, 40.5, 1], [12, 37, 1], [0.3, 36.5, 1]], wheel:{t:'y', n:5, fin:'black', cal:'#1d4fa8'}, col:'#3f6b3a'},
+  'Porsche|911 Carrera':{L:177.9, H:51.1, WB:96.5, FO:37.5, TD:26.2, rim:20, cr:9, cf:5.5, sill:7.5, tail:[1.5, 35.5], tb:28.5, rearPts:[[10, 38.5, 10], [30, 44.5, 18], [55, 49.5, 22]], rr:[72, 50.8], rf:[110, 50.4], cowl:[131, 34.5],
+    hoodPts:[[150, 33.6, 20]], hood:[168, 32], frontPts:[[175.9, 29, 8], [177.9, 18, 8], [175, 7, 3], [169, 5.5, 0]], nose:29,
+    belt:[36, 34], w:[[30, 37, 1], [50, 43.5, 10], [72, 48.4, 12], [106, 48.6, 6], [128, 35, 1]], pil:[[60, 1.6, 2]], doors:[128, 80], lines:[[[2, 33], [28, 36.5, 15], [52, 38, 15], [80, 34.5, 30], [128, 33, 30], [168, 30]]],
+    hl:[[177.6, 31, 1], [169, 33, 2], [170, 29, 1], [177.8, 28, 1]], tl:[[0.4, 34, 1], [8, 35, 1], [7.5, 32.8, 1], [0.3, 32.3, 1]], wheel:{t:'split', n:5, fin:'silver', cal:'#c4282f'}, col:'#b8bcc0'},
+  'Lamborghini|Huracán Tecnica':{gap:1, low:12.5, L:179.8, H:47.4, WB:103.2, FO:41, TD:26.5, rim:20, cr:7.5, cf:4.5, sill:6.5, tail:[1, 38], tb:30, deck:[40, 40], rr:[70, 46], rrR:6, rf:[100, 47.3], cowl:[126, 33], hoodPts:[[150, 30.5, 30]], hood:[174, 24], nose:20,
+    belt:[34.5, 32.5], w:[[74, 37.5, 1], [72, 43.5, 4], [98, 45.6, 6], [124, 34.5, 1]], doors:[124, 74], wing:[2, 22, 44], shapes:[{p:[[45, 22, 1], [75, 32, 2], [82, 30, 1], [58, 19, 1]], f:'#141517'}],
+    lines:[[[2, 33], [70, 35.5, 40], [176, 26]]], hl:[[179.5, 26, 1], [166, 28, 2], [168, 25, 1], [179.7, 24, 1]], tl:[[0.3, 35, 1], [8, 35.8, 1], [7, 33.5, 1], [0.3, 33, 1]], wheel:{t:'y', n:5, fin:'black', cal:'#d8b31f'}, col:'#7bbf2a'},
+  'Ferrari|296 GTB':{gap:1, low:13, L:179.6, H:46.9, WB:100.4, FO:40.5, TD:26.5, rim:20, cr:7.5, cf:4.5, sill:6.5, tail:[1, 36.5], tb:29, deck:[36, 39.5], rr:[68, 45.5], rrR:6, rf:[98, 46.8], cowl:[124, 33], hood:[173, 24], nose:20.5,
+    belt:[34.5, 32], w:[[78, 37, 1], [76, 43.5, 4], [96, 45.2, 6], [122, 34, 1]], doors:[122, 78], shapes:[{p:[[50, 30, 1], [70, 35, 2], [74, 32, 1], [56, 28, 1]], f:'#141517'}],
+    lines:[[[2, 32], [80, 34, 40], [173, 27]]], hl:[[179.3, 26.5, 1], [165, 28.5, 2], [167, 25.5, 1], [179.5, 24.5, 1]], tl:[[0.3, 34.5, 1], [6, 35, 1], [5.5, 33, 1], [0.3, 32.5, 1]], wheel:{t:'split', n:5, fin:'silver', cal:'#d8b31f'}, col:'#b8101a'},
+  'McLaren|750S':{gap:1, low:13, L:179.4, H:47.1, WB:105.1, FO:40, TD:26.5, rim:20, cr:7.5, cf:4.5, sill:6.5, tail:[1, 38], tb:30, deck:[30, 40], rr:[64, 45.5], rrR:6, rf:[102, 47], cowl:[128, 32.5], hood:[175, 23.5], nose:20,
+    belt:[34, 32], w:[[60, 38, 1], [66, 44, 8], [100, 46, 8], [127, 33.5, 1], [100, 36.5, 0]], doors:[128, 64], shapes:[{p:[[42, 22, 1], [68, 30, 2], [70, 26, 1], [50, 19, 1]], f:'#141517'}],
+    lines:[[[2, 33], [80, 35, 40], [175, 26.5]]], hl:[[179.1, 26, 1], [170, 29, 2], [172, 24.5, 1], [179.3, 24, 1]], tl:[[0.3, 36, 1], [6, 36.5, 1], [5.5, 34, 1], [0.3, 33.5, 1]], wheel:{t:'split', n:10, fin:'black', cal:'#c9cdd1'}, col:'#e0662b'},
+  'Lamborghini|Revuelto':{gap:1, low:12, L:194.4, H:45, WB:106.3, FO:44, TD:27, rim:21, cr:7, cf:4, sill:6, tail:[1, 36], tb:28, deck:[44, 38.5], rr:[76, 43.8], rrR:6, rf:[106, 45], cowl:[134, 31.5], hoodPts:[[160, 29, 30]], hood:[188, 22], nose:19,
+    belt:[33, 31], w:[[82, 36, 1], [80, 41.8, 4], [104, 43.3, 6], [132, 32.5, 1]], doors:[132, 82], shapes:[{p:[[55, 20, 1], [85, 31, 2], [88, 28, 1], [62, 17, 1]], f:'#141517'}],
+    lines:[[[2, 31], [90, 33.5, 40], [188, 25]]], hl:[[194.1, 24, 1], [180, 26.5, 2], [182, 23, 1], [194.3, 22.5, 1]], tl:[[0.3, 33, 1], [8, 33.5, 1], [7, 31, 1], [0.3, 30.5, 1]], wheel:{t:'turbine', n:5, fin:'black', cal:'#e0662b'}, col:'#1f7a8c'},
+  'Bugatti|Chiron':{gap:1, low:15, L:178.9, H:47.7, WB:107.1, FO:38, TD:27.5, rim:21, cr:8, cf:5, sill:7, tail:[1, 37], tb:29, deck:[32, 40.5], rr:[64, 46.5], rrR:6, rf:[100, 47.6], cowl:[126, 34], hood:[174, 26], nose:23,
+    belt:[35, 33.5], w:[[72, 38, 1], [68, 44.6, 4], [98, 46.1, 6], [124, 35.5, 1]], doors:[124, 62], shapes:[{p:[[56, 40, 4], [50, 34, 4], [50, 24, 4], [56, 18, 2], [60, 22, 4], [57, 34, 4]], f:'#121315'}, {p:[[60, 45, 0], [57, 38, 6], [57, 26, 6], [64, 14, 0]], open:1, f:'#e8ecef', w:1.3}], lines:[[[60, 34], [174, 28.5]]],
+    hl:[[178.6, 28.5, 1], [168, 30, 2], [170, 27, 1], [178.8, 26.5, 1]], tl:[[0.3, 35, 1], [4, 35.5, 1], [3.5, 33, 1], [0.3, 32.5, 1]], wheel:{t:'star', n:10, fin:'silver', cal:'#1d4fa8'}, col:'#1f3f8f'},
+  // ---- pickups ----
+  'Toyota|Tacoma':{L:213, H:72, WB:131.9, FO:34, TD:31.5, rim:18, cr:17, cf:14, sill:15, tail:[0.5, 50], tailR:0.5, tb:34, rearPts:[[62, 50, 0], [63.5, 51, 0], [65, 69, 2]], rr:[68, 71.5], rrR:3, rf:[140, 72], rfR:6, cowl:[160, 52], hoodPts:[[185, 53.5, 20]], hood:[208, 51.5], hoodR:3, nose:46,
+    belt:[53.5, 52.5], dlo:[69, 156], cIn:3, aIn:3.5, pil:[[109, 3.4, 0.4]], doors:[154, 110, 69], clad:{r:3}, bed:[62, 50], lines:[[[3, 47], [62, 47.5], [208, 48.5]]],
+    hl:[[212.7, 49.5, 1], [200, 51, 2], [201, 47, 1], [212.9, 46, 1]], tl:[[0.3, 48, 0.5], [2.5, 48.3, 0.5], [2.5, 38, 0.5], [0.3, 37.5, 0.5]], wheel:{t:'split', n:6, fin:'black'}, col:'#d9551a'},
+  'Chevrolet|Silverado 1500':{L:231.7, H:75.6, WB:147.4, FO:37, TD:32, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 54], tailR:0.5, tb:36, rearPts:[[69, 54, 0], [70.5, 55, 0], [72, 73, 2]], rr:[75, 75.3], rrR:3, rf:[156, 75.6], rfR:6, cowl:[178, 54], hoodPts:[[200, 55, 20]], hood:[227, 53.5], hoodR:2, nose:49.5, noseR:2,
+    belt:[57, 56], dlo:[76, 173], cIn:3, aIn:3.5, pil:[[122, 3.4, 0.3]], doors:[170, 123, 77], steps:1, bed:[69, 54], lines:[[[3, 50], [69, 50.5], [227, 51]]],
+    hl:[[231.4, 52, 1], [218, 53.5, 2], [219, 49.5, 1], [231.6, 48.5, 1]], tl:[[0.3, 52, 0.5], [3, 52.3, 0.5], [3, 40, 0.5], [0.3, 39.5, 0.5]], wheel:{t:'split', n:6, fin:'machined'}, col:'#9ea4aa'},
+  'Ford|F-150':{L:231.7, H:77.2, WB:145.4, FO:36, TD:32.5, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 55], tailR:0.5, tb:37, rearPts:[[67, 55, 0], [68.5, 56, 0], [70, 75, 2]], rr:[73, 77], rrR:3, rf:[157, 77.2], rfR:6, cowl:[179, 55], hoodPts:[[202, 56.5, 20]], hood:[227, 55], hoodR:2, nose:50, noseR:2,
+    belt:[58.5, 57.5], dlo:[74, 174], cIn:3, aIn:3.5, pil:[[121, 3.4, 0.3]], doors:[171, 122, 75], steps:1, bed:[67, 55], lines:[[[3, 51.5], [67, 52], [227, 52.5]]],
+    hl:[[231.4, 53.5, 1], [219, 55, 2], [220, 51, 1], [231.6, 50, 1]], tl:[[0.3, 53, 0.5], [3, 53.3, 0.5], [3, 41, 0.5], [0.3, 40.5, 0.5]], wheel:{t:'split', n:6, fin:'machined'}, col:'#2c4a7c'},
+  'Ram|1500':{L:232.9, H:77.6, WB:144.6, FO:37, TD:32.5, rim:20, cr:17, cf:15, sill:16, tail:[0.5, 55], tailR:0.5, tb:37, rearPts:[[66, 55, 0], [67.5, 56, 0], [69, 75, 2]], rr:[72, 77.3], rrR:3, rf:[158, 77.6], rfR:6, cowl:[180, 55.5], hoodPts:[[204, 57, 20]], hood:[228, 55.5], hoodR:3, nose:50,
+    belt:[58.5, 57.5], dlo:[73, 175], cIn:3, aIn:3.5, pil:[[121, 3.4, 0.3]], doors:[172, 122, 74], steps:1, bed:[66, 55], lines:[[[3, 51.5], [66, 52], [228, 53]]],
+    hl:[[232.6, 53.5, 1], [220, 55, 2], [221, 51.5, 1], [232.8, 50.5, 1]], tl:[[0.3, 54, 0.5], [3, 54.3, 0.5], [3, 42, 0.5], [0.3, 41.5, 0.5]], wheel:{t:'split', n:6, fin:'silver'}, col:'#1a1c1f'},
+  'GMC|Sierra Denali':{L:231.9, H:75.5, WB:147.4, FO:37, TD:32.5, rim:22, cr:17, cf:15, sill:16, tail:[0.5, 54], tailR:0.5, tb:36, rearPts:[[69, 54, 0], [70.5, 55, 0], [72, 73, 2]], rr:[75, 75.2], rrR:3, rf:[157, 75.5], rfR:6, cowl:[179, 54], hoodPts:[[201, 55.2, 20]], hood:[227, 53.5], hoodR:2, nose:49.5, noseR:2,
+    belt:[57, 56], dlo:[76, 173], cIn:3, aIn:3.5, pil:[[122, 3.4, 0.3]], chromeDlo:1, doors:[170, 123, 77], steps:1, bed:[69, 54], lines:[[[3, 50], [69, 50.5], [227, 51]]],
+    hl:[[231.6, 52.5, 1], [218, 53.5, 2], [219, 49.5, 1], [231.8, 48.5, 1]], tl:[[0.3, 52, 0.5], [3, 52.3, 0.5], [3, 40, 0.5], [0.3, 39.5, 0.5]], wheel:{t:'split', n:6, fin:'chrome'}, col:'#4e5257'},
+  // ---- classics (the convertibles are drawn with the top down) ----
+  'Cadillac|Eldorado Biarritz':{L:223, H:52, WB:129.5, FO:40, TD:28.5, rim:15, cr:13, cf:12, sill:11, noDlo:1, belt:[37.5, 37.5], sh:33, noTrim:1,
+    pts:[[6, 13, 0], [0.5, 16, 3], [0, 30, 4], [0.5, 37.5, 2], [20, 38.2, 10], [48, 38.2, 6], [50, 40.5, 3], [72, 41, 4], [74, 37.5, 2], [138, 37.5, 2], [142, 38.5, 4], [215, 37.8, 10], [222.6, 35, 4], [223, 24, 6], [219, 12, 0]],
+    ws:[[141, 38.5], [131, 52], 10], cseats:[100, 128], leather:'#3a1d1d', chrome:[[[2, 30], [220, 30.5]], [[60, 12.5], [170, 12.5]]], shapes:[{p:[[0, 16, 0], [0, 30, 0], [8, 30, 0], [8, 16, 0]], f:'#d9dde1'}],
+    hl:[[222.8, 33, 1], [216, 33.5, 1], [216, 28, 1], [222.9, 27.5, 1]], tl:[[0.3, 36.5, 1], [3, 37, 1], [3, 31, 1], [0.3, 30.5, 1]], wheel:{t:'hubcap', n:12, fin:'chrome', ww:1}, col:'#7a1f2b'},
+  'Ford|Mustang Convertible':{L:181.6, H:48, WB:108, FO:37, TD:25.5, rim:14, cr:11, cf:10, sill:9.5, noDlo:1, belt:[35, 35], sh:31, noTrim:1,
+    pts:[[5, 11, 0], [0.5, 14, 3], [0, 26, 4], [0.5, 35, 2], [16, 35.8, 8], [42, 35.8, 5], [44, 37.5, 2], [58, 37.8, 3], [60, 35, 2], [118, 35, 2], [122, 35.8, 3], [150, 35.2, 12], [178, 34, 5], [181.4, 31, 4], [181.6, 20, 5], [178, 10, 0]],
+    ws:[[121, 35.8], [112, 48], 8], cseats:[86, 106], leather:'#7a1d1d', shapes:[{p:[[60, 20, 2], [52, 28, 3], [57, 30, 1], [66, 24, 2]], f:'#1c1d20'}], chrome:[[[0, 13], [8, 13]], [[174, 12], [181.6, 12]]],
+    lines:[[[2, 32], [50, 33, 20], [66, 30, 10], [120, 30, 30], [178, 31]]], hl:[[181.4, 30, 2], [178, 30.5, 2], [178, 25.5, 2], [181.5, 25, 2]], tl:[[0.3, 32, 1], [2.5, 32.3, 1], [2.5, 27, 1], [0.3, 26.8, 1]], wheel:{t:'wire', n:12, fin:'chrome', ww:1}, col:'#f2efe6'},
+  'Chevrolet|Bel Air Convertible':{L:200, H:54, WB:115, FO:38, TD:27, rim:14, cr:12, cf:11, sill:10.5, noDlo:1, belt:[37, 37], sh:30, noTrim:1,
+    pts:[[6, 13, 0], [0.5, 16, 3], [0, 30, 4], [0, 38, 1], [3, 40.5, 1], [30, 38, 8], [50, 37, 5], [52, 39, 2], [66, 39.5, 3], [68, 36.8, 2], [124, 36.8, 2], [128, 37.5, 3], [180, 37, 10], [195, 36.5, 6], [199.5, 32, 4], [200, 22, 6], [196, 12, 0]],
+    ws:[[127, 37.5], [118, 53], 8], cseats:[96, 116], leather:'#e8e2d4', shapes:[{p:[[8, 30, 1], [55, 30, 1], [60, 27, 1], [100, 27, 1], [96, 25.2, 1], [8, 26, 1]], f:'#cfd2d6'}],
+    chrome:[[[6, 30.2], [56, 30.2, 2], [62, 27.2, 2], [104, 27.2, 2], [150, 30]], [[0, 14], [10, 14]], [[188, 13], [200, 13]]],
+    hl:[[199.6, 33, 2], [196, 33.5, 2], [196, 28.5, 2], [199.7, 28, 2]], tl:[[0.3, 37.5, 1], [2.5, 38, 1], [2.5, 33, 1], [0.3, 32.8, 1]], wheel:{t:'hubcap', n:12, fin:'chrome', ww:2}, col:'#3fb0a6'},
+  'Mercedes-Benz|280 SL Pagoda':{L:169.5, H:50.6, WB:94.5, FO:34, TD:25.5, rim:14, cr:10, cf:8, sill:9, tail:[1, 33.5], tb:26, deck:[26, 34.8], rr:[46, 51.2], rrR:4, rf:[96, 51.4], rfR:4, cowl:[108, 36], hood:[160, 34], nose:31,
+    belt:[36, 36], dlo:[44, 106], cIn:2, aIn:2.5, dt:1.2, roof:[[38, 47, 0], [46, 52, 0], [96, 52, 0], [102, 47, 0], [96, 49.6, 0], [48, 49.6, 0]], roofC:'#1d2a3a', doors:[106, 64], noTrim:1,
+    chrome:[[[2, 32], [160, 32.5]], [[30, 10], [140, 10]]], hl:[[169.2, 33, 1], [166, 33, 1], [166, 26, 1], [169.4, 26, 1]], tl:[[0.3, 32, 1], [6, 32, 1], [6, 26, 1], [0.3, 26, 1]], wheel:{t:'hubcap', n:16, fin:'silver'}, col:'#e9e2cc'},
+  'Chevrolet|Corvette Sting Ray Convertible':{L:175.1, H:46, WB:98, FO:34, TD:26, rim:15, cr:10, cf:8, sill:8, noDlo:1, belt:[34.5, 34.5], sh:30, noTrim:1,
+    pts:[[5, 11, 0], [0.5, 14, 3], [0, 24, 4], [1, 32.5, 3], [20, 34, 10], [40, 35.5, 6], [44, 37, 2], [54, 37.5, 3], [56, 34.5, 2], [104, 34.5, 2], [108, 35, 3], [128, 34, 12], [150, 33.5, 10], [170, 31, 8], [174.8, 27, 5], [175.1, 20, 5], [171, 9, 0]],
+    ws:[[107, 35], [98, 46], 6], cseats:[80, 96], leather:'#1d1d1f', shapes:[{p:[[118, 27, 0.5], [119, 19, 0.5]], open:1, f:'#16171a', w:1}, {p:[[121, 27, 0.5], [122, 19, 0.5]], open:1, f:'#16171a', w:1}, {p:[[124, 27, 0.5], [125, 19, 0.5]], open:1, f:'#16171a', w:1}],
+    lines:[[[2, 30], [30, 32, 20], [60, 28, 30], [110, 28, 30], [170, 30]]], hl:[[174.9, 25, 1], [168, 26, 1], [168, 24, 1], [175, 23.5, 1]], tl:[[0.3, 30, 1], [2.5, 30.3, 1], [2.5, 26, 1], [0.3, 25.8, 1]], wheel:{t:'steel', n:5, fin:'silver'}, col:'#1f5fa8'},
+});
+// handles go just ahead of each door's rear edge
+Object.values(VEH_SPECS).forEach(p => { if(p.doors && !p.handles) p.handles = p.doors.slice(1).map(x => x + 3.5); if(!p.mirror && p.cowl) p.mirror = [p.cowl[0] - 2, p.belt[1] + 1.4]; });
+// ---- two wheels: motorcycles, scooters and e-bikes ----
+// Same idea as the cars: inches, x forward from the rear axle, y up from the ground.
+function spokedWheel(cx, cy, R, rimR, o){
+  o = o || {}; const tire = o.tire || '#17181a', rim = o.rim || '#c9ced3';
+  let s = `<circle cx="${cx}" cy="${cy}" r="${r1((R + rimR) / 2)}" fill="none" stroke="${tire}" stroke-width="${r1(R - rimR)}"/><circle cx="${cx}" cy="${cy}" r="${r1((R + rimR) / 2)}" fill="none" stroke="#2c2d30" stroke-width="${r1((R - rimR) * 0.45)}"/>` +
+    `<circle cx="${cx}" cy="${cy}" r="${r1(rimR)}" fill="none" stroke="${rim}" stroke-width="${r1(o.rimW || Math.max(1.2, rimR * 0.08))}"/>`;
+  if(o.knobs) for(let i = 0; i < 28; i++){ const a = i * Math.PI / 14; s += `<rect x="${r1(cx + Math.cos(a) * R - 1)}" y="${r1(cy + Math.sin(a) * R - 1)}" width="2" height="2" fill="${tire}"/>`; }
+  if(o.cast){ const n = o.cast; for(let i = 0; i < n; i++){ const a = i * 2 * Math.PI / n - Math.PI / 2; s += `<path d="M${r1(cx + Math.cos(a - 0.12) * rimR * 0.25)},${r1(cy + Math.sin(a - 0.12) * rimR * 0.25)} L${r1(cx + Math.cos(a - 0.06) * rimR)},${r1(cy + Math.sin(a - 0.06) * rimR)} L${r1(cx + Math.cos(a + 0.06) * rimR)},${r1(cy + Math.sin(a + 0.06) * rimR)} L${r1(cx + Math.cos(a + 0.12) * rimR * 0.25)},${r1(cy + Math.sin(a + 0.12) * rimR * 0.25)}Z" fill="${rim}"/>`; } }
+  else { const n = o.spokes || 32; for(let i = 0; i < n; i++){ const a = i * 2 * Math.PI / n, b = a + (i % 2 ? 0.5 : -0.5); s += `<line x1="${r1(cx + Math.cos(a) * rimR * 0.14)}" y1="${r1(cy + Math.sin(a) * rimR * 0.14)}" x2="${r1(cx + Math.cos(b) * rimR)}" y2="${r1(cy + Math.sin(b) * rimR)}" stroke="${o.spokeC || '#b7bcc2'}" stroke-width=".6"/>`; } }
+  if(o.disc) s += `<circle cx="${cx}" cy="${cy}" r="${r1(rimR * 0.62)}" fill="none" stroke="#9aa0a7" stroke-width="${r1(rimR * 0.12)}" opacity=".9"/>`;
+  if(o.hub) s += `<circle cx="${cx}" cy="${cy}" r="${r1(o.hub)}" fill="#2b2d31" stroke="#55595f"/>`;
+  return s + `<circle cx="${cx}" cy="${cy}" r="${r1(Math.max(2, rimR * 0.12))}" fill="#6b7077" stroke="#3a3d42" stroke-width=".6"/>`;
+}
+// p: {WB, rr, rf (wheel radii), rim (rim radius), parts:[{p: points, f: fill or 'paint', s: stroke, w: stroke width, o: opacity, open}], ...}
+function drawTwo(p, c, id){
+  const L = p.WB + p.rr + p.rf, s = Math.min(540 / L, 205 / p.H), x0 = (DW - (p.WB + p.rr + p.rf) * s) / 2 + p.rr * s, X = x => r1(x0 + x * s), Y = y => r1(DG - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const W = t => hexMix(c, '#ffffff', t), K = t => hexMix(c, '#000000', t);
+  let g = `<defs><linearGradient id="${id}m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${W(0.45)}"/><stop offset=".35" stop-color="${W(0.08)}"/><stop offset=".6" stop-color="${c}"/><stop offset="1" stop-color="${K(0.45)}"/></linearGradient>` +
+    `<linearGradient id="${id}ch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#aab1b8"/><stop offset="1" stop-color="#e7eaed"/></linearGradient>` +
+    `<linearGradient id="${id}bk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a4d52"/><stop offset="1" stop-color="#141517"/></linearGradient></defs>`;
+  g += studio(id, (X(-p.rr) + X(p.WB + p.rf)) / 2, (p.WB + p.rr + p.rf) * s / 2 * 0.9);
+  const fill = f => f === 'paint' ? `url(#${id}m)` : f === 'chrome' ? `url(#${id}ch)` : f === 'black' ? `url(#${id}bk)` : f === 'paint2' ? (p.c2 || '#1b1c1f') : f;
+  const part = q => q.open ? `<path d="${rpath(P(q.p), false)}" fill="none" stroke="${fill(q.f)}" stroke-width="${r1((q.w || 1) * s)}" stroke-linecap="round" stroke-linejoin="round" opacity="${q.o || 1}"/>`
+    : `<path d="${rpath(P(q.p), true)}" fill="${fill(q.f)}" ${q.s ? `stroke="${q.s}" stroke-width="${q.sw || 0.8}"` : ''} opacity="${q.o || 1}"/>`;
+  (p.back || []).forEach(q => { g += part(q); });
+  g += spokedWheel(X(0), Y(p.rr), p.rr * s, p.rimR * s, p.wr || {}) + spokedWheel(X(p.WB), Y(p.rf), p.rf * s, (p.rimF || p.rimR) * s, p.wf || p.wr || {});
+  (p.parts || []).forEach(q => { g += part(q); });
+  (p.circles || []).forEach(([x, y, r, f, st]) => { g += `<circle cx="${X(x)}" cy="${Y(y)}" r="${r1(r * s)}" fill="${fill(f)}" ${st ? `stroke="${st}" stroke-width="1"` : ''}/>`; });
+  g += `<ellipse cx="${X(0)}" cy="${DG + 1}" rx="${r1(p.rr * s * 0.6)}" ry="2.2" fill="#000" opacity=".45"/><ellipse cx="${X(p.WB)}" cy="${DG + 1}" rx="${r1(p.rf * s * 0.6)}" ry="2.2" fill="#000" opacity=".45"/>`;
+  return g;
+}
+const MOTO_SPECS = {
+  'Honda|Rebel 500':{WB:58.7, rr:12.7, rf:12.6, rimR:8, H:40, wr:{cast:6, rim:'#1d1e21', disc:1}, col:'#2b2d31', c2:'#1b1c1f',
+    back:[{p:[[52, 33], [44.5, 37.5]], open:1, f:'#1b1c1f', w:1}],
+    parts:[{p:[[-11, 17, 6], [-6, 25, 6], [4, 27.5, 6], [11, 25, 2], [8, 23.5, 2], [2, 25, 6], [-8, 21.5, 2]], f:'paint'},
+      {p:[[24, 14], [0, 12.7]], open:1, f:'#26282b', w:2.2}, {p:[[14, 26], [4, 15]], open:1, f:'#8a9097', w:1.6},
+      {p:[[22, 9, 2], [21, 20, 2], [28, 25, 2], [40, 24, 2], [43, 13, 2], [34, 7, 2]], f:'black'}, {p:[[25, 13], [40, 13]], open:1, f:'#5b6067', w:0.5}, {p:[[25, 16], [40, 16]], open:1, f:'#5b6067', w:0.5}, {p:[[25, 19], [40, 19]], open:1, f:'#5b6067', w:0.5},
+      {p:[[40, 10, 3], [30, 7.5, 3], [10, 8.5, 3], [-6, 11, 0]], open:1, f:'#1d1e21', w:2.6}, {p:[[-8, 9.5, 2], [6, 9, 2], [6, 13, 2], [-8, 13.5, 2]], f:'black'},
+      {p:[[50, 31], [36, 22, 4], [24, 22], [12, 27]], open:1, f:'#1b1c1f', w:1.8},
+      {p:[[21, 28.5, 4], [25, 33.5, 8], [40, 34.8, 8], [49, 32, 4], [47, 28, 4], [32, 26.5, 6]], f:'paint'}, {p:[[26, 32.5], [44, 33.2]], open:1, f:'#ffffff', w:0.4, o:0.5},
+      {p:[[9, 27, 2], [11, 29.5, 3], [21, 30, 4], [23, 27.5, 2], [18, 26, 2]], f:'#3a2a20'},
+      {p:[[58.7, 12.6], [51, 33]], open:1, f:'#1b1c1f', w:1.8}, {p:[[57.5, 14], [51.5, 30]], open:1, f:'#9aa0a7', w:0.5}, {p:[[50, 21, 4], [56, 26, 6], [66, 22, 4], [62, 20, 2], [56, 23, 4], [52, 19.5, 2]], f:'paint'}],
+    circles:[[54.5, 32.5, 3.6, '#1b1c1f'], [55.2, 32.5, 2.8, '#e8eef2', '#555'], [-9.5, 23, 1, '#c4141f']]},
+  'Kawasaki|Ninja 650':{WB:55.5, rr:12.3, rf:11.8, rimR:8.5, H:46, wr:{cast:6, rim:'#1d1e21', disc:1}, col:'#5fae2e', c2:'#1b1c1f',
+    parts:[{p:[[22, 15], [0, 12.3]], open:1, f:'#202225', w:2.6}, {p:[[13, 28], [5, 15]], open:1, f:'#c33a2a', w:1.4}, {p:[[20, 13.5], [4, 12]], open:1, f:'#3a3d42', w:0.8},
+      {p:[[23, 8, 2], [22, 20, 2], [36, 23, 2], [38, 10, 2]], f:'#2b2d31'}, {p:[[21, 5, 2], [35, 4.5, 2], [35, 8.5, 2], [21, 9, 2]], f:'black'},
+      {p:[[46, 33], [30, 22], [22, 15]], open:1, f:'#26282b', w:1.4},
+      {p:[[55.5, 11.8], [47, 35]], open:1, f:'#1b1c1f', w:2}, {p:[[54.8, 13.5], [47.6, 33]], open:1, f:'#9aa0a7', w:0.5},
+      {p:[[48, 14, 3], [54, 18, 5], [61, 16, 2], [57, 14.3, 2], [53, 15.4, 3], [50, 12.6, 2]], f:'paint'},
+      {p:[[60, 28, 3], [54, 36, 3], [46, 37.5, 3], [38, 33, 3], [31, 24, 3], [31, 12, 3], [42, 8, 3], [52, 11.5, 3], [57, 19, 3]], f:'paint'}, {p:[[47, 31, 2], [40, 27, 2], [36, 17, 2], [44, 13, 2], [50, 19, 2]], f:'#1b1c1f'},
+      {p:[[62, 30, 3], [57, 37.5, 3], [51, 38.5, 3], [52, 31, 3]], f:'paint'},
+      {p:[[56, 37, 1], [50.5, 44.5, 1], [47.5, 43.5, 1], [48.5, 38.6, 1]], f:'#2d3a46', o:0.85}, {p:[[61, 30, 1], [57, 33.6, 1], [55.6, 31.6, 1], [59.6, 28.6, 1]], f:'#e8eef2', s:'#555'},
+      {p:[[28, 33, 3], [31, 38, 5], [44, 38.6, 4], [46.5, 34, 3], [40, 30, 3], [30, 30, 3]], f:'paint'}, {p:[[32, 37], [44, 37.6]], open:1, f:'#ffffff', w:0.4, o:0.6},
+      {p:[[10, 32, 2], [13, 34.4, 3], [28, 34.7, 3], [29, 32, 2], [20, 31, 2]], f:'#1d1e21'},
+      {p:[[-8, 34, 3], [2, 36.2, 3], [13, 34.6, 3], [12, 31, 2], [0, 30.5, 2]], f:'paint'}, {p:[[0, 35.6, 2], [9, 36.4, 2], [9, 35, 2], [1, 34.6, 2]], f:'#1d1e21'}, {p:[[-8.5, 32.8, 1], [-5, 33.4, 1], [-5.5, 32, 1], [-8.5, 31.8, 1]], f:'#c4141f'}]},
+  'Ducati|Monster':{WB:57.4, rr:12.3, rf:11.8, rimR:8.5, H:42, wr:{cast:3, rim:'#1d1e21', disc:1}, col:'#c8102e', c2:'#1b1c1f',
+    parts:[{p:[[23, 15], [0, 12.3]], open:1, f:'#202225', w:2.8}, {p:[[13, 27], [6, 16]], open:1, f:'#d9b34a', w:1.4},
+      {p:[[22, 8, 2], [21, 19, 2], [27, 26, 2], [33, 24, 2], [35, 18, 2], [42, 26, 2], [47, 24, 2], [42, 10, 2], [32, 6, 2]], f:'#2b2d31'}, {p:[[27, 24], [32, 20]], open:1, f:'#55595f', w:0.6},
+      {p:[[3, 12.5, 2], [17, 9.5, 2], [18, 13, 2], [4, 16, 2]], f:'black'}, {p:[[24, 8, 3], [18, 9.5, 3]], open:1, f:'#3a3d42', w:1.2},
+      {p:[[48.5, 33], [36, 27.5]], open:1, f:'#a50d26', w:1}, {p:[[48.5, 33], [42.5, 23]], open:1, f:'#a50d26', w:1}, {p:[[36, 27.5], [42.5, 23]], open:1, f:'#a50d26', w:1},
+      {p:[[57.4, 11.8], [49, 35]], open:1, f:'#1b1c1f', w:2.2}, {p:[[56.6, 13.5], [49.6, 33]], open:1, f:'#d9b34a', w:0.8}, {p:[[47.5, 36], [44, 38]], open:1, f:'#1b1c1f', w:1},
+      {p:[[49, 14.5, 3], [55, 19, 5], [62, 17, 2], [58, 15, 2], [54, 16.6, 3], [51, 13.4, 2]], f:'paint'},
+      {p:[[-7, 33.5, 3], [5, 34.6, 3], [9, 32, 2], [-4, 31, 2]], f:'paint'}, {p:[[4, 31.5, 2], [9, 33.8, 3], [22, 33.6, 3], [23, 31, 2], [10, 30, 2]], f:'#1d1e21'},
+      {p:[[22, 31.5, 4], [25, 36.5, 8], [39, 38, 8], [47, 34.5, 4], [43, 30.5, 4], [29, 29.5, 4]], f:'paint'}, {p:[[27, 35.5], [40, 36.8]], open:1, f:'#ffffff', w:0.4, o:0.6}],
+    circles:[[53.5, 32.5, 3.4, '#1b1c1f'], [54.1, 32.5, 2.6, '#e8eef2', '#555'], [-6.5, 32, 0.9, '#c4141f']]},
+  'Harley-Davidson|Street Bob 114':{WB:64.2, rr:12.7, rf:13, rimR:9.5, rimF:9.5, H:46, wr:{spokes:40, rim:'#1d1e21', spokeC:'#2a2c30'}, wf:{spokes:40, rim:'#1d1e21', spokeC:'#2a2c30', disc:1}, col:'#16171a', c2:'#1b1c1f',
+    back:[{p:[[54, 36], [52.5, 44.5, 2], [45, 45]], open:1, f:'#1b1c1f', w:1.1}],
+    parts:[{p:[[-12, 15, 6], [-7, 24, 6], [4, 26.5, 6], [10, 24, 2], [6, 22.8, 2], [0, 24, 6], [-9, 19.5, 2]], f:'paint'},
+      {p:[[23, 13], [0, 12.7]], open:1, f:'#1d1e21', w:2.4}, {p:[[12, 25], [8, 14]], open:1, f:'#3a3d42', w:1.2},
+      {p:[[24, 8, 2], [22, 21, 2], [28, 28, 2], [33, 24, 2], [36, 18, 2], [42, 28, 2], [48, 25.5, 2], [46, 12, 2], [36, 6, 2]], f:'black'},
+      {p:[[26, 23.5], [32, 22]], open:1, f:'#8a9097', w:0.5}, {p:[[25.5, 21], [33, 19.5]], open:1, f:'#8a9097', w:0.5}, {p:[[41, 24], [47, 23]], open:1, f:'#8a9097', w:0.5}, {p:[[40.5, 21.5], [47, 20.5]], open:1, f:'#8a9097', w:0.5},
+      {p:[[45, 14, 3], [32, 10, 3], [10, 11, 3], [-11, 12.5, 0]], open:1, f:'chrome', w:2.2}, {p:[[45, 18, 3], [32, 13.5, 3], [10, 14.5, 3], [-11, 16, 0]], open:1, f:'chrome', w:2.2},
+      {p:[[52, 31], [40, 25, 4], [25, 23.5], [13, 26]], open:1, f:'#1b1c1f', w:1.8},
+      {p:[[24, 28, 4], [29, 33, 8], [44, 34.6, 8], [52, 31.5, 4], [50, 27.3, 4], [33, 26.3, 6]], f:'paint'}, {p:[[29, 32], [46, 33]], open:1, f:'#ffffff', w:0.4, o:0.5},
+      {p:[[9, 25, 2], [11, 27.6, 3], [24, 28.2, 4], [26, 26, 2], [20, 24, 2]], f:'#1d1b1a'},
+      {p:[[64.2, 13], [53, 35]], open:1, f:'#1b1c1f', w:2.2}, {p:[[62.6, 15], [53.6, 32.5]], open:1, f:'#a7adb4', w:0.6}],
+    circles:[[34.5, 18, 3.8, 'chrome', '#7a8088'], [56.5, 32, 3.4, '#1b1c1f'], [57.1, 32, 2.6, '#e8eef2', '#555'], [-11, 21, 0.9, '#c4141f']]},
+  'BMW|R 1300 GS':{WB:59.6, rr:12.5, rf:12.8, rimR:8.5, rimF:9.5, H:50, wr:{spokes:40, rim:'#d8b24a', spokeC:'#c6ccd2', disc:1}, col:'#f2f2f0', c2:'#1d4fa8',
+    back:[{p:[[50, 41], [44, 43.5]], open:1, f:'#1b1c1f', w:1.1}],
+    parts:[{p:[[23, 16], [0, 12.5]], open:1, f:'#202225', w:3}, {p:[[13, 30], [7, 16]], open:1, f:'#d9b34a', w:1.6},
+      {p:[[25, 9, 2], [25, 23, 2], [43, 25, 2], [46, 12, 2], [36, 8, 2]], f:'#2b2d31'},
+      {p:[[24, 14, 3], [12, 22, 3], [2, 23.5, 0]], open:1, f:'#8a9097', w:1.8}, {p:[[-6, 21.5, 2], [12, 24, 2], [12, 28, 2], [-6, 25.6, 2]], f:'chrome'},
+      {p:[[59.6, 12.8], [51, 39]], open:1, f:'#1b1c1f', w:2.4}, {p:[[46, 30], [56, 26]], open:1, f:'#1b1c1f', w:1.6},
+      {p:[[54, 26, 2], [64, 27.5, 3], [70, 23.5, 2], [63, 24, 2], [56, 23.5, 2]], f:'paint'},
+      {p:[[-9, 37.5, 1], [5, 38, 1], [5, 36, 1], [-9, 36, 1]], f:'#26282b'}, {p:[[-8, 35.5, 2], [6, 36.5, 2], [10, 33, 2], [-5, 31.5, 2]], f:'paint'},
+      {p:[[3, 35.5, 2], [7, 38.4, 3], [29, 38.8, 3], [30, 36, 2], [12, 34.5, 2]], f:'#1d1e21'},
+      {p:[[27, 34.5, 4], [31, 40, 6], [47, 42, 6], [57, 38, 4], [55, 29, 4], [42, 25.5, 4], [30, 28, 4]], f:'paint'}, {p:[[33, 31, 3], [53, 33, 3], [52, 28.6, 3], [36, 27.4, 3]], f:'paint2'},
+      {p:[[54, 41, 2], [50, 52, 2], [46.5, 51, 2], [49.5, 39.5, 2]], f:'#2d3a46', o:0.7}, {p:[[57.5, 37, 2], [61, 35, 2], [60.2, 31.5, 2], [56, 32.5, 2]], f:'#e8eef2', s:'#555'}],
+    circles:[[38, 15, 4.6, 'chrome', '#7a8088'], [-8.5, 33.5, 0.9, '#c4141f']]},
+  // scooters
+  'Yamaha|Zuma 50F':{WB:50.6, rr:9.3, rf:9.3, rimR:6, H:44, wr:{cast:5, rim:'#9aa1a8', knobs:1}, col:'#1f4fbf', c2:'#1b1c1f',
+    parts:[{p:[[18, 11, 2], [40, 11, 2], [40, 15, 2], [18, 15, 2]], f:'#1d1e21'}, {p:[[2, 10, 2], [16, 10, 2], [16, 15, 2], [2, 14, 2]], f:'#5b6067'},
+      {p:[[-8, 22, 4], [-2, 30, 6], [16, 30, 6], [21, 22, 4], [18, 14, 3], [4, 14, 3]], f:'paint'}, {p:[[-4, 29.5, 3], [0, 33, 4], [19, 33, 4], [21, 29.5, 2]], f:'#1d1e21'},
+      {p:[[50.6, 9.3], [45, 30]], open:1, f:'#1d1e21', w:1.8}, {p:[[45, 14, 3], [51, 29, 5], [49, 38, 4], [44, 39.5, 3], [41, 28, 4], [38, 15, 3]], f:'paint'},
+      {p:[[39, 40, 3], [52, 41.5, 3], [51, 46.5, 3], [40, 45, 3]], f:'#1d1e21'}, {p:[[49, 43.5, 1], [52, 44, 1], [51.5, 41.6, 1], [49, 41.8, 1]], f:'#e8eef2'},
+      {p:[[45, 12, 3], [52, 15.5, 5], [57, 13, 2], [53, 11.5, 2], [48, 10.5, 2]], f:'#1d1e21'}, {p:[[40, 46], [36, 47]], open:1, f:'#1d1e21', w:1}],
+    circles:[[-6.5, 24, 1, '#c4141f']]},
+  'Honda|Ruckus':{WB:49.8, rr:9.3, rf:9.3, rimR:5, H:40, wr:{cast:5, rim:'#2b2d31', knobs:1}, col:'#5d6b3c', c2:'#1b1c1f',
+    parts:[{p:[[0, 9.3], [10, 14], [30, 14], [44, 34]], open:1, f:'#2b2d31', w:1.6}, {p:[[2, 22], [26, 22], [30, 14]], open:1, f:'#2b2d31', w:1.6}, {p:[[26, 22], [24, 30]], open:1, f:'#2b2d31', w:1.4},
+      {p:[[2, 9, 2], [18, 9, 2], [18, 16, 2], [2, 15, 2]], f:'black'}, {p:[[12, 22.5, 2], [14, 25.5, 3], [28, 25.5, 3], [29, 22.5, 2]], f:'#1d1e21'},
+      {p:[[-4, 23, 1], [8, 23, 1], [8, 24.5, 1], [-4, 24.5, 1]], f:'#2b2d31'}, {p:[[49.8, 9.3], [44, 34]], open:1, f:'#2b2d31', w:1.8},
+      {p:[[44, 14, 3], [50, 19, 5], [56, 16.5, 2], [52, 14, 2], [47, 12.5, 2]], f:'paint'}, {p:[[42, 30, 2], [48, 32, 2], [48, 37, 2], [42, 36, 2]], f:'paint'},
+      {p:[[44, 37], [42, 41], [36, 41.5]], open:1, f:'#1d1e21', w:1}, {p:[[30, 14, 2], [40, 15, 2], [42, 19, 2], [32, 19, 2]], f:'paint'}],
+    circles:[[47.8, 34.5, 2.2, '#e8eef2', '#333']]},
+  'Genuine|Buddy 125':{WB:51.2, rr:9, rf:9, rimR:6, H:44, wr:{cast:5, rim:'#c9ced3'}, col:'#2f9cc9', c2:'#1b1c1f',
+    parts:[{p:[[18, 11, 2], [40, 11, 2], [40, 15, 2], [18, 15, 2]], f:'#1d1e21'},
+      {p:[[-6, 18, 6], [-4, 27, 8], [8, 31, 8], [18, 29, 6], [20, 18, 4], [14, 12, 3], [2, 12, 3]], f:'paint'}, {p:[[0, 29.5, 3], [3, 33, 4], [20, 32.8, 4], [21, 29.5, 2]], f:'#2a2420'},
+      {p:[[51.2, 9], [45, 30]], open:1, f:'#1d1e21', w:1.8}, {p:[[39, 14, 4], [44, 22, 6], [47, 38, 4], [43, 39, 3], [40, 26, 6], [36, 15, 3]], f:'paint'},
+      {p:[[40, 38, 3], [50, 39, 3], [50, 44, 3], [41, 43, 3]], f:'paint'}, {p:[[45, 12, 3], [52, 15, 5], [57, 12.5, 2], [53, 11.5, 2], [48, 10.5, 2]], f:'paint'},
+      {p:[[40, 43.5], [36, 44.5]], open:1, f:'#1d1e21', w:1}],
+    circles:[[48.5, 41.5, 2.2, '#e8eef2', '#555'], [-5, 22, 1, '#c4141f']]},
+  'Vespa|Primavera 50':{WB:52.4, rr:9, rf:9, rimR:6, H:44, wr:{cast:5, rim:'#c9ced3'}, col:'#9fd3c7', c2:'#1b1c1f',
+    parts:[{p:[[18, 11, 2], [40, 11, 2], [40, 14, 2], [18, 14, 2]], f:'#5b6067'},
+      {p:[[-6, 17, 8], [-3, 27, 10], [10, 31, 10], [20, 28, 6], [21, 16, 4], [12, 11, 4], [2, 11, 4]], f:'paint'}, {p:[[1, 29.5, 3], [4, 33.5, 4], [20, 33, 4], [21, 29.5, 2]], f:'#5a3a26'},
+      {p:[[52.4, 9], [46, 30]], open:1, f:'#9aa0a7', w:1.6}, {p:[[38, 13, 4], [43, 20, 6], [47, 37, 4], [43, 38.5, 3], [40, 26, 6], [35, 14, 3]], f:'paint'},
+      {p:[[41, 37, 3], [51, 38.5, 4], [51, 43.5, 3], [42, 42.5, 3]], f:'paint'}, {p:[[45, 13, 4], [53, 17, 6], [59, 13.5, 2], [54, 11, 2], [48, 10.5, 2]], f:'paint'},
+      {p:[[42, 43], [37, 44]], open:1, f:'#1d1e21', w:1}],
+    circles:[[49.5, 41, 2.4, '#e8eef2', '#9aa0a7']]},
+  // e-bikes: rear axle at x 0; the battery sits in or on the down tube
+  'Aventon|Level.2':{WB:44.5, rr:14.3, rf:14.3, rimR:12.6, H:44, wr:{spokes:32, rim:'#2b2d31', spokeC:'#b7bcc2', hub:2.2}, col:'#3c6e8f', c2:'#1b1c1f',
+    parts:[{p:[[-6, 25, 10], [0, 27.5, 10], [8, 25, 4]], open:1, f:'#1d1e21', w:1.2}, {p:[[38, 25, 10], [44.5, 28, 10], [52, 25, 4]], open:1, f:'#1d1e21', w:1.2},
+      {p:[[0, 14.3], [17, 11.5]], open:1, f:'paint', w:1.4}, {p:[[0, 14.3], [12, 30]], open:1, f:'paint', w:1.3}, {p:[[17, 11.5], [11, 32]], open:1, f:'paint', w:1.8},
+      {p:[[12, 30], [38, 33]], open:1, f:'paint', w:2}, {p:[[17, 11.5], [37, 30]], open:1, f:'paint', w:3.8}, {p:[[18.5, 13.5], [34.5, 28.5]], open:1, f:'#1d1e21', w:1.2, o:0.6},
+      {p:[[44.5, 14.3], [38, 34.5]], open:1, f:'#1d1e21', w:1.4}, {p:[[38, 34.5], [37, 38], [33, 38.5]], open:1, f:'#1d1e21', w:1.2},
+      {p:[[11, 32], [10.5, 36]], open:1, f:'#1d1e21', w:1}, {p:[[6, 36, 2], [14, 36.5, 2], [14, 38, 2], [6, 37.5, 2]], f:'#1d1e21'},
+      {p:[[-4, 29], [12, 29], [12, 27], [2, 16]], open:1, f:'#1d1e21', w:0.8}, {p:[[38.5, 31.5, 1], [41, 32, 1], [41, 30, 1], [38.5, 29.6, 1]], f:'#e8eef2'}],
+    circles:[[17, 11.5, 3.6, 'none', '#2b2d31'], [0, 14.3, 2.4, '#2b2d31']]},
+  'Rad Power Bikes|RadCity 5 Plus':{WB:46, rr:14, rf:14, rimR:12.2, H:44, wr:{spokes:36, rim:'#2b2d31', spokeC:'#9aa0a7', hub:3.2}, col:'#3a3c40', c2:'#1b1c1f',
+    parts:[{p:[[-6, 25, 10], [0, 27.3, 10], [8, 25, 4]], open:1, f:'#1d1e21', w:1.2}, {p:[[39, 25, 10], [46, 27.8, 10], [53, 25, 4]], open:1, f:'#1d1e21', w:1.2},
+      {p:[[0, 14], [17, 11.5]], open:1, f:'paint', w:1.6}, {p:[[0, 14], [12, 30]], open:1, f:'paint', w:1.4}, {p:[[17, 11.5], [11, 32]], open:1, f:'paint', w:2},
+      {p:[[12, 30], [39, 33]], open:1, f:'paint', w:2.2}, {p:[[17, 11.5], [38, 30]], open:1, f:'paint', w:2.4},
+      {p:[[21, 17, 1.5], [33, 27, 1.5], [36, 24, 1.5], [24, 14, 1.5]], f:'#1d1e21'}, {p:[[46, 14], [39, 35]], open:1, f:'#1d1e21', w:1.6},
+      {p:[[39, 35], [38, 39], [33, 39.5]], open:1, f:'#1d1e21', w:1.2}, {p:[[11, 32], [10.5, 36]], open:1, f:'#1d1e21', w:1}, {p:[[5, 36, 2], [14, 36.5, 2], [14, 38.5, 2], [5, 38, 2]], f:'#1d1e21'},
+      {p:[[-5, 29.5], [12, 29.5], [12, 27], [2, 16]], open:1, f:'#1d1e21', w:1}, {p:[[40, 33, 1], [43, 33.5, 1], [43, 31, 1], [40, 30.6, 1]], f:'#e8eef2'}],
+    circles:[[17, 11.5, 3.8, 'none', '#2b2d31']]},
+  'Specialized|Turbo Vado 4.0':{WB:45.5, rr:14.4, rf:14.4, rimR:12.6, H:44, wr:{spokes:32, rim:'#1d1e21', spokeC:'#b7bcc2'}, col:'#55634a', c2:'#1b1c1f',
+    parts:[{p:[[-6, 25, 10], [0, 27.6, 10], [8, 25, 4]], open:1, f:'#1d1e21', w:1.2}, {p:[[39, 25, 10], [45.5, 28, 10], [52, 25, 4]], open:1, f:'#1d1e21', w:1.2},
+      {p:[[0, 14.4], [17, 11.5]], open:1, f:'paint', w:1.5}, {p:[[0, 14.4], [12, 30.5]], open:1, f:'paint', w:1.4}, {p:[[17, 11.5], [11, 32]], open:1, f:'paint', w:2.2},
+      {p:[[12, 30.5], [38, 33.5]], open:1, f:'paint', w:2.3}, {p:[[17, 11.5], [38, 30.5]], open:1, f:'paint', w:4.2},
+      {p:[[14, 9, 3], [21, 9, 3], [21, 15, 3], [14, 15, 3]], f:'#2b2d31'}, {p:[[45.5, 14.4], [38.5, 35]], open:1, f:'#1d1e21', w:1.5},
+      {p:[[38.5, 35], [37, 38.5], [32, 39]], open:1, f:'#1d1e21', w:1.2}, {p:[[11, 32], [10.5, 36]], open:1, f:'#1d1e21', w:1}, {p:[[5.5, 36, 2], [14, 36.5, 2], [14, 38, 2], [5.5, 37.6, 2]], f:'#1d1e21'},
+      {p:[[-4, 29.5], [12, 29.5], [12, 27], [2, 16]], open:1, f:'#1d1e21', w:0.8}, {p:[[39, 33, 1], [42, 33.5, 1], [42, 31.3, 1], [39, 30.9, 1]], f:'#e8eef2'}],
+    circles:[[17.5, 12, 3.4, 'none', '#2b2d31']]},
+  'Trek|Allant+ 7':{WB:45, rr:14.4, rf:14.4, rimR:12.6, H:44, wr:{spokes:32, rim:'#1d1e21', spokeC:'#b7bcc2'}, col:'#1c3a5e', c2:'#1b1c1f',
+    parts:[{p:[[-6, 25, 10], [0, 27.6, 10], [8, 25, 4]], open:1, f:'#1d1e21', w:1.2}, {p:[[38.5, 25, 10], [45, 28, 10], [51.5, 25, 4]], open:1, f:'#1d1e21', w:1.2},
+      {p:[[0, 14.4], [17, 11.5]], open:1, f:'paint', w:1.5}, {p:[[0, 14.4], [12, 31]], open:1, f:'paint', w:1.3}, {p:[[17, 11.5], [11, 32.5]], open:1, f:'paint', w:2.2},
+      {p:[[12, 31], [38, 34]], open:1, f:'paint', w:2.2}, {p:[[17, 11.5], [38, 31]], open:1, f:'paint', w:4.4},
+      {p:[[14, 9, 3], [21, 9, 3], [21, 15, 3], [14, 15, 3]], f:'#2b2d31'}, {p:[[45, 14.4], [38.5, 35.5]], open:1, f:'#1d1e21', w:1.5},
+      {p:[[38.5, 35.5], [37.5, 39], [32.5, 39.5]], open:1, f:'#1d1e21', w:1.2}, {p:[[11, 32.5], [10.5, 36.5]], open:1, f:'#1d1e21', w:1}, {p:[[5.5, 36.5, 2], [14, 37, 2], [14, 38.6, 2], [5.5, 38.2, 2]], f:'#1d1e21'},
+      {p:[[-4, 30], [12, 30], [12, 27.5], [2, 16]], open:1, f:'#1d1e21', w:0.8}, {p:[[39, 33.5, 1], [42, 34, 1], [42, 31.8, 1], [39, 31.4, 1]], f:'#e8eef2'}],
+    circles:[[17.5, 12, 3.4, 'none', '#2b2d31']]},
+};
+// ---- motorhomes ----
+// x runs forward from the rear wall, y up from the ground, in inches
+function drawRV(p, c, id){
+  const L = p.L, s = Math.min(590 / L, 200 / p.H), x0 = (DW - L * s) / 2, X = x => r1(x0 + x * s), Y = y => r1(DG - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const fx = L - p.FO, rx = fx - p.WB, wr = p.TD / 2, cabL = p.cabL, bx = L - cabL, cabRoof = p.cabRoof, W = t => hexMix(c, '#ffffff', t), K = t => hexMix(c, '#000000', t);
+  const body = p.bodyC || '#f4f3ef';
+  let g = `<defs><linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${hexMix(body, '#ffffff', 0.6)}"/><stop offset=".55" stop-color="${body}"/><stop offset="1" stop-color="${hexMix(body, '#000000', 0.18)}"/></linearGradient>` +
+    `<linearGradient id="${id}gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6c7d8e"/><stop offset=".45" stop-color="#2c3742"/><stop offset="1" stop-color="#161c22"/></linearGradient></defs>`;
+  g += studio(id, (X(0) + X(L)) / 2, L * s / 2);
+  [fx, rx].forEach(x => { g += `<circle cx="${X(x)}" cy="${Y(wr)}" r="${r1((wr + 2) * s)}" fill="#111214"/>`; });
+  // the box and, on a Class C, the bunk over the cab
+  const box = p.sprinter && !p.overcab ? [[0, 16, 0], [0, p.H - 4, 5], [4, p.H, 5], [bx + 4, p.H, 30], [bx + 30, cabRoof + 6, 30], [bx + 38, cabRoof, 0], [bx, cabRoof, 0], [bx, 16, 0]]
+    : [[0, 16, 0], [0, p.H - 4, 5], [4, p.H, 5], [L - p.oc - 10, p.H, 12], [L - p.oc, p.H - 10, 10], [L - p.oc + 2, cabRoof + 4, 6], [L - p.oc - 8, cabRoof, 0], [bx, cabRoof, 0], [bx, 16, 0]];
+  const cab = [[bx - 2, 16, 0], [bx - 2, cabRoof, 0], [bx + cabL - p.ws[0], cabRoof, 6], [L - p.ws[1], p.hood[0], 4], [L - 3, p.hood[1], 8], [L, p.hood[1] - 8, 5], [L, 14, 3], [L - 6, 11, 0]];
+  g += `<path d="${rpath(P(cab), true)}" fill="${p.cabC ? p.cabC : `url(#${id}b)`}" stroke="#8a8f96" stroke-width=".8"/>`;
+  g += `<path d="${rpath(P(box), true)}" fill="url(#${id}b)" stroke="#8a8f96" stroke-width=".8"/>`;
+  // cab glass, doors and lights
+  g += `<path d="${rpath(P([[bx + 6, cabRoof - 4, 2], [bx + cabL - p.ws[0] - 2, cabRoof - 4, 3], [L - p.ws[1] - 4, p.hood[0] + 2, 2], [bx + 6, p.hood[0] + 2, 2]]), true)}" fill="url(#${id}gl)"/>` +
+    `<path d="M${X(bx + 4)},${Y(p.hood[0] + 1)} L${X(bx + 4)},${Y(18)}" stroke="#7d838a" stroke-width="1"/><rect x="${X(bx + 10)}" y="${Y(p.hood[0] - 4)}" width="${r1(6 * s)}" height="${r1(1.4 * s)}" fill="#55595f"/>` +
+    `<path d="${rpath(P([[L - 0.5, p.hood[1] - 2, 1], [L - 10, p.hood[1] - 0.5, 1], [L - 9, p.hood[1] - 5, 1], [L - 0.5, p.hood[1] - 6, 1]]), true)}" fill="#dfe6ec" stroke="#6f7881" stroke-width=".7"/>` +
+    `<rect x="${X(bx + 14)}" y="${Y(p.hood[0] + 4)}" width="${r1(7 * s)}" height="${r1(5 * s)}" rx="2" fill="#1b1c1f"/>`;
+  if(p.overcab) g += `<rect x="${X(L - p.oc - 18)}" y="${Y(p.H - 8)}" width="${r1(14 * s)}" height="${r1(8 * s)}" rx="${r1(2 * s)}" fill="url(#${id}gl)"/>`;
+  // the graphics swoosh in the paint color
+  g += `<clipPath id="${id}bx"><path d="${rpath(P(box), true)}"/></clipPath><g clip-path="url(#${id}bx)">`;
+  (p.swoosh || []).forEach(sw => { g += `<path d="${rpath(P(sw), true)}" fill="${sw.c2 ? p.c2 : c}" opacity=".95"/>`; });
+  g += '</g>';
+  // lower storage bays, windows, slide-out, entry door, awning
+  (p.bays || []).forEach(([x, w]) => { g += `<rect x="${X(x)}" y="${Y(36)}" width="${r1(w * s)}" height="${r1(16 * s)}" rx="${r1(1.5 * s)}" fill="none" stroke="#9aa0a7" stroke-width="1"/><rect x="${X(x + w / 2 - 2)}" y="${Y(29)}" width="${r1(4 * s)}" height="${r1(1.2 * s)}" fill="#6b7077"/>`; });
+  (p.slide || []).forEach(([x, w]) => { g += `<rect x="${X(x)}" y="${Y(p.H - 22)}" width="${r1(w * s)}" height="${r1((p.H - 60) * s)}" fill="none" stroke="#7d838a" stroke-width="1.6"/><rect x="${X(x)}" y="${Y(p.H - 22)}" width="${r1(w * s)}" height="2" fill="#000" opacity=".25"/>`; });
+  (p.win || []).forEach(([x, y, w, h]) => { g += `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" rx="${r1(2 * s)}" fill="url(#${id}gl)" stroke="#1b1c1f" stroke-width="1.4"/>`; });
+  if(p.door){ const [x, w] = p.door; g += `<rect x="${X(x)}" y="${Y(84)}" width="${r1(w * s)}" height="${r1(66 * s)}" rx="${r1(2 * s)}" fill="url(#${id}b)" stroke="#7d838a" stroke-width="1.2"/><rect x="${X(x + 4)}" y="${Y(78)}" width="${r1((w - 8) * s)}" height="${r1(16 * s)}" rx="${r1(2 * s)}" fill="url(#${id}gl)"/><rect x="${X(x + w - 6)}" y="${Y(52)}" width="${r1(1.5 * s)}" height="${r1(6 * s)}" fill="#55595f"/><rect x="${X(x - 2)}" y="${Y(18)}" width="${r1((w + 4) * s)}" height="${r1(3 * s)}" fill="#3a3d42"/>`; }
+  if(p.awning) g += `<rect x="${X(p.awning[0])}" y="${Y(p.H - 6)}" width="${r1((p.awning[1] - p.awning[0]) * s)}" height="${r1(5 * s)}" rx="${r1(2.5 * s)}" fill="#e5e6e2" stroke="#9aa0a7"/>`;
+  g += `<rect x="${X(20)}" y="${Y(p.H + 9)}" width="${r1(30 * s)}" height="${r1(9 * s)}" rx="${r1(3 * s)}" fill="#e9e9e5" stroke="#9aa0a7"/>` + (p.ladder ? `<path d="M${X(1.5)},${Y(p.H - 2)} L${X(1.5)},${Y(40)}" stroke="#6b7077" stroke-width="1.5"/>` : '');
+  g += `<path d="${rpath(P([[0.4, 40, 1], [3, 40, 1], [3, 30, 1], [0.4, 30, 1]]), true)}" fill="#b5141f"/>`;
+  g += `<rect x="${X(rx - wr - 14)}" y="${Y(20)}" width="${r1((wr * 2 + 28) * s)}" height="${r1(5 * s)}" fill="#1b1c1f" opacity=".7"/>`;
+  [fx, rx].forEach(x => { g += drawWheel(id, X(x), Y(wr), wr * s, (p.rim / 2) * s, x === rx ? {t:'steel', n:8, fin:'silver'} : {t:'steel', n:8, fin:'silver'}); });
+  g += `<ellipse cx="${X(fx)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/><ellipse cx="${X(rx)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/>`;
+  return g;
+}
+const RV_SPECS = {
+  'Thor|Four Winds 31':{L:395, H:135, WB:208, FO:36, TD:31, rim:16, cabL:110, cabRoof:84, oc:34, overcab:1, ws:[52, 34], hood:[50, 40], col:'#3d6b7a', ladder:1,
+    win:[[40, 70, 34, 26], [150, 66, 44, 30], [262, 66, 22, 18]], slide:[[100, 120]], door:[218, 30], bays:[[16, 30], [56, 36], [104, 36], [148, 40], [254, 26]], awning:[150, 280],
+    swoosh:[[[0, 50, 0], [120, 48, 40], [260, 62, 40], [361, 100, 10], [361, 92, 10], [260, 54, 40], [120, 42, 40], [0, 44, 0]]]},
+  'Jayco|Greyhawk 30':{L:390, H:135, WB:208, FO:36, TD:31, rim:16, cabL:110, cabRoof:84, oc:34, overcab:1, ws:[52, 34], hood:[50, 40], col:'#8a4a2a', c2:'#3a3d42', ladder:1,
+    win:[[36, 72, 30, 24], [140, 66, 40, 30], [260, 66, 20, 18]], slide:[[90, 130]], door:[214, 30], bays:[[16, 30], [54, 34], [100, 34], [146, 40], [250, 26]], awning:[140, 275],
+    swoosh:[[[0, 56, 0], [100, 60, 40], [220, 54, 40], [356, 96, 10], [356, 90, 10], [220, 47, 40], [100, 52, 40], [0, 50, 0]], Object.assign([[0, 46, 0], [90, 48, 40], [356, 86, 10], [356, 83, 10], [90, 44, 40], [0, 43, 0]], {c2:1})]},
+  'Winnebago|View 24':{L:300, H:131, WB:170, FO:36, TD:29, rim:16, cabL:96, cabRoof:86, oc:30, overcab:1, sprinter:1, ws:[58, 30], hood:[46, 36], col:'#5a6470',
+    win:[[30, 70, 28, 24], [110, 66, 36, 28], [186, 68, 16, 16]], slide:[[70, 90]], door:[160, 26], bays:[[14, 26], [48, 30], [86, 34], [124, 28]], awning:[110, 200],
+    swoosh:[[[0, 52, 0], [90, 46, 40], [200, 60, 30], [270, 104, 10], [270, 98, 10], [200, 54, 30], [90, 40, 40], [0, 46, 0]]]},
+  'Airstream|Atlas':{L:298, H:122, WB:170, FO:36, TD:29, rim:16, cabL:96, cabRoof:86, sprinter:1, ws:[58, 30], hood:[46, 36], col:'#2b2e33', bodyC:'#d4d8dc', cabC:'#d4d8dc',
+    win:[[26, 72, 40, 22], [96, 72, 60, 22], [170, 72, 26, 22]], slide:[[90, 80]], door:[160, 26], bays:[[14, 26], [48, 30], [86, 34], [124, 28]], awning:[96, 200],
+    swoosh:[[[0, 44, 0], [202, 44, 0], [202, 38, 0], [0, 38, 0]]]},
+};
+// ---- boats: x runs forward from the transom, y up from the waterline, in inches ----
+function seaScene(id, cx, half){
+  return `<defs><linearGradient id="${id}sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ec5ea"/><stop offset="1" stop-color="#e3f1f9"/></linearGradient>` +
+    `<linearGradient id="${id}sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f86b5"/><stop offset="1" stop-color="#1d5480"/></linearGradient></defs>` +
+    `<rect width="${DW}" height="${DH}" fill="url(#${id}sk)"/><path d="M0,${DG - 50} Q120,${DG - 66} 220,${DG - 54} T420,${DG - 58} T640,${DG - 52} L640,${DG - 40} L0,${DG - 40}Z" fill="#8fb3a3" opacity=".6"/>` +
+    `<rect y="${DG - 40}" width="${DW}" height="${DH - DG + 40}" fill="url(#${id}sea)"/>` +
+    [[60, 30], [200, 12], [330, 34], [470, 18], [560, 40], [110, 58], [420, 62]].map(([x, y]) => `<path d="M${x},${DG - 40 + y} q10,-3 20,0 q10,3 20,0" stroke="#fff" stroke-opacity=".35" stroke-width="1.2" fill="none"/>`).join('');
+}
+function drawBoat(p, c, id){
+  const L = p.L, s = Math.min(480 / L, 200 / (p.mast || p.top || 80)), x0 = (DW - L * s) / 2, wl = DG - 14, X = x => r1(x0 + x * s), Y = y => r1(wl - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const hullC = p.hullC || '#f6f6f2', W = t => hexMix(hullC, '#ffffff', t), K = t => hexMix(hullC, '#000000', t);
+  let g = seaScene(id) + `<defs><linearGradient id="${id}h" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${W(0.5)}"/><stop offset=".5" stop-color="${hullC}"/><stop offset="1" stop-color="${K(0.22)}"/></linearGradient>` +
+    `<linearGradient id="${id}gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6c7d8e"/><stop offset=".45" stop-color="#2c3742"/><stop offset="1" stop-color="#161c22"/></linearGradient>` +
+    `<linearGradient id="${id}sl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e9e6dc"/><stop offset=".6" stop-color="#ffffff"/><stop offset="1" stop-color="#f1efe8"/></linearGradient></defs>`;
+  // sails go behind the rigging
+  if(p.mast){ const [mx, mh] = [p.mastX, p.mast], boom = p.boom || 6;
+    if(p.jib) g += `<path d="M${X(mx + 1)},${Y(mh * 0.86)} Q${X(mx + (L - mx) * 0.5)},${Y(mh * 0.45)} ${X(L - 2)},${Y(p.sheer[1] + 1)} L${X(mx + 4)},${Y(p.sheer[1] + 3)}Z" fill="url(#${id}sl)" stroke="#cfcbbf" stroke-width=".8"/>`;
+    g += `<path d="M${X(mx - 1)},${Y(mh - 2)} Q${X(mx - (p.boomL || mx * 0.8) * 0.45)},${Y(mh * 0.5)} ${X(mx - (p.boomL || mx * 0.8))},${Y(p.sheer[0] + boom + 2)} L${X(mx - 1)},${Y(p.sheer[0] + boom + 2)}Z" fill="${p.sailC || `url(#${id}sl)`}" stroke="#cfcbbf" stroke-width=".8"/>`;
+    (p.stripes || []).forEach(([a, b, col]) => { g += `<path d="M${X(mx - 1)},${Y(mh * a)} L${X(mx - (p.boomL || mx * 0.8) * (1 - a) - 2)},${Y(mh * a)} L${X(mx - (p.boomL || mx * 0.8) * (1 - b) - 2)},${Y(mh * b)} L${X(mx - 1)},${Y(mh * b)}Z" fill="${col}" opacity=".9"/>`; });
+    g += `<path d="M${X(mx)},${Y(mh)} L${X(mx)},${Y(p.sheer[1] - 2)}" stroke="#a4a9ae" stroke-width="${r1(Math.max(1.6, 4 * s))}"/><path d="M${X(mx)},${Y(mh * 0.9)} L${X(L - 1)},${Y(p.sheer[1] + 1)} M${X(mx)},${Y(mh * 0.95)} L${X(2)},${Y(p.sheer[0] + 2)}" stroke="#7d838a" stroke-width=".6"/>` +
+      `<path d="M${X(mx)},${Y(p.sheer[0] + boom + 2)} L${X(mx - (p.boomL || mx * 0.8))},${Y(p.sheer[0] + boom + 2)}" stroke="#6b7077" stroke-width="2.2"/>`; }
+  // superstructure behind the hull's sheer
+  (p.decks || []).forEach(d => { g += `<path d="${rpath(P(d.p), true)}" fill="${d.f === 'paint' ? c : d.f || `url(#${id}h)`}" stroke="${d.s || '#9aa0a7'}" stroke-width=".8"/>`; });
+  (p.glass || []).forEach(gp => { g += `<path d="${rpath(P(gp), true)}" fill="url(#${id}gl)" opacity=".92"/>`; });
+  if(p.tower) g += `<path d="${rpath(P(p.tower), false)}" fill="none" stroke="#2b2d31" stroke-width="${r1(3 * s)}" stroke-linejoin="round"/>`;
+  (p.heads || []).forEach(x => { g += `<rect x="${X(x)}" y="${Y(p.sheer[0] + 14)}" width="${r1(7 * s)}" height="${r1(12 * s)}" rx="${r1(3 * s)}" fill="#2b2f35"/>`; });
+  // the hull: sheer, bow, keel and transom
+  const sh = p.sheer, hull = [[0, sh[0], 2], [L * 0.5, (sh[0] + sh[1]) / 2 - (p.dip || 1), L * 0.4], [L - (p.bowIn || 6), sh[1], 4], [L, sh[1] - 2, 3], [L - (p.rake || 30), -10, 20], [L * 0.3, -12, 30], [0, -10, 2]];
+  g += `<path d="${rpath(P(hull), true)}" fill="url(#${id}h)" stroke="${K(0.35)}" stroke-width=".9"/>`;
+  if(p.stripe) g += `<path d="${rpath(P([[0, sh[0] - p.stripe[0], 0], [L * 0.5, (sh[0] + sh[1]) / 2 - p.stripe[0] - (p.dip || 1), L * 0.4], [L - (p.rake || 30) * 0.15 - 2, sh[1] - p.stripe[0] - 2, 0], [L - (p.rake || 30) * 0.3, sh[1] - p.stripe[0] - p.stripe[1] - 3, 0], [L * 0.5, (sh[0] + sh[1]) / 2 - p.stripe[0] - p.stripe[1] - (p.dip || 1), L * 0.4], [0, sh[0] - p.stripe[0] - p.stripe[1], 0]]), true)}" fill="${c}"/>`;
+  if(p.hullWin) p.hullWin.forEach(([x, y, w, h]) => { g += `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" rx="${r1(h * s / 2)}" fill="#1c2a36"/>`; });
+  (p.ports || []).forEach(x => { g += `<ellipse cx="${X(x)}" cy="${Y(sh[0] + 4)}" rx="${r1(3 * s)}" ry="${r1(1.5 * s)}" fill="#1c2a36"/>`; });
+  g += `<path d="M${X(-1)},${Y(sh[0] + 0.5)} ${rpath(P([[L * 0.5, (sh[0] + sh[1]) / 2 - (p.dip || 1) + 0.5, L * 0.4], [L - (p.bowIn || 6), sh[1] + 0.5, 4]]), false, true).slice(1)}" fill="none" stroke="#d9dde1" stroke-width="${r1(Math.max(1.2, 1.4 * s))}"/>`;
+  if(p.rail) g += `<path d="M${X(p.rail[0])},${Y(p.rail[1])} L${X(L - 4)},${Y(sh[1] + p.rail[2])}" stroke="#d0d5da" stroke-width="1.4"/>`;
+  if(p.motor) g += `<path d="${rpath(P([[-2, sh[0] + 6, 2], [-12, sh[0] + 8, 4], [-14, sh[0] - 6, 3], [-6, -14, 2], [-3, -14, 0], [-1, sh[0] - 6, 0]]), true)}" fill="${p.motor}"/>`;
+  // the water line, a bow wave and the reflection
+  g += `<rect x="${X(-16)}" y="${wl}" width="${r1((L + 20) * s)}" height="${DH - wl}" fill="#1d5480" opacity=".55"/><path d="M${X(L - (p.rake || 30) * 0.4)},${wl} q${r1(10 * s)},-${r1(3 * s)} ${r1(30 * s)},2" stroke="#fff" stroke-width="2" fill="none" opacity=".7"/>` +
+    `<ellipse cx="${X(L / 2)}" cy="${wl + 6}" rx="${r1(L * s * 0.55)}" ry="5" fill="#fff" opacity=".18"/>`;
+  return g;
+}
+const BOAT_SPECS = {
+  'Hobie|Getaway':{L:199, mast:310, mastX:100, boomL:84, boom:30, sheer:[22, 24], dip:-2, bowIn:2, rake:24, jib:1, col:'#d12f2f', hullC:'#f2f2ee',
+    decks:[{p:[[16, 22, 0], [190, 24, 0], [190, 30, 0], [16, 28, 0]], f:'#2b2d31'}], sailC:'#f6f4ee', stripes:[[0.62, 0.7, '#d12f2f'], [0.48, 0.56, '#f0a12a'], [0.34, 0.42, '#2a7fd1']]},
+  'J/Boats|J/70':{L:273, mast:380, mastX:150, boomL:118, boom:14, sheer:[24, 30], rake:40, jib:1, col:'#1d2e4a', hullC:'#1d2e4a', stripe:null,
+    decks:[{p:[[30, 24, 0], [180, 28, 0], [176, 34, 4], [120, 35, 4], [110, 31, 2], [30, 29, 0]], f:'#e9e9e3'}]},
+  'Beneteau|First 24':{L:288, mast:400, mastX:160, boomL:128, boom:16, sheer:[26, 32], rake:44, jib:1, col:'#2e6db0', hullC:'#f2f2ee', stripe:[6, 3],
+    decks:[{p:[[40, 26, 0], [200, 31, 0], [190, 40, 6], [110, 42, 6], [96, 34, 2], [40, 31, 0]], f:'#efefe9'}], ports:[130, 150, 170]},
+  'Catalina|275 Sport':{L:330, mast:440, mastX:180, boomL:150, boom:18, sheer:[30, 38], rake:52, jib:1, col:'#1f4f8f', hullC:'#f4f4f0', stripe:[7, 4],
+    decks:[{p:[[50, 30, 0], [230, 37, 0], [220, 50, 8], [124, 52, 8], [108, 40, 2], [50, 36, 0]], f:'#efefe9'}], glass:[[[140, 44, 2], [210, 44, 2], [206, 48, 2], [142, 48, 2]]]},
+  'Bayliner|VR5':{L:228, top:70, sheer:[28, 34], rake:56, dip:2, col:'#c4282f', hullC:'#f6f6f2', stripe:[5, 6], motor:'#1b1c1f', heads:[70, 104],
+    decks:[{p:[[112, 32, 0], [124, 46, 3], [142, 47, 3], [138, 33, 0]], f:'#f2f2ee'}], glass:[[[124, 46, 2], [134, 58, 3], [152, 56, 3], [142, 46.5, 2]]], rail:[150, 35, 4]},
+  'Sea Ray|SPX 210':{L:252, top:76, sheer:[30, 36], rake:60, dip:2, col:'#1f3f6f', hullC:'#f6f6f2', stripe:[6, 8], motor:'#f2f2ee', heads:[80, 116],
+    decks:[{p:[[124, 34, 0], [136, 48, 3], [156, 49, 3], [152, 35, 0]], f:'#f2f2ee'}], glass:[[[136, 48, 2], [146, 60, 3], [166, 58, 3], [156, 48.5, 2]]], rail:[164, 37, 4]},
+  'MasterCraft|XT22':{L:264, top:120, sheer:[34, 40], rake:64, dip:2, col:'#2a2d33', hullC:'#2a2d33', stripe:[4, 3], heads:[80, 120],
+    decks:[{p:[[130, 38, 0], [142, 52, 3], [162, 53, 3], [158, 39, 0]], f:'#e9e9e3'}], glass:[[[142, 52, 2], [152, 62, 3], [170, 60, 3], [162, 52.5, 2]]], tower:[[86, 38, 0], [96, 108, 8], [140, 108, 8], [134, 40, 0]]},
+  'Chris-Craft|Launch 25 GT':{L:300, top:84, sheer:[34, 42], rake:70, dip:1, col:'#7a4a2a', hullC:'#f3efe4', stripe:[5, 3], motor:'#f3efe4', heads:[96, 134],
+    decks:[{p:[[0, 34, 0], [40, 35, 0], [40, 38, 0], [0, 37, 0]], f:'#8a5a32'}, {p:[[184, 38, 0], [300, 41, 0], [296, 43, 0], [184, 40.5, 0]], f:'#8a5a32'}, {p:[[150, 36, 0], [162, 52, 3], [184, 53, 3], [178, 37, 0]], f:'#f3efe4'}],
+    glass:[[[162, 52, 2], [172, 64, 3], [194, 62, 3], [184, 52.5, 2]]], rail:[186, 42, 3]},
+  'Ferretti|500':{L:600, top:190, sheer:[56, 70], rake:110, dip:2, col:'#2b2e33', hullC:'#f6f6f2', hullWin:[[250, 40, 70, 7], [340, 42, 50, 7]],
+    decks:[{p:[[40, 56, 0], [470, 66, 0], [440, 104, 10], [140, 108, 10], [100, 70, 0], [40, 70, 0]], f:`#f6f6f2`}, {p:[[140, 108, 0], [380, 108, 0], [360, 136, 6], [200, 138, 6], [170, 108, 0]], f:'#f6f6f2'},
+      {p:[[190, 138, 0], [330, 138, 0], [320, 150, 4], [200, 150, 4]], f:'#2b2d31'}], glass:[[[150, 74, 3], [430, 74, 3], [410, 98, 4], [160, 100, 4]], [[220, 114, 2], [350, 114, 2], [340, 128, 2], [226, 130, 2]]], rail:[380, 140, 0]},
+  'Azimut|60 Fly':{L:720, top:220, sheer:[64, 80], rake:130, dip:2, col:'#2b2e33', hullC:'#f6f6f2', hullWin:[[300, 46, 110, 9], [430, 50, 60, 8]],
+    decks:[{p:[[50, 64, 0], [560, 76, 0], [520, 124, 12], [170, 128, 12], [120, 80, 0], [50, 80, 0]], f:'#f6f6f2'}, {p:[[170, 128, 0], [460, 128, 0], [430, 160, 6], [240, 162, 6], [200, 128, 0]], f:'#f6f6f2'},
+      {p:[[230, 162, 0], [400, 162, 0], [390, 176, 4], [240, 176, 4]], f:'#2b2d31'}], glass:[[[180, 86, 3], [510, 86, 3], [488, 118, 4], [196, 120, 4]], [[260, 136, 2], [420, 136, 2], [404, 152, 2], [266, 154, 2]]]},
+  'Sunseeker|Predator 65':{L:780, top:180, sheer:[62, 76], rake:150, dip:2, col:'#3d4248', hullC:'#3d4248', hullWin:[[320, 44, 140, 8]],
+    decks:[{p:[[60, 62, 0], [620, 74, 0], [560, 112, 14], [220, 120, 14], [160, 78, 0], [60, 76, 0]], f:'#f4f4f0'}, {p:[[240, 120, 0], [460, 118, 0], [440, 126, 4], [250, 128, 4]], f:'#2b2d31'}],
+    glass:[[[230, 84, 3], [580, 82, 3], [550, 106, 6], [240, 112, 6]]]},
+  'Princess|Y72':{L:870, top:250, sheer:[72, 90], rake:150, dip:2, col:'#2b2e33', hullC:'#f6f6f2', hullWin:[[360, 50, 150, 10], [540, 56, 70, 9]],
+    decks:[{p:[[60, 72, 0], [680, 86, 0], [630, 140, 14], [200, 146, 14], [150, 90, 0], [60, 90, 0]], f:'#f6f6f2'}, {p:[[200, 146, 0], [560, 146, 0], [520, 184, 8], [290, 186, 8], [240, 146, 0]], f:'#f6f6f2'},
+      {p:[[280, 186, 0], [490, 186, 0], [478, 200, 4], [290, 200, 4]], f:'#2b2d31'}], glass:[[[210, 98, 3], [620, 98, 3], [594, 134, 4], [230, 138, 4]], [[300, 154, 2], [510, 154, 2], [490, 174, 2], [306, 176, 2]]]},
+};
+// ---- business jets: x runs forward from the tail, y up, in inches; drawn in flight ----
+function skyScene(id){
+  return `<defs><linearGradient id="${id}sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5f9fd6"/><stop offset="1" stop-color="#d7ebf8"/></linearGradient></defs><rect width="${DW}" height="${DH}" fill="url(#${id}sk)"/>` +
+    `<g fill="#fff" opacity=".85"><ellipse cx="90" cy="240" rx="80" ry="18"/><ellipse cx="140" cy="228" rx="50" ry="20"/><ellipse cx="520" cy="60" rx="60" ry="12"/><ellipse cx="560" cy="52" rx="34" ry="12"/><ellipse cx="420" cy="262" rx="110" ry="16"/></g>`;
+}
+function drawJet(p, c, id){
+  const L = p.L, s = 580 / L, x0 = (DW - L * s) / 2, cy = 168, X = x => r1(x0 + x * s), Y = y => r1(cy - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const D = p.D, top = D / 2, bot = -D / 2;
+  let g = skyScene(id) + `<defs><linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eef0f2"/><stop offset="1" stop-color="#b9c0c7"/></linearGradient>` +
+    `<linearGradient id="${id}e" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f5f6"/><stop offset="1" stop-color="#9aa1a8"/></linearGradient></defs>`;
+  // far wing, tail fin and stabilizer
+  g += `<path d="${rpath(P(p.wing), true)}" fill="#c9ced3" stroke="#9aa1a8" stroke-width=".8"/>`;
+  g += `<path d="${rpath(P(p.fin), true)}" fill="url(#${id}f)" stroke="#9aa1a8" stroke-width=".8"/>`;
+  if(p.finStripe) g += `<path d="${rpath(P(p.finStripe), true)}" fill="${c}"/>`;
+  // the fuselage: tail cone, cabin tube and nose
+  const fus = [[0, p.tailY + 4, 2], [p.tailL, top, p.tailL * 0.8], [L - p.noseL, top, p.noseL * 0.5], [L - p.noseL * 0.35, top * 0.35, p.noseL * 0.4], [L, -D * 0.12, 8], [L - p.noseL * 0.4, bot * 0.9, p.noseL * 0.4], [L - p.noseL * 1.2, bot, p.noseL], [p.tailL * 1.3, bot, p.tailL], [0, p.tailY - 3, 2]];
+  g += `<path d="${rpath(P(fus), true)}" fill="url(#${id}f)" stroke="#8d949b" stroke-width=".9"/>`;
+  (p.stripes || []).forEach(sp => { g += `<path d="${rpath(P(sp), true)}" fill="${sp.c2 ? (p.c2 || '#c9a24a') : c}"/>`; });
+  // cockpit glass and cabin windows
+  g += `<path d="${rpath(P(p.cockpit), true)}" fill="#1f2b36" stroke="#56606a" stroke-width=".6"/>`;
+  for(let i = 0; i < p.win.n; i++){ const x = p.win.x + i * p.win.gap; g += p.win.oval ? `<ellipse cx="${X(x)}" cy="${Y(p.win.y)}" rx="${r1(p.win.w / 2 * s)}" ry="${r1(p.win.h / 2 * s)}" fill="#1f2b36" stroke="#8d949b" stroke-width=".5"/>` : `<rect x="${X(x - p.win.w / 2)}" y="${Y(p.win.y + p.win.h / 2)}" width="${r1(p.win.w * s)}" height="${r1(p.win.h * s)}" rx="${r1(p.win.w * 0.35 * s)}" fill="#1f2b36" stroke="#8d949b" stroke-width=".5"/>`; }
+  if(p.door) g += `<rect x="${X(p.door[0])}" y="${Y(top * 0.6)}" width="${r1(p.door[1] * s)}" height="${r1(D * 0.8 * s)}" rx="${r1(5 * s)}" fill="none" stroke="#9aa1a8" stroke-width=".9"/>`;
+  // the near-side wing, then the engine
+  g += `<path d="${rpath(P(p.wingNear), true)}" fill="url(#${id}e)" stroke="#8d949b" stroke-width=".8"/>`;
+  const [ex, ey, el, eh] = p.eng;
+  if(p.pylon) g += `<path d="${rpath(P(p.pylon), true)}" fill="#c9ced3" stroke="#8d949b" stroke-width=".7"/>`;
+  g += `<path d="${rpath(P([[ex, ey + eh * 0.3, eh * 0.3], [ex + el * 0.15, ey + eh / 2, eh * 0.4], [ex + el, ey + eh / 2, eh * 0.3], [ex + el, ey - eh / 2, eh * 0.3], [ex + el * 0.15, ey - eh / 2, eh * 0.4], [ex, ey - eh * 0.3, eh * 0.3]]), true)}" fill="url(#${id}e)" stroke="#7d848c" stroke-width=".9"/>` +
+    `<rect x="${X(ex + el - 3)}" y="${Y(ey + eh / 2)}" width="${r1(3 * s)}" height="${r1(eh * s)}" fill="#3a3d42"/>` + (p.engStripe ? `<rect x="${X(ex + el * 0.3)}" y="${Y(ey + eh / 2 - 2)}" width="${r1(el * 0.4 * s)}" height="${r1(4 * s)}" fill="${c}"/>` : '');
+  if(p.stab) g += `<path d="${rpath(P(p.stab), true)}" fill="url(#${id}e)" stroke="#8d949b" stroke-width=".8"/>`;
+  return g;
+}
+const JET_SPECS = {
+  'HondaJet|Elite II':{L:511, D:66, tailL:120, noseL:90, tailY:14, col:'#1f3f8f', c2:'#c9a24a',
+    fin:[[10, 30, 2], [40, 101, 4], [78, 101, 4], [92, 30, 0]], stab:[[16, 99, 2], [92, 101, 2], [94, 105, 2], [26, 105, 2]],
+    wing:[[230, -26, 0], [300, -26, 0], [330, -36, 0], [260, -36, 0]], wingNear:[[200, -22, 2], [330, -22, 4], [340, -32, 2], [240, -34, 2]],
+    pylon:[[214, -20, 0], [244, -20, 0], [240, 18, 0], [224, 18, 0]], eng:[160, 30, 110, 34], cockpit:[[440, 18, 2], [478, 10, 6], [490, 2, 2], [452, 4, 2]],
+    win:{n:5, x:290, gap:28, y:6, w:15, h:18, oval:0}, door:[400, 30], stripes:[[[90, -6, 0], [510, -4, 0], [500, -12, 0], [90, -14, 0]], Object.assign([[90, -16, 0], [500, -14, 0], [490, -18, 0], [90, -20, 0]], {c2:1})], finStripe:[[40, 79, 0], [76, 79, 0], [78, 91, 0], [42, 91, 0]]},
+  'Embraer|Phenom 300E':{L:614, D:72, tailL:150, noseL:100, tailY:14, col:'#2b2e33', c2:'#9a1f2a',
+    fin:[[20, 30, 2], [50, 108, 4], [90, 108, 4], [118, 30, 0]], stab:[[26, 107, 2], [112, 108, 2], [114, 112, 2], [36, 112, 2]],
+    wing:[[290, -30, 0], [370, -30, 0], [400, -40, 0], [320, -40, 0]], wingNear:[[260, -26, 2], [400, -26, 4], [410, -38, 2], [300, -40, 2]],
+    eng:[120, 22, 110, 38], pylon:[[200, 10, 0], [236, 10, 0], [236, 20, 0], [200, 20, 0]], cockpit:[[530, 20, 2], [572, 10, 6], [586, 2, 2], [544, 4, 2]],
+    win:{n:6, x:270, gap:38, y:8, w:16, h:20}, door:[490, 34], stripes:[[[150, -10, 0], [612, -6, 0], [600, -14, 0], [150, -18, 0]], Object.assign([[150, -20, 0], [600, -16, 0], [590, -20, 0], [150, -24, 0]], {c2:1})], finStripe:[[50, 86, 0], [88, 86, 0], [90, 98, 0], [52, 98, 0]]},
+  'Cessna|Citation CJ4 Gen2':{L:640, D:68, tailL:150, noseL:110, tailY:14, col:'#7a1f2b', c2:'#2b2e33',
+    fin:[[20, 30, 2], [48, 101, 4], [86, 101, 4], [116, 30, 0]], stab:[[30, 60, 2], [120, 62, 2], [122, 66, 2], [40, 66, 2]],
+    wing:[[300, -28, 0], [380, -28, 0], [410, -38, 0], [330, -38, 0]], wingNear:[[270, -24, 2], [410, -24, 4], [420, -36, 2], [310, -38, 2]],
+    eng:[130, 22, 108, 36], pylon:[[210, 10, 0], [240, 10, 0], [240, 20, 0], [210, 20, 0]], cockpit:[[552, 18, 2], [596, 10, 6], [610, 2, 2], [566, 4, 2]],
+    win:{n:6, x:290, gap:38, y:6, w:16, h:22, oval:1}, door:[510, 32], stripes:[[[150, -8, 0], [636, -4, 0], [626, -12, 0], [150, -16, 0]], Object.assign([[150, -18, 0], [626, -14, 0], [616, -18, 0], [150, -22, 0]], {c2:1})], finStripe:[[48, 79, 0], [84, 79, 0], [86, 91, 0], [50, 91, 0]]},
+  'Pilatus|PC-24':{L:662, D:74, tailL:150, noseL:110, tailY:16, col:'#2b2e33', c2:'#b8101a',
+    fin:[[20, 32, 2], [50, 109, 4], [92, 109, 4], [120, 32, 0]], stab:[[26, 108, 2], [116, 109, 2], [118, 114, 2], [36, 114, 2]],
+    wing:[[300, -32, 0], [380, -32, 0], [410, -42, 0], [330, -42, 0]], wingNear:[[270, -28, 2], [410, -28, 4], [420, -40, 2], [310, -42, 2]],
+    eng:[134, 24, 112, 38], pylon:[[214, 12, 0], [246, 12, 0], [246, 22, 0], [214, 22, 0]], cockpit:[[572, 20, 2], [618, 10, 6], [632, 2, 2], [586, 4, 2]],
+    win:{n:7, x:270, gap:36, y:8, w:16, h:20}, door:[150, 50], stripes:[[[150, -10, 0], [658, -6, 0], [648, -14, 0], [150, -18, 0]], Object.assign([[150, -20, 0], [648, -16, 0], [638, -20, 0], [150, -24, 0]], {c2:1})], finStripe:[[50, 89, 0], [90, 89, 0], [92, 101, 0], [52, 101, 0]]},
+  'Gulfstream|G650ER':{L:1198, D:110, tailL:250, noseL:170, tailY:24, col:'#1f2a3a', c2:'#9aa1a8',
+    fin:[[30, 36, 2], [90, 194, 6], [160, 194, 6], [210, 36, 0]], stab:[[40, 192, 2], [200, 194, 2], [204, 202, 2], [56, 202, 2]],
+    wing:[[540, -48, 0], [700, -48, 0], [760, -64, 0], [600, -64, 0]], wingNear:[[500, -42, 2], [760, -42, 4], [780, -60, 2], [580, -64, 2]],
+    eng:[220, 38, 190, 62], pylon:[[350, 20, 0], [400, 20, 0], [400, 34, 0], [350, 34, 0]], cockpit:[[1040, 30, 2], [1118, 16, 8], [1140, 4, 2], [1060, 6, 2]],
+    win:{n:7, x:500, gap:62, y:12, w:30, h:40, oval:1}, door:[980, 56], stripes:[[[250, -18, 0], [1190, -12, 0], [1170, -24, 0], [250, -30, 0]]], finStripe:[[90, 158, 0], [156, 158, 0], [158, 177, 0], [92, 177, 0]]},
+};
+// ---------- House drawings ----------
+// Each home type is drawn as a front view in feet (x from the left, y up from the ground), with its own setting.
+// What the owner has done to it shows: exterior paint, a new roof, solar panels, a pool, a deck, a garden,
+// a fence, an added garage or wing, a chimney with a fire going, cameras, an EV charger and furnished rooms.
+function houseKit(id, s, x0, G){
+  const X = x => r1(x0 + x * s), Y = y => r1(G - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
+  const K = (c, t) => hexMix(c, '#000000', t), W = (c, t) => hexMix(c, '#ffffff', t);
+  const k = {X, Y, P, s, K, W};
+  let pat = 0;
+  // wall materials as overlays: lap siding, brick, logs, board and batten, stone, stucco
+  k.wall = (x, y, w, h, c, mat) => {
+    let o = `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="${c}"/>`;
+    const pid = id + 'pt' + (++pat);
+    if(mat === 'siding') o += `<defs><pattern id="${pid}" width="8" height="${r1(0.55 * s)}" patternUnits="userSpaceOnUse"><rect width="8" height="1" fill="${K(c, 0.18)}" y="${r1(0.55 * s) - 1}"/><rect width="8" height=".6" fill="#fff" opacity=".35"/></pattern></defs>`;
+    if(mat === 'brick') o += `<defs><pattern id="${pid}" width="${r1(0.75 * s)}" height="${r1(0.5 * s)}" patternUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="none"/><path d="M0,${r1(0.25 * s)} H${r1(0.75 * s)} M0,${r1(0.5 * s) - 0.5} H${r1(0.75 * s)} M${r1(0.375 * s)},0 V${r1(0.25 * s)} M0,${r1(0.25 * s)} V${r1(0.5 * s)}" stroke="#e8e0d4" stroke-width=".7" opacity=".55"/></pattern></defs>`;
+    if(mat === 'log') o += `<defs><pattern id="${pid}" width="8" height="${r1(0.9 * s)}" patternUnits="userSpaceOnUse"><rect width="8" height="${r1(0.9 * s)}" fill="url(#${id}lg)"/></pattern></defs>`;
+    if(mat === 'board') o += `<defs><pattern id="${pid}" width="${r1(1.2 * s)}" height="8" patternUnits="userSpaceOnUse"><rect width="1.2" height="8" fill="${K(c, 0.15)}"/></pattern></defs>`;
+    if(mat === 'stone') o += `<defs><pattern id="${pid}" width="${r1(2 * s)}" height="${r1(1.2 * s)}" patternUnits="userSpaceOnUse"><path d="M0,${r1(0.6 * s)} H${r1(2 * s)} M${r1(0.8 * s)},0 V${r1(0.6 * s)} M${r1(1.5 * s)},${r1(0.6 * s)} V${r1(1.2 * s)}" stroke="${K(c, 0.3)}" stroke-width=".8" opacity=".6"/></pattern></defs>`;
+    if(mat === 'slat') o += `<defs><pattern id="${pid}" width="${r1(0.5 * s)}" height="8" patternUnits="userSpaceOnUse"><rect width=".8" height="8" fill="${K(c, 0.25)}"/></pattern></defs>`;
+    if(mat && mat !== 'stucco' && mat !== 'glass') o += `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="url(#${pid})"/>`;
+    return o + `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="url(#${id}ws)"/>`;
+  };
+  // roofs: a front-facing gable, or the slope of a side-gable / hip roof seen from the front
+  k.gable = (x, y, w, h, wallC, roofC, o) => {
+    o = o || {}; const ov = o.ov == null ? 1.2 : o.ov, t = o.t || 0.7, mx = x + w / 2;
+    let g = `<path d="M${X(x)},${Y(y)} L${X(mx)},${Y(y + h)} L${X(x + w)},${Y(y)}Z" fill="${wallC}"/>`;
+    if(o.mat) g += `<clipPath id="${id}gc${++pat}"><path d="M${X(x)},${Y(y)} L${X(mx)},${Y(y + h)} L${X(x + w)},${Y(y)}Z"/></clipPath><g clip-path="url(#${id}gc${pat})">${k.wall(x, y, w, h, wallC, o.mat)}</g>`;
+    g += `<path d="M${X(x - ov)},${Y(y - ov * h / (w / 2))} L${X(mx)},${Y(y + h + t)} L${X(x + w + ov)},${Y(y - ov * h / (w / 2))} L${X(x + w + ov - 0.3)},${Y(y - ov * h / (w / 2) - t)} L${X(mx)},${Y(y + h)} L${X(x - ov + 0.3)},${Y(y - ov * h / (w / 2) - t)}Z" fill="${roofC}" stroke="${K(roofC, 0.3)}" stroke-width=".7"/>`;
+    return g + `<path d="M${X(x)},${Y(y)} L${X(mx)},${Y(y + h)} L${X(x + w)},${Y(y)}" fill="none" stroke="#000" stroke-opacity=".18" stroke-width="${r1(0.5 * s)}" transform="translate(0,${r1(0.25 * s)})"/>`;
+  };
+  k.slope = (x, y, w, h, roofC, o) => {
+    o = o || {}; const ov = o.ov == null ? 1.2 : o.ov, inset = o.inset || 0, pts = [[x - ov, y - 0.2], [x + inset, y + h], [x + w - inset, y + h], [x + w + ov, y - 0.2]];
+    const pid = id + 'sh' + (++pat);
+    let g = `<defs><pattern id="${pid}" width="${r1(1.2 * s)}" height="${r1(0.45 * s)}" patternUnits="userSpaceOnUse"><rect width="100%" height="1" y="${r1(0.45 * s) - 1}" fill="#000" opacity=".22"/><rect width="1" height="100%" x="${r1(0.3 * s)}" fill="#000" opacity=".08"/></pattern>` +
+      `<linearGradient id="${pid}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${W(roofC, 0.12)}"/><stop offset="1" stop-color="${K(roofC, 0.15)}"/></linearGradient></defs>`;
+    g += `<path d="${rpath(P(pts), true)}" fill="url(#${pid}g)" stroke="${K(roofC, 0.35)}" stroke-width=".8"/>`;
+    if(!o.metal) g += `<path d="${rpath(P(pts), true)}" fill="url(#${pid})"/>`;
+    else for(let xx = x - ov + 1; xx < x + w + ov - 0.5; xx += 1.6) g += `<path d="M${X(xx)},${Y(y - 0.1)} L${X(xx + (xx < x + w / 2 ? 1 : -1) * inset * (Math.abs(xx - (x + w / 2)) / (w / 2 + ov)))},${Y(y + h)}" stroke="${K(roofC, 0.25)}" stroke-width=".7"/>`;
+    return g + `<rect x="${X(x - ov)}" y="${Y(y)}" width="${r1((w + 2 * ov) * s)}" height="${r1(0.35 * s)}" fill="${K(roofC, 0.35)}"/><rect x="${X(x)}" y="${Y(y - 0.35)}" width="${r1(w * s)}" height="${r1(0.8 * s)}" fill="#000" opacity=".18"/>`;
+  };
+  k.flat = (x, y, w, c, o) => `<rect x="${X(x - (o || 0.6))}" y="${Y(y + 1)}" width="${r1((w + 2 * (o || 0.6)) * s)}" height="${r1(1 * s)}" fill="${c}"/><rect x="${X(x)}" y="${Y(y)}" width="${r1(w * s)}" height="${r1(0.7 * s)}" fill="#000" opacity=".2"/>`;
+  // windows: trim, glass with a sky reflection, muntins, sill, shutters, and curtains or lamplight when furnished
+  k.win = (x, y, w, h, o) => {
+    o = o || {}; const tr = o.trim || '#f6f4ee', f = 0.35;
+    let g = '';
+    if(o.shut) g += `<rect x="${X(x - f - w * 0.42)}" y="${Y(y + h + f)}" width="${r1(w * 0.38 * s)}" height="${r1((h + 2 * f) * s)}" fill="${o.shut}"/><rect x="${X(x + w + f + w * 0.04)}" y="${Y(y + h + f)}" width="${r1(w * 0.38 * s)}" height="${r1((h + 2 * f) * s)}" fill="${o.shut}"/>`;
+    g += `<rect x="${X(x - f)}" y="${Y(y + h + f)}" width="${r1((w + 2 * f) * s)}" height="${r1((h + 2 * f) * s)}" fill="${tr}"/><rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="url(#${id}gl)"/>`;
+    if(o.room) g += `<rect x="${X(x)}" y="${Y(y + h * 0.42)}" width="${r1(w * s)}" height="${r1(h * 0.42 * s)}" fill="#ffd98a" opacity="${o.room * 0.12}"/>` + (o.room > 1 ? `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * 0.18 * s)}" height="${r1(h * s)}" fill="${o.curtain || '#efe6d6'}" opacity=".9"/><rect x="${X(x + w * 0.82)}" y="${Y(y + h)}" width="${r1(w * 0.18 * s)}" height="${r1(h * s)}" fill="${o.curtain || '#efe6d6'}" opacity=".9"/>` : '');
+    g += `<path d="M${X(x + w * 0.15)},${Y(y + h)} l${r1(w * 0.3 * s)},0 l-${r1(w * 0.45 * s)},${r1(h * 0.6 * s)}Z" fill="#fff" opacity=".18"/>`;
+    const c = o.cols == null ? 2 : o.cols, rw = o.rows == null ? 2 : o.rows;
+    for(let i = 1; i < c; i++) g += `<rect x="${r1(x0 + (x + w * i / c) * s - 0.6)}" y="${Y(y + h)}" width="1.2" height="${r1(h * s)}" fill="${tr}"/>`;
+    for(let i = 1; i < rw; i++) g += `<rect x="${X(x)}" y="${r1(G - (y + h * i / rw) * s - 0.6)}" width="${r1(w * s)}" height="1.2" fill="${tr}"/>`;
+    if(o.sash) g += `<rect x="${X(x)}" y="${r1(G - (y + h / 2) * s - 1.2)}" width="${r1(w * s)}" height="2.4" fill="${tr}"/>`;
+    return g + `<rect x="${X(x - f - 0.3)}" y="${Y(y)}" width="${r1((w + 2 * f + 0.6) * s)}" height="${r1(0.35 * s)}" fill="${K(tr, 0.12)}"/>`;
+  };
+  k.door = (x, y, w, h, c, o) => {
+    o = o || {}; let g = '';
+    if(o.side) g += k.win(x - 1.3, y + 0.2, 0.9, h - 0.4, {cols:1, rows:3, trim:o.trim}) + k.win(x + w + 0.4, y + 0.2, 0.9, h - 0.4, {cols:1, rows:3, trim:o.trim});
+    g += `<rect x="${X(x - 0.35)}" y="${Y(y + h + 0.35)}" width="${r1((w + 0.7) * s)}" height="${r1((h + 0.35) * s)}" fill="${o.trim || '#f6f4ee'}"/><rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="${c}"/>`;
+    if(o.glass) g += `<rect x="${X(x + w * 0.2)}" y="${Y(y + h * 0.9)}" width="${r1(w * 0.6 * s)}" height="${r1(h * 0.75 * s)}" fill="url(#${id}gl)"/>`;
+    else g += [0.15, 0.55].map(t => `<rect x="${X(x + w * 0.15)}" y="${Y(y + h * (t + 0.35))}" width="${r1(w * 0.7 * s)}" height="${r1(h * 0.3 * s)}" fill="none" stroke="${K(c, 0.3)}" stroke-width=".8"/>`).join('');
+    return g + `<circle cx="${X(x + w * 0.82)}" cy="${Y(y + h * 0.48)}" r="${r1(Math.max(1, 0.12 * s))}" fill="#e3c77a"/>` + (o.bell ? `<circle cx="${X(x + w + 0.25)}" cy="${Y(y + h * 0.5)}" r="${r1(Math.max(1.2, 0.12 * s))}" fill="#4fc3f7"/>` : '');
+  };
+  k.garage = (x, y, w, h, c) => { let g = `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="${c}" stroke="${K(c, 0.2)}" stroke-width=".8"/>`;
+    for(let i = 1; i < 4; i++) g += `<rect x="${X(x)}" y="${r1(G - (y + h * i / 4) * s - 0.6)}" width="${r1(w * s)}" height="1.2" fill="${K(c, 0.18)}"/>`;
+    const n = Math.max(2, Math.round(w / 2.2)); for(let i = 0; i < n; i++) g += `<rect x="${X(x + w * (i + 0.15) / n)}" y="${Y(y + h * 0.92)}" width="${r1(w * 0.7 / n * s)}" height="${r1(h * 0.14 * s)}" fill="url(#${id}gl)"/>`;
+    return g + `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(0.5 * s)}" fill="#000" opacity=".15"/>`; };
+  k.col = (x, y, w, h, c) => `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="${c || '#f7f5ef'}"/><rect x="${X(x - w * 0.2)}" y="${Y(y + h)}" width="${r1(w * 1.4 * s)}" height="${r1(0.4 * s)}" fill="${c || '#f7f5ef'}"/><rect x="${X(x - w * 0.2)}" y="${Y(y + 0.4)}" width="${r1(w * 1.4 * s)}" height="${r1(0.4 * s)}" fill="${c || '#f7f5ef'}"/><rect x="${X(x + w * 0.65)}" y="${Y(y + h)}" width="${r1(w * 0.35 * s)}" height="${r1(h * s)}" fill="#000" opacity=".1"/>`;
+  k.chim = (x, y, w, h, smoke) => `<rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="#9a5a46"/><rect x="${X(x)}" y="${Y(y + h)}" width="${r1(w * s)}" height="${r1(h * s)}" fill="url(#${id}br)"/><rect x="${X(x - 0.3)}" y="${Y(y + h + 0.5)}" width="${r1((w + 0.6) * s)}" height="${r1(0.6 * s)}" fill="#6e3e30"/>` +
+    (smoke ? `<g fill="#e8eaee" opacity=".75"><circle cx="${X(x + w / 2)}" cy="${Y(y + h + 2)}" r="${r1(0.9 * s)}"/><circle cx="${X(x + w / 2 + 1.2)}" cy="${Y(y + h + 3.6)}" r="${r1(1.2 * s)}"/><circle cx="${X(x + w / 2 + 3)}" cy="${Y(y + h + 5)}" r="${r1(1.5 * s)}"/></g>` : '');
+  k.tree = (x, y, h, kind, c) => {
+    if(kind === 'pine') return `<rect x="${X(x - 0.4)}" y="${Y(y + h * 0.2)}" width="${r1(0.8 * s)}" height="${r1(h * 0.2 * s)}" fill="#5a3e2a"/>` + [0, 1, 2].map(i => `<path d="M${X(x)},${Y(y + h * (0.55 + i * 0.22) + h * 0.2)} L${X(x + h * (0.3 - i * 0.07))},${Y(y + h * (0.12 + i * 0.25))} L${X(x - h * (0.3 - i * 0.07))},${Y(y + h * (0.12 + i * 0.25))}Z" fill="${['#2c5e3c', '#336b45', '#3b7a4f'][i]}"/>`).join('');
+    if(kind === 'palm') return `<path d="M${X(x)},${Y(y)} Q${X(x + h * 0.08)},${Y(y + h * 0.5)} ${X(x - h * 0.04)},${Y(y + h)}" stroke="#8a6a42" stroke-width="${r1(0.55 * s)}" fill="none"/>` + [[-1, 0.1], [1, 0.05], [-0.7, -0.25], [0.8, -0.2], [0.1, 0.3]].map(([dx, dy]) => `<path d="M${X(x - h * 0.04)},${Y(y + h)} q${r1(dx * h * 0.2 * s)},-${r1((0.15 + dy * 0.2) * h * s)} ${r1(dx * h * 0.42 * s)},${r1((0.08 - dy * 0.3) * h * s)}" stroke="#3f8a4a" stroke-width="${r1(0.5 * s)}" fill="none" stroke-linecap="round"/>`).join('');
+    const cc = c || '#4f8a3e';
+    return `<rect x="${X(x - 0.35)}" y="${Y(y + h * 0.45)}" width="${r1(0.7 * s)}" height="${r1(h * 0.45 * s)}" fill="#6a4a30"/>` +
+      `<circle cx="${X(x)}" cy="${Y(y + h * 0.68)}" r="${r1(h * 0.3 * s)}" fill="${K(cc, 0.12)}"/><circle cx="${X(x - h * 0.17)}" cy="${Y(y + h * 0.58)}" r="${r1(h * 0.2 * s)}" fill="${cc}"/><circle cx="${X(x + h * 0.15)}" cy="${Y(y + h * 0.62)}" r="${r1(h * 0.22 * s)}" fill="${cc}"/><circle cx="${X(x - h * 0.05)}" cy="${Y(y + h * 0.82)}" r="${r1(h * 0.18 * s)}" fill="${W(cc, 0.15)}"/>`;
+  };
+  k.shrub = (x, w, c) => `<ellipse cx="${X(x + w / 2)}" cy="${Y(0.7)}" rx="${r1(w / 2 * s)}" ry="${r1(1.1 * s)}" fill="${c || '#4a7e3a'}"/><ellipse cx="${X(x + w / 2 - w * 0.15)}" cy="${Y(1.1)}" rx="${r1(w * 0.28 * s)}" ry="${r1(0.7 * s)}" fill="${W(c || '#4a7e3a', 0.15)}"/>`;
+  k.flowers = (x, w) => { let g = `<rect x="${X(x)}" y="${Y(0.6)}" width="${r1(w * s)}" height="${r1(0.6 * s)}" fill="#5b3f2a"/>`; for(let i = 0; i < w * 1.6; i++){ const xx = x + 0.3 + i * 0.62; g += `<circle cx="${X(xx)}" cy="${Y(0.9 + (i % 3) * 0.25)}" r="${r1(0.32 * s)}" fill="${['#e2557a', '#f2c84b', '#f08a3c', '#b57bd6', '#ffffff'][i % 5]}"/><circle cx="${X(xx)}" cy="${Y(0.55)}" r="${r1(0.3 * s)}" fill="#3f7a35"/>`; } return g; };
+  k.picket = (a, b, c) => { let g = `<rect x="${X(a)}" y="${Y(2.4)}" width="${r1((b - a) * s)}" height="${r1(0.3 * s)}" fill="${c || '#f7f5ef'}"/><rect x="${X(a)}" y="${Y(1.2)}" width="${r1((b - a) * s)}" height="${r1(0.3 * s)}" fill="${c || '#f7f5ef'}"/>`; for(let xx = a; xx <= b; xx += 0.75) g += `<path d="M${X(xx)},${Y(0)} L${X(xx)},${Y(3)} L${X(xx + 0.2)},${Y(3.35)} L${X(xx + 0.4)},${Y(3)} L${X(xx + 0.4)},${Y(0)}Z" fill="${c || '#f7f5ef'}" stroke="${K(c || '#f7f5ef', 0.2)}" stroke-width=".4"/>`; return g; };
+  k.privacy = (a, b, h) => { let g = ''; for(let xx = a; xx < b; xx += 0.5) g += `<rect x="${X(xx)}" y="${Y(h)}" width="${r1(0.48 * s)}" height="${r1(h * s)}" fill="${(Math.round(xx * 2) % 2) ? '#a07a52' : '#9a7450'}"/>`; return g + `<rect x="${X(a)}" y="${Y(h)}" width="${r1((b - a) * s)}" height="${r1(0.3 * s)}" fill="#7a5a3a"/>`; };
+  k.solar = (x, y, cols, rows, w, h) => { let g = ''; for(let r = 0; r < rows; r++) for(let c = 0; c < cols; c++) g += `<rect x="${X(x + c * w)}" y="${Y(y + (r + 1) * h)}" width="${r1((w - 0.15) * s)}" height="${r1((h - 0.15) * s)}" fill="#1d2f52" stroke="#9fb2cc" stroke-width=".5"/><path d="M${X(x + c * w + w / 2)},${Y(y + (r + 1) * h)} v${r1(h * s)}" stroke="#3e5680" stroke-width=".5"/>`; return g; };
+  k.cam = (x, y) => `<rect x="${X(x)}" y="${Y(y)}" width="${r1(0.9 * s)}" height="${r1(0.45 * s)}" rx="${r1(0.2 * s)}" fill="#f2f3f4" stroke="#333" stroke-width=".5"/><circle cx="${X(x + 0.2)}" cy="${Y(y - 0.22)}" r="${r1(0.12 * s)}" fill="#c4141f"/>`;
+  k.charger = (x, y) => `<rect x="${X(x)}" y="${Y(y + 1.6)}" width="${r1(0.9 * s)}" height="${r1(1.6 * s)}" rx="${r1(0.2 * s)}" fill="#2b2d31"/><rect x="${X(x + 0.25)}" y="${Y(y + 1.3)}" width="${r1(0.4 * s)}" height="${r1(0.25 * s)}" fill="#45d483"/><path d="M${X(x + 0.45)},${Y(y)} q${r1(0.6 * s)},${r1(0.6 * s)} ${r1(1.2 * s)},0" stroke="#2b2d31" stroke-width="1" fill="none"/>`;
+  k.sign = (x, txt) => `<rect x="${X(x)}" y="${Y(2.4)}" width="${r1(0.15 * s)}" height="${r1(2.4 * s)}" fill="#555"/><rect x="${X(x - 0.6)}" y="${Y(2.6)}" width="${r1(1.4 * s)}" height="${r1(0.9 * s)}" fill="#1d4fa8"/>`;
+  return k;
+}
+function houseDefs(id){
+  return `<defs><linearGradient id="${id}gl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#bcd6ea"/><stop offset=".45" stop-color="#5d7f9c"/><stop offset="1" stop-color="#2c4257"/></linearGradient>` +
+    `<linearGradient id="${id}ws" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".12"/><stop offset=".25" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient>` +
+    `<linearGradient id="${id}lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b07a4a"/><stop offset=".5" stop-color="#8a5a32"/><stop offset=".92" stop-color="#5e3a1e"/><stop offset="1" stop-color="#3e2614"/></linearGradient>` +
+    `<pattern id="${id}br" width="6" height="4" patternUnits="userSpaceOnUse"><path d="M0,2 H6 M0,4 H6 M3,0 V2 M0,2 V4" stroke="#e8d8c8" stroke-width=".5" opacity=".5"/></pattern>` +
+    `<linearGradient id="${id}wa" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd0ec"/><stop offset="1" stop-color="#2f97c9"/></linearGradient></defs>`;
+}
+// skies and settings behind a house
+function houseScene(id, kind, G){
+  const sky = kind === 'city' ? ['#9ec3e0', '#e9f1f7'] : kind === 'beach' ? ['#8cc8ec', '#e6f4fb'] : ['#a9d2ee', '#eef7fc'];
+  let g = `<defs><linearGradient id="${id}sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky[0]}"/><stop offset="1" stop-color="${sky[1]}"/></linearGradient>` +
+    `<linearGradient id="${id}ln" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fb35a"/><stop offset="1" stop-color="#5f9a44"/></linearGradient></defs>` +
+    `<rect width="${DW}" height="${DH}" fill="url(#${id}sk)"/><g fill="#fff" opacity=".8"><ellipse cx="110" cy="46" rx="46" ry="10"/><ellipse cx="140" cy="40" rx="28" ry="11"/><ellipse cx="500" cy="34" rx="40" ry="8"/></g>`;
+  if(kind === 'mount') g += `<path d="M0,${G - 40} L90,${G - 120} L170,${G - 60} L260,${G - 140} L360,${G - 70} L450,${G - 125} L560,${G - 55} L640,${G - 100} L640,${G} L0,${G}Z" fill="#9fb3c4"/><path d="M240,${G - 124} L260,${G - 140} L280,${G - 124} L270,${G - 120} L250,${G - 120}Z" fill="#f4f6f8"/>` +
+    `<path d="M0,${G - 30} ${Array.from({length:33}, (_, i) => `L${i * 20},${G - 30 - (i % 3) * 14 - 10} L${i * 20 + 10},${G - 30}`).join(' ')} L640,${G} L0,${G}Z" fill="#3c6a4c"/>`;
+  else if(kind === 'beach') g += `<rect y="${G - 52}" width="${DW}" height="34" fill="#4a9fd0"/><path d="M0,${G - 22} Q160,${G - 30} 320,${G - 24} T640,${G - 22} L640,${G} L0,${G}Z" fill="#ecdcae"/>`;
+  else if(kind === 'city') g += [[10, 120], [70, 160], [130, 110], [470, 150], [530, 190], [590, 130]].map(([x, h]) => `<rect x="${x}" y="${G - h}" width="52" height="${h}" fill="#b4c3d1"/>` + Array.from({length:Math.floor(h / 14)}, (_, r) => `<rect x="${x + 6}" y="${G - h + 6 + r * 14}" width="40" height="5" fill="#d7e2ec"/>`).join('')).join('');
+  else if(kind === 'farm') g += `<path d="M0,${G - 34} Q200,${G - 54} 400,${G - 38} T640,${G - 40} L640,${G} L0,${G}Z" fill="#a9c27a"/><path d="M0,${G - 22} L640,${G - 26} L640,${G} L0,${G}Z" fill="#d6c27a" opacity=".7"/>`;
+  else g += `<path d="M0,${G - 24} ${Array.from({length:17}, (_, i) => `Q${i * 40 + 20},${G - 52 - (i % 3) * 8} ${i * 40 + 40},${G - 26}`).join(' ')} L640,${G} L0,${G}Z" fill="#6f9a62" opacity=".75"/>`;
+  g += kind === 'beach' ? `<rect y="${G}" width="${DW}" height="${DH - G}" fill="#ecdcae"/>` : kind === 'city' ? `<rect y="${G}" width="${DW}" height="${DH - G}" fill="#b8bcc2"/><rect y="${G + 30}" width="${DW}" height="2" fill="#f2f2ee" opacity=".8"/>` : `<rect y="${G}" width="${DW}" height="${DH - G}" fill="url(#${id}ln)"/>`;
+  return g;
+}
+const HOUSE_WALLS = ['#f2ece0', '#dfe6ea', '#e9dcc4', '#cfd8c6', '#d9cbb3', '#c9d4de', '#efe3d0', '#bfc7cc'], HOUSE_ROOFS = ['#4a4e55', '#5a3e34', '#3f4a5a', '#6b5a4a', '#2f3338'], HOUSE_DOORS = ['#7a2a26', '#1f3a5a', '#2f4a36', '#3a3d42', '#8a5a2a', '#5a2e4a'];
+// key: the home type, seed: its id, o: {paint, mods, solar, furnish}
+function drawHouse(key, seed, o, id){
+  o = o || {}; const m = o.mods || {}, r = seeded(seed || key);
+  const wall = o.paint || HOUSE_WALLS[Math.floor(r() * HOUSE_WALLS.length)], roof = m.roof ? '#33373d' : HOUSE_ROOFS[Math.floor(r() * HOUSE_ROOFS.length)], doorC = HOUSE_DOORS[Math.floor(r() * HOUSE_DOORS.length)];
+  const shut = r() < 0.5 ? hexMix(doorC, '#000000', 0.15) : null, v = r(), room = o.furnish || 0, trim = '#f7f5ef', G = 236;
+  const T = HOUSE_TYPES[key] || HOUSE_TYPES.familyhome, s = T.s || 8, x0 = (DW - T.w * s) / 2 + (T.dx || 0) * s, k = houseKit(id, s, x0, G);
+  const wo = {trim, shut, room, sash:1};
+  let g = houseDefs(id) + houseScene(id, T.scene || 'yard', G);
+  const ctx = {k, wall, roof, doorC, trim, shut, v, r, wo, room, m, o, s};
+  const b = T.draw(ctx), a = b.a;
+  // behind the house: trees, then side wings the owner added
+  let back = (b.back || ''), side = '';
+  // the deck goes on whichever side is free of an added garage
+  if(a.deckX != null && m.garage && a.garR != null && a.deckX >= a.garR) a.deckX = (m.addition && a.addL != null ? a.addL - 14 : (a.addL != null ? a.addL : 0)) - 13;
+  if(m.addition && a.addL != null) side += k.wall(a.addL - 14, 0, 14, a.addH || 9, wall, a.mat || 'siding') + k.slope(a.addL - 14, a.addH || 9, 14, 4, roof, {inset:2, ov:0.8}) + k.win(a.addL - 10.5, 3, 5, 4.4, wo);
+  if(m.garage && a.garR != null) side += k.wall(a.garR, 0, 22, 9, wall, a.mat || 'siding') + k.slope(a.garR, 9, 22, 4, roof, {inset:3, ov:0.8}) + k.garage(a.garR + 2.5, 0, 17, 7.2, trim) + (m.evcharger ? k.charger(a.garR + 20, 3) : '');
+  else if(m.evcharger && a.garage) side += k.charger(a.garage[0] + a.garage[1] + 0.6, 3);
+  if(m.deck && a.deckX != null) side += `<rect x="${k.X(a.deckX)}" y="${k.Y(2.4)}" width="${r1(12 * s)}" height="${r1(0.6 * s)}" fill="#9a6a3e"/>` + [0, 3, 6, 9, 11.6].map(x => `<rect x="${k.X(a.deckX + x)}" y="${k.Y(2.4)}" width="${r1(0.4 * s)}" height="${r1(2.4 * s)}" fill="#7a5230"/>`).join('') +
+    `<rect x="${k.X(a.deckX)}" y="${k.Y(5.6)}" width="${r1(12 * s)}" height="${r1(0.3 * s)}" fill="#7a5230"/>` + Array.from({length:24}, (_, i) => `<rect x="${k.X(a.deckX + i * 0.5)}" y="${k.Y(5.6)}" width="${r1(0.15 * s)}" height="${r1(3.2 * s)}" fill="#8a5e36"/>`).join('') +
+    (m.outkitchen ? `<rect x="${k.X(a.deckX + 1)}" y="${k.Y(5.8)}" width="${r1(4 * s)}" height="${r1(2.8 * s)}" fill="#6b6f75"/><rect x="${k.X(a.deckX + 1.4)}" y="${k.Y(6.6)}" width="${r1(3.2 * s)}" height="${r1(0.8 * s)}" rx="2" fill="#2b2d31"/><path d="M${k.X(a.deckX + 0.4)},${k.Y(11)} L${k.X(a.deckX + 11.6)},${k.Y(11)} M${k.X(a.deckX + 0.6)},${k.Y(11)} V${k.Y(3)} M${k.X(a.deckX + 11.4)},${k.Y(11)} V${k.Y(3)}" stroke="#8a5e36" stroke-width="${r1(0.4 * s)}"/>` : '') +
+    (m.hottub ? `<rect x="${k.X(a.deckX + 6.5)}" y="${k.Y(5.4)}" width="${r1(5 * s)}" height="${r1(2.6 * s)}" rx="${r1(0.4 * s)}" fill="#6b4a32"/><rect x="${k.X(a.deckX + 6.8)}" y="${k.Y(5.6)}" width="${r1(4.4 * s)}" height="${r1(0.5 * s)}" fill="url(#${id}wa)"/>` : '');
+  else if(m.outkitchen && a.deckX != null) side += `<rect x="${k.X(a.deckX + 1)}" y="${k.Y(3)}" width="${r1(5 * s)}" height="${r1(3 * s)}" fill="#6b6f75"/><rect x="${k.X(a.deckX + 1.5)}" y="${k.Y(3.8)}" width="${r1(4 * s)}" height="${r1(0.8 * s)}" fill="#2b2d31"/>`;
+  g += back + b.g + side;
+  // the roof: solar panels, a chimney with a fire going
+  if(o.solar && a.solar) g += k.solar(...a.solar);
+  if(m.fireplace) g += a.chim ? k.chim(a.chim[0], a.chim[1], 2.2, a.chim[2], true) : '';
+  if(m.security && a.eave) g += k.cam(a.eave[0] + 0.6, a.eave[1] - 0.6) + k.cam(a.eave[2] - 1.6, a.eave[1] - 0.6);
+  if(m.basement && a.found) g += a.found.map(x => `<rect x="${k.X(x)}" y="${k.Y(1.3)}" width="${r1(2.6 * s)}" height="${r1(1.1 * s)}" fill="url(#${id}gl)" stroke="#9aa0a6" stroke-width=".6"/>`).join('');
+  // the yard in front
+  let front = b.front || '';
+  if(m.garden && a.bed) front += a.bed.map(([x, w]) => k.flowers(x, w)).join('');
+  else if(a.bed && !b.noShrubs) front += a.bed.map(([x, w]) => k.shrub(x, w)).join('');
+  if(m.pool && a.pool) front += `<path d="${rpath(k.P([[a.pool[0], -2.2, 1.2], [a.pool[0] + a.pool[1], -2.2, 1.2], [a.pool[0] + a.pool[1] + 2.5, -6.4, 1.6], [a.pool[0] - 2.5, -6.4, 1.6]]), true)}" fill="#e9e4d8"/><path d="${rpath(k.P([[a.pool[0] + 0.6, -2.7, 1], [a.pool[0] + a.pool[1] - 0.6, -2.7, 1], [a.pool[0] + a.pool[1] + 1.6, -5.9, 1.2], [a.pool[0] - 1.6, -5.9, 1.2]]), true)}" fill="url(#${id}wa)"/><path d="M${k.X(a.pool[0] + 2)},${k.Y(-4)} q${r1(s)},-2 ${r1(2 * s)},0 t${r1(2 * s)},0" stroke="#fff" stroke-opacity=".6" fill="none"/>`;
+  if(m.hottub && a.pool && !(m.deck && a.deckX != null)) front += `<ellipse cx="${k.X(a.pool[0] + a.pool[1] + 6)}" cy="${k.Y(-4)}" rx="${r1(2.4 * s)}" ry="${r1(1.4 * s)}" fill="#6b4a32"/><ellipse cx="${k.X(a.pool[0] + a.pool[1] + 6)}" cy="${k.Y(-3.8)}" rx="${r1(1.9 * s)}" ry="${r1(1 * s)}" fill="url(#${id}wa)"/>`;
+  if(m.fence && a.fence) front += a.fence.map(([x1, x2]) => b.privacy ? k.privacy(x1, x2, 4.5) : k.picket(x1, x2)).join('');
+  if(m.security && a.yard) front += k.sign(a.yard);
+  g += front + (b.fg || '');
+  return g;
+}
+// the home types; each draws itself and says where add-ons go (a = anchors, in feet)
+const HOUSE_TYPES = {
+  // a craftsman bungalow with a deep front porch
+  starter:{w:34, s:8.2, dx:-2, draw:c => { const {k, wall, roof, doorC, trim, wo, v, m} = c; let g = k.tree(-14, 0, 22) + k.tree(46, 0, 18, 'tree', '#5c9443');
+    g += k.wall(-0.5, 0, 35, 1.6, '#8c8a86', 'stone') + k.wall(0, 1.6, 34, 9.4, wall, 'siding') + k.slope(0, 11, 34, 6.5, roof, {inset:5, ov:1.6});
+    if(v > 0.5) g += k.wall(13, 14, 8, 3.5, wall, 'siding') + k.gable(12.5, 17.5, 9, 2.6, wall, roof, {ov:0.6}) + k.win(14.5, 14.4, 5, 2.4, Object.assign({}, wo, {rows:1, cols:3, sash:0}));
+    g += `<rect x="${k.X(0)}" y="${k.Y(11)}" width="${r1(19 * k.s)}" height="${r1(1 * k.s)}" fill="${trim}"/>` + k.gable(-0.6, 11.4, 20.2, 4.4, hexMix(wall, '#ffffff', 0.2), roof, {ov:0.9});
+    g += k.door(8, 1.6, 3.2, 7, doorC, {glass:1, trim, bell:m.smart}) + k.win(12.6, 3.6, 5, 5, Object.assign({}, wo, {cols:3, rows:1, sash:1})) + k.win(1.6, 3.6, 4.6, 5, Object.assign({}, wo, {cols:3, rows:1}));
+    g += k.win(22, 3.6, 3.6, 5.2, wo) + k.win(28.2, 3.6, 3.6, 5.2, wo);
+    g += [-0.4, 17.4].map(x => k.wall(x, 1.6, 2, 3, '#8c8a86', 'stone') + `<path d="M${k.X(x + 0.3)},${k.Y(4.6)} L${k.X(x + 1.7)},${k.Y(4.6)} L${k.X(x + 1.35)},${k.Y(11)} L${k.X(x + 0.65)},${k.Y(11)}Z" fill="${trim}"/>`).join('');
+    g += `<rect x="${k.X(-0.5)}" y="${k.Y(1.8)}" width="${r1(20 * k.s)}" height="${r1(0.4 * k.s)}" fill="#9a8e7e"/>` + [0, 0.6, 1.2].map(i => `<rect x="${k.X(7.2 - i)}" y="${k.Y(1.6 - i * 0.55)}" width="${r1((4.8 + i * 2) * k.s)}" height="${r1(0.55 * k.s)}" fill="#a39a8c"/>`).join('');
+    const front = `<path d="M${k.X(7.5)},${k.Y(0)} L${k.X(11.7)},${k.Y(0)} L${k.X(12.5)},${k.Y(-8)} L${k.X(6.5)},${k.Y(-8)}Z" fill="#cfc8bb"/>`;
+    return {g, front, a:{addL:0, garR:34, deckX:36, solar:[22, 12.4, 4, 2, 2.4, 1.9], chim:[29, 11, 8], eave:[0, 11, 34], found:[2, 24, 29], bed:[[0.5, 6], [21, 12]], pool:[18, 10], fence:[[-14, -2], [36, 48]], yard:-6}}; }},
+  // a two-story center-hall colonial with an attached garage
+  suburb:{w:58, s:6.4, dx:2, draw:c => { const {k, wall, roof, doorC, trim, wo, v, m} = c; let g = k.tree(-10, 0, 28) + k.tree(66, 0, 24, 'tree', '#5c9443');
+    g += k.wall(0, 0, 40, 1.4, '#9a958e', 'brick') + k.wall(0, 1.4, 40, 18.6, wall, 'siding') + k.slope(0, 20, 40, 8, roof, {inset:0, ov:1.2});
+    g += k.wall(40, 0, 22, 12, wall, 'siding') + k.slope(40, 12, 22, 5, roof, {inset:2.5, ov:0.8}) + k.garage(42.5, 0, 17, 8, trim);
+    const w2 = Object.assign({}, wo, {cols:2, rows:3});
+    [3, 10.5, 25, 32.5].forEach(x => { g += k.win(x, 3.2, 3.6, 5.6, w2) + k.win(x, 12.2, 3.6, 5.4, w2); }); g += k.win(18.2, 12.2, 3.6, 5.4, w2);
+    g += k.door(18.3, 1.4, 3.4, 7.4, doorC, {trim, side:v > 0.4, bell:m.smart}) + `<rect x="${k.X(15.5)}" y="${k.Y(10.4)}" width="${r1(9 * k.s)}" height="${r1(0.8 * k.s)}" fill="${trim}"/>` + k.gable(15.2, 11.2, 9.6, 2.2, trim, roof, {ov:0.4}) + k.col(15.8, 1.4, 0.7, 9) + k.col(23.5, 1.4, 0.7, 9);
+    g += k.chim(3, 20, 2.4, 10, false);
+    const front = `<path d="M${k.X(18)},${k.Y(0)} L${k.X(22)},${k.Y(0)} L${k.X(23)},${k.Y(-9)} L${k.X(17)},${k.Y(-9)}Z" fill="#cfc8bb"/><path d="M${k.X(42)},${k.Y(0)} L${k.X(60)},${k.Y(0)} L${k.X(64)},${k.Y(-9)} L${k.X(39)},${k.Y(-9)}Z" fill="#b9b5ad"/>`;
+    return {g, front, a:{addL:0, garage:[42.5, 17], deckX:-14, solar:[24, 21.5, 5, 2, 2.6, 2.6], chim:[3, 20, 10], eave:[0, 20, 40], found:[4, 27, 33], bed:[[0.5, 14], [25, 14]], pool:[-2, 9], fence:[[-16, -3], [63, 72]], yard:-8, mat:'siding'}}; }},
+  // a family home: two stories with a front-facing gable and a porch
+  familyhome:{w:40, s:7.2, dx:-1, draw:c => { const {k, wall, roof, doorC, trim, wo, v, m} = c; let g = k.tree(-12, 0, 24) + k.tree(50, 0, 20, 'tree', '#5c9443');
+    g += k.wall(0, 0, 26, 1.4, '#9a958e', 'brick') + k.wall(0, 1.4, 26, 17.6, wall, 'siding') + k.gable(-0.2, 19, 26.4, 9, wall, roof, {ov:1.2, mat:'siding'}) + k.win(10.5, 21, 5, 3.4, Object.assign({}, wo, {rows:1, cols:2, sash:0}));
+    g += k.wall(26, 0, 16, 10, wall, 'siding') + k.slope(26, 10, 16, 4.6, roof, {inset:3, ov:0.8}) + k.garage(27.5, 0, 13, 7.6, trim);
+    g += k.win(3, 11.6, 4.2, 5.6, Object.assign({}, wo, {rows:2})) + k.win(15, 11.6, 4.2, 5.6, Object.assign({}, wo, {rows:2}));
+    g += k.door(10.5, 1.4, 3.3, 7.2, doorC, {glass:v > 0.5, trim, bell:m.smart}) + k.win(2.5, 3, 5.2, 5, Object.assign({}, wo, {cols:3})) + k.win(16, 3, 5.2, 5, Object.assign({}, wo, {cols:3}));
+    g += `<rect x="${k.X(-0.5)}" y="${k.Y(9.6)}" width="${r1(27 * k.s)}" height="${r1(0.8 * k.s)}" fill="${trim}"/>` + k.slope(-0.5, 10.4, 27, 1.8, roof, {ov:0.6}) + [0, 8.6, 15.6, 24.6].map(x => k.col(x, 1.4, 0.6, 8.2)).join('');
+    const front = `<path d="M${k.X(10.2)},${k.Y(0)} L${k.X(14)},${k.Y(0)} L${k.X(15)},${k.Y(-9)} L${k.X(9.4)},${k.Y(-9)}Z" fill="#cfc8bb"/><path d="M${k.X(27.5)},${k.Y(0)} L${k.X(40.5)},${k.Y(0)} L${k.X(44)},${k.Y(-9)} L${k.X(25)},${k.Y(-9)}Z" fill="#b9b5ad"/>`;
+    return {g, front, a:{addL:0, garage:[27.5, 13], deckX:-14, solar:[28, 11, 4, 1, 2.4, 2.4], chim:[20, 22, 9], eave:[0, 19, 26], found:[3, 18], bed:[[0, 8.5], [15.5, 9.5]], pool:[44, 8], fence:[[-15, -2], [46, 54]], yard:-6}}; }},
+  // a long, low ranch with a picture window and an attached garage
+  sfr:{w:56, s:6.4, dx:2, draw:c => { const {k, wall, roof, doorC, trim, wo, v, m} = c; let g = k.tree(-10, 0, 22) + k.tree(64, 0, 20, 'tree', '#5c9443');
+    g += k.wall(0, 0, 38, 1.2, '#9a958e', 'brick') + k.wall(0, 1.2, 38, 8.8, wall, v > 0.5 ? 'board' : 'siding') + (v > 0.5 ? k.wall(0, 1.2, 12, 4, '#a85f4a', 'brick') : '') + k.slope(0, 10, 38, 5.5, roof, {inset:6, ov:1.8});
+    g += k.wall(38, 0, 20, 9.4, wall, 'siding') + k.slope(38, 9.4, 20, 4.4, roof, {inset:3, ov:1.2}) + k.garage(40, 0, 16, 7.2, trim);
+    g += k.win(2.5, 3.4, 8, 4.6, Object.assign({}, wo, {cols:3, rows:1, sash:0})) + k.door(16, 1.2, 3.2, 7, doorC, {trim, bell:m.smart}) + k.win(22.5, 3.6, 4, 4.4, wo) + k.win(30, 3.6, 4, 4.4, wo);
+    const front = `<path d="M${k.X(15.6)},${k.Y(0)} L${k.X(19.6)},${k.Y(0)} L${k.X(20.4)},${k.Y(-9)} L${k.X(14.8)},${k.Y(-9)}Z" fill="#cfc8bb"/><path d="M${k.X(40)},${k.Y(0)} L${k.X(56)},${k.Y(0)} L${k.X(59)},${k.Y(-9)} L${k.X(37)},${k.Y(-9)}Z" fill="#b9b5ad"/>`;
+    return {g, front, a:{addL:0, garage:[40, 16], deckX:-14, solar:[16, 11, 6, 2, 2.4, 2.2], chim:[8, 10, 8], eave:[0, 10, 38], found:[4, 24, 31], bed:[[0, 14], [21, 16]], pool:[-1, 8], fence:[[-15, -3], [60, 70]], yard:-7}}; }},
+  // a log cabin with a stone chimney in the mountains
+  cabin:{w:30, s:8.6, scene:'mount', draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; const logC = c.o.paint || '#8a5a32'; let g = k.tree(-10, 0, 26, 'pine') + k.tree(38, 0, 24, 'pine') + k.tree(-4, 0, 18, 'pine');
+    g += k.wall(-0.5, 0, 31, 1.6, '#8c8a86', 'stone') + k.wall(0, 1.6, 30, 10.4, logC, 'log') + k.gable(-0.4, 12, 30.8, 9, logC, roof, {ov:1.6, mat:'log', t:0.9});
+    g += k.win(12.5, 13.5, 5, 4, Object.assign({}, wo, {rows:1, cols:2, trim:'#5e3a1e', sash:0}));
+    g += `<rect x="${k.X(0)}" y="${k.Y(11.6)}" width="${r1(30 * k.s)}" height="${r1(0.8 * k.s)}" fill="#5e3a1e"/>` + k.slope(-0.5, 12.2, 31, 2, roof, {ov:0.8}) + [0.2, 9.6, 19.6, 29].map(x => `<rect x="${k.X(x)}" y="${k.Y(11.6)}" width="${r1(0.8 * k.s)}" height="${r1(10 * k.s)}" fill="#7a4a26"/>`).join('');
+    g += k.door(13, 1.6, 3.4, 7, '#5e3a1e', {trim:'#4a2e18'}) + k.win(3, 4, 5, 4.6, Object.assign({}, wo, {trim:'#5e3a1e'})) + k.win(22, 4, 5, 4.6, Object.assign({}, wo, {trim:'#5e3a1e'}));
+    g += `<rect x="${k.X(-0.5)}" y="${k.Y(1.9)}" width="${r1(31 * k.s)}" height="${r1(0.4 * k.s)}" fill="#6a4a2e"/>` + k.wall(31, 0, 3.4, 21, '#8c8a86', 'stone') + `<rect x="${k.X(30.7)}" y="${k.Y(21.8)}" width="${r1(4 * k.s)}" height="${r1(0.8 * k.s)}" fill="#6b6a66"/>`;
+    return {g, a:{addL:-0.5, mat:'log', deckX:36, solar:[2, 13.5, 3, 2, 2.4, 2], chim:[31.4, 20, 3], eave:[0, 12, 30], bed:[[1, 6], [22, 6]], pool:[4, 9], fence:[[-12, -2], [38, 44]], yard:-6}, noShrubs:0, privacy:0,
+      fg:m.fireplace ? `<g fill="#e8eaee" opacity=".75"><circle cx="${k.X(32.7)}" cy="${k.Y(24)}" r="${r1(1 * k.s)}"/><circle cx="${k.X(34)}" cy="${k.Y(25.6)}" r="${r1(1.3 * k.s)}"/><circle cx="${k.X(35.8)}" cy="${k.Y(27)}" r="${r1(1.6 * k.s)}"/></g>` : ''}; }},
+  // a modern home: flat roofs, stacked boxes, glass walls and wood
+  lux:{w:60, s:6, dx:1, draw:c => { const {k, wall, roof, trim, m, room} = c; const wc = c.o.paint || '#f2f2ee'; let g = k.tree(-8, 0, 18, 'palm') + k.tree(66, 0, 22, 'palm');
+    g += k.wall(0, 0, 40, 11, wc, 'stucco') + k.wall(26, 11, 34, 11, wc, 'stucco') + k.wall(40, 0, 20, 11, '#9a6a42', 'slat');
+    g += k.win(4, 1.2, 28, 8.2, {trim:'#2b2d31', cols:5, rows:1, sash:0, room}) + k.win(30, 13, 26, 7.4, {trim:'#2b2d31', cols:4, rows:1, sash:0, room}) + k.win(43, 1.4, 4, 8, {trim:'#2b2d31', cols:1, rows:1, sash:0});
+    g += k.flat(0, 11, 26, '#2b2d31', 2.5) + k.flat(26, 22, 34, '#2b2d31', 3) + k.door(48.5, 0, 4, 8.5, '#1d1e21', {trim:'#2b2d31', bell:m.smart});
+    return {g, a:{addL:0, mat:'stucco', garR:60, deckX:-14, solar:[30, 22.6, 6, 1, 2.5, 0.8], chim:[54, 22, 4], eave:[0, 11, 40], found:[6, 20], bed:[[1, 8], [34, 6]], pool:[2, 22], fence:[[-12, -1], [62, 70]], yard:-7}, privacy:1}; }},
+  // a Georgian estate: brick, a columned portico, two wings and a circular drive
+  mansion:{w:96, s:4.3, draw:c => { const {k, roof, doorC, trim, wo, m} = c; const br = c.o.paint || '#a8553f'; let g = k.tree(-14, 0, 34, 'pine') + k.tree(108, 0, 30, 'pine');
+    g += k.wall(0, 0, 24, 18, br, 'brick') + k.slope(0, 18, 24, 6, roof, {inset:4}) + k.wall(72, 0, 24, 18, br, 'brick') + k.slope(72, 18, 24, 6, roof, {inset:4});
+    g += k.wall(24, 0, 48, 30, br, 'brick') + k.slope(24, 30, 48, 9, roof, {inset:8, ov:1.4}) + `<rect x="${k.X(24)}" y="${k.Y(30)}" width="${r1(48 * k.s)}" height="${r1(1 * k.s)}" fill="${trim}"/>`;
+    [27, 34, 59, 66].forEach(x => { g += k.win(x, 3, 3.4, 6.6, Object.assign({}, wo, {rows:3})) + k.win(x, 12.5, 3.4, 6.4, Object.assign({}, wo, {rows:3})) + k.win(x, 22, 3.4, 5.4, Object.assign({}, wo, {rows:2})); });
+    [4, 11, 18, 76, 83, 90].forEach(x => { g += k.win(x - 1, 3, 3.2, 6.4, Object.assign({}, wo, {rows:3})) + k.win(x - 1, 11.2, 3.2, 5, Object.assign({}, wo, {rows:2})); });
+    g += k.gable(39, 25, 18, 6, trim, roof, {ov:0.8}) + `<rect x="${k.X(39)}" y="${k.Y(25)}" width="${r1(18 * k.s)}" height="${r1(1.2 * k.s)}" fill="${trim}"/>` + [40, 44.5, 50.3, 54.8].map(x => k.col(x, 1.5, 1.2, 23.5)).join('') + k.door(46.3, 1.5, 3.4, 8.5, doorC, {trim, bell:m.smart}) + k.win(46.1, 12.5, 3.8, 6, Object.assign({}, wo, {rows:3}));
+    [31, 47, 63].forEach(x => { g += k.wall(x - 0.5, 33, 3.8, 3.5, roof, '') + k.gable(x - 1, 36.5, 4.8, 1.8, roof, roof, {ov:0.3}) + k.win(x + 0.3, 33.4, 2.2, 2.6, Object.assign({}, wo, {rows:2, cols:1})); });
+    g += k.chim(27, 36, 2.6, 7) + k.chim(66.4, 36, 2.6, 7) + `<rect x="${k.X(36)}" y="${k.Y(1.5)}" width="${r1(24 * k.s)}" height="${r1(1.5 * k.s)}" fill="#cfc8bb"/>`;
+    const front = `<ellipse cx="${k.X(48)}" cy="${k.Y(-5)}" rx="${r1(30 * k.s)}" ry="${r1(5 * k.s)}" fill="#d9d2c4"/><ellipse cx="${k.X(48)}" cy="${k.Y(-5)}" rx="${r1(18 * k.s)}" ry="${r1(2.8 * k.s)}" fill="#6fa452"/><ellipse cx="${k.X(48)}" cy="${k.Y(-5)}" rx="${r1(3 * k.s)}" ry="${r1(1 * k.s)}" fill="#cfd5da"/><rect x="${k.X(47.4)}" y="${k.Y(-1)}" width="${r1(1.2 * k.s)}" height="${r1(4 * k.s)}" fill="#cfd5da"/>`;
+    return {g, front, a:{addL:0, mat:'brick', deckX:100, solar:[74, 19, 6, 2, 2.4, 2.2], chim:[27, 36, 7], eave:[24, 30, 72], found:[28, 60], bed:[[1, 20], [75, 20]], pool:[72, 18], fence:[[-14, -2], [98, 110]], yard:-6}, privacy:1}; }},
+  // a beach house raised on pilings with wraparound decks
+  beach:{w:36, s:5.6, scene:'beach', draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; let g = k.tree(-12, 0, 22, 'palm') + k.tree(46, 0, 20, 'palm');
+    g += [0, 8, 16, 24, 32, 35].map(x => `<rect x="${k.X(x)}" y="${k.Y(9)}" width="${r1(1 * k.s)}" height="${r1(9 * k.s)}" fill="#8a6a42"/>`).join('') + `<rect x="${k.X(1)}" y="${k.Y(8)}" width="${r1(34 * k.s)}" height="${r1(8 * k.s)}" fill="#c9b48a" opacity=".35"/>`;
+    g += k.wall(0, 9, 36, 20, wall, 'board') + k.slope(0, 29, 36, 7, roof, {inset:6, ov:1.6, metal:1});
+    g += `<rect x="${k.X(-2)}" y="${k.Y(9.6)}" width="${r1(40 * k.s)}" height="${r1(0.6 * k.s)}" fill="${trim}"/><rect x="${k.X(-2)}" y="${k.Y(12.6)}" width="${r1(40 * k.s)}" height="${r1(0.3 * k.s)}" fill="${trim}"/>` + Array.from({length:41}, (_, i) => `<rect x="${k.X(-2 + i)}" y="${k.Y(12.6)}" width="${r1(0.2 * k.s)}" height="${r1(3 * k.s)}" fill="${trim}"/>`).join('');
+    g += k.door(16.5, 9.6, 3.4, 7.2, doorC, {glass:1, trim, bell:m.smart}) + k.win(3, 11, 6, 5.4, wo) + k.win(27, 11, 6, 5.4, wo) + k.win(4, 20, 5, 5.4, wo) + k.win(15.5, 20, 5, 5.4, wo) + k.win(27, 20, 5, 5.4, wo);
+    g += `<path d="M${k.X(14)},${k.Y(0)} L${k.X(22)},${k.Y(9)}" stroke="${trim}" stroke-width="${r1(1.4 * k.s)}"/>`;
+    const front = [-8, 4, 30, 42].map(x => `<path d="M${k.X(x)},${k.Y(0)} q${r1(-1 * k.s)},-${r1(3 * k.s)} -${r1(2 * k.s)},-${r1(4 * k.s)} M${k.X(x)},${k.Y(0)} q${r1(1 * k.s)},-${r1(3 * k.s)} ${r1(2 * k.s)},-${r1(4 * k.s)} M${k.X(x)},${k.Y(0)} l0,-${r1(5 * k.s)}" stroke="#8aa25a" stroke-width="1.2" fill="none" transform="scale(1,-1) translate(0,-${2 * k.Y(0)})"/>`).join('');
+    return {g, front, a:{addL:0, mat:'board', deckX:38, solar:[4, 30, 6, 2, 2.4, 2], chim:[28, 29, 7], eave:[0, 29, 36], bed:[[1, 6], [28, 6]], pool:[2, 10], fence:[[-12, -2], [40, 48]], yard:-6}, noShrubs:1}; }},
+  // a white farmhouse with a wraparound porch and a red barn
+  ranch:{w:70, s:5.4, dx:-2, scene:'farm', draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; const wc = c.o.paint || '#f6f4ee'; let g = k.tree(-8, 0, 30) + k.tree(76, 0, 26, 'tree', '#5c9443');
+    g += k.wall(46, 0, 24, 18, '#a8322a', 'board') + k.gable(45.6, 18, 24.8, 9, '#a8322a', '#5a5f66', {ov:0.8, mat:'board'}) + `<rect x="${k.X(52)}" y="${k.Y(12)}" width="${r1(12 * k.s)}" height="${r1(12 * k.s)}" fill="#f4efe6"/><path d="M${k.X(52)},${k.Y(12)} L${k.X(64)},${k.Y(0)} M${k.X(64)},${k.Y(12)} L${k.X(52)},${k.Y(0)}" stroke="#a8322a" stroke-width="${r1(1 * k.s)}"/><rect x="${k.X(55.5)}" y="${k.Y(21.5)}" width="${r1(5 * k.s)}" height="${r1(3.5 * k.s)}" fill="#f4efe6"/>`;
+    g += k.wall(0, 0, 36, 1.4, '#9a958e', 'stone') + k.wall(0, 1.4, 36, 19.6, wc, 'board') + k.slope(0, 21, 36, 9, roof, {inset:0, ov:1.2, metal:1}) + k.gable(11, 21, 14, 7, wc, roof, {ov:0.8, mat:'board'}) + k.win(15.5, 22.3, 5, 3.2, Object.assign({}, wo, {rows:1, sash:0}));
+    [3, 10, 23, 30].forEach(x => { g += k.win(x, 12.5, 3.4, 5.6, Object.assign({}, wo, {rows:3})) + k.win(x, 3, 3.4, 5.6, Object.assign({}, wo, {rows:3})); });
+    g += k.door(16.3, 1.4, 3.4, 7.2, doorC, {glass:1, trim, bell:m.smart}) + k.slope(-2, 10.4, 40, 2, '#5a5f66', {ov:0.4, metal:1}) + [-1.5, 6, 14, 21.5, 29, 36.5].map(x => k.col(x, 1.4, 0.6, 9)).join('') + k.chim(30, 26, 2.4, 6);
+    g += `<rect x="${k.X(-2)}" y="${k.Y(4)}" width="${r1(40 * k.s)}" height="${r1(0.3 * k.s)}" fill="${trim}"/>` + Array.from({length:40}, (_, i) => `<rect x="${k.X(-2 + i)}" y="${k.Y(4)}" width="${r1(0.18 * k.s)}" height="${r1(2.6 * k.s)}" fill="${trim}"/>`).join('');
+    const front = `<g stroke="#f4efe6" stroke-width="${r1(0.4 * k.s)}">${Array.from({length:30}, (_, i) => `<line x1="${k.X(-14 + i * 4)}" y1="${k.Y(-6)}" x2="${k.X(-14 + i * 4)}" y2="${k.Y(-2.5)}"/>`).join('')}<line x1="${k.X(-14)}" x2="${k.X(104)}" y1="${k.Y(-3.4)}" y2="${k.Y(-3.4)}"/><line x1="${k.X(-14)}" x2="${k.X(104)}" y1="${k.Y(-5)}" y2="${k.Y(-5)}"/></g>`;
+    return {g, front, a:{addL:0, mat:'board', deckX:-15, solar:[2, 22.4, 3, 2, 2.4, 2.6], chim:[30, 26, 6], eave:[0, 21, 36], found:[4, 28], bed:[[1, 10], [24, 10]], pool:[20, 12], fence:[], yard:-1}}; }},
+  // a cottage with dormers and a picket fence
+  vacation:{w:34, s:8, scene:'yard', draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; const wc = c.o.paint || '#9fb2c4'; let g = k.tree(-12, 0, 22) + k.tree(44, 0, 20, 'pine');
+    g += k.wall(-0.3, 0, 34.6, 1.2, '#9a958e', 'stone') + k.wall(0, 1.2, 34, 9.8, wc, 'siding') + k.slope(0, 11, 34, 9, roof, {inset:0, ov:1.2});
+    [6, 22].forEach(x => { g += k.wall(x, 14, 6, 5, wc, 'siding') + k.gable(x - 0.4, 19, 6.8, 2.6, wc, roof, {ov:0.5}) + k.win(x + 1.4, 14.6, 3.2, 3.6, Object.assign({}, wo, {rows:2, sash:0})); });
+    g += k.door(15.4, 1.2, 3.2, 7, doorC, {trim, bell:m.smart}) + k.win(4, 3, 4.4, 5.4, Object.assign({}, wo, {rows:3})) + k.win(25.6, 3, 4.4, 5.4, Object.assign({}, wo, {rows:3})) + k.gable(13.6, 8.6, 6.8, 1.8, trim, roof, {ov:0.3}) + k.chim(28, 17, 2.2, 6);
+    const front = `<path d="M${k.X(15.2)},${k.Y(0)} L${k.X(18.8)},${k.Y(0)} L${k.X(19.6)},${k.Y(-9)} L${k.X(14.4)},${k.Y(-9)}Z" fill="#cfc8bb"/>` + k.picket(-6, 13) + k.picket(21, 40);
+    return {g, front, a:{addL:0, garR:34, deckX:36, solar:[1, 12, 2, 2, 2.4, 2.4], chim:[28, 17, 6], eave:[0, 11, 34], found:[3, 28], bed:[[0.5, 12], [21, 12]], pool:[2, 9], fence:[], yard:-7}}; }},
+  // a side-by-side duplex, two front doors
+  duplex:{w:44, s:6.6, draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; let g = k.tree(-10, 0, 22) + k.tree(52, 0, 22, 'tree', '#5c9443');
+    g += k.wall(0, 0, 44, 1.4, '#9a958e', 'brick') + k.wall(0, 1.4, 44, 17.6, wall, 'siding') + k.slope(0, 19, 44, 7, roof, {inset:0, ov:1.2}) + `<rect x="${k.X(21.8)}" y="${k.Y(19)}" width="${r1(0.4 * k.s)}" height="${r1(17.6 * k.s)}" fill="${hexMix(wall, '#000000', 0.2)}"/>`;
+    [[2, 9.5, 14.5], [41.5 - 3.6, 30.9, 26.2]].forEach(([w1, d, w2], i) => { g += k.win(w1, 3, 3.6, 5.4, wo) + k.win(w2, 3, 3.6, 5.4, wo) + k.door(d, 1.4, 3.2, 7, i ? '#1f3a5a' : doorC, {trim, bell:m.smart}) + k.win(w1, 11.5, 3.6, 5, wo) + k.win(w2, 11.5, 3.6, 5, wo) + k.gable(d - 1.6, 9, 6.4, 1.8, trim, roof, {ov:0.3}); });
+    return {g, a:{addL:0, garR:44, deckX:-14, solar:[3, 20.2, 7, 2, 2.4, 2.6], chim:[20, 19, 8], eave:[0, 19, 44], found:[5, 36], bed:[[0.5, 7], [36, 7]], pool:[16, 10], fence:[[-12, -2], [46, 56]], yard:-7}}; }},
+  // a brick fourplex
+  apt4:{w:46, s:6.2, draw:c => { const {k, roof, doorC, trim, wo, m} = c; const br = c.o.paint || '#a85f4a'; let g = k.tree(-10, 0, 24) + k.tree(56, 0, 22, 'tree', '#5c9443');
+    g += k.wall(0, 0, 46, 21, br, 'brick') + k.flat(0, 21, 46, '#3a3d42', 0.8) + `<rect x="${k.X(0)}" y="${k.Y(21.6)}" width="${r1(46 * k.s)}" height="${r1(0.8 * k.s)}" fill="${trim}"/>`;
+    [3, 11, 31, 39].forEach(x => { g += k.win(x, 3, 4, 5.6, wo) + k.win(x, 13, 4, 5.6, wo); });
+    g += k.door(19.6, 0, 6.8, 8.2, doorC, {glass:1, trim}) + `<rect x="${k.X(18.6)}" y="${k.Y(9.6)}" width="${r1(8.8 * k.s)}" height="${r1(1 * k.s)}" fill="#3a3d42"/>` + k.win(20.5, 12.5, 5, 6, wo);
+    return {g, a:{addL:0, mat:'brick', garR:46, deckX:-14, solar:[4, 22.4, 8, 1, 2.4, 0.9], chim:[40, 21.5, 4], eave:[0, 21, 46], bed:[[0.5, 16], [29, 16]], pool:[-2, 8], fence:[[-12, -2], [48, 58]], yard:-7}}; }},
+  // a big old house rented out to students
+  student:{w:40, s:6.4, draw:c => { const {k, wall, roof, doorC, trim, wo, m} = c; const wc = c.o.paint || '#cfd8c6'; let g = k.tree(-12, 0, 28) + k.tree(48, 0, 26, 'tree', '#5c9443');
+    g += k.wall(0, 0, 40, 1.6, '#9a958e', 'brick') + k.wall(0, 1.6, 40, 19.4, wc, 'siding') + k.gable(-0.2, 21, 40.4, 10, wc, roof, {ov:1.2, mat:'siding'}) + k.win(17, 23, 6, 4, Object.assign({}, wo, {rows:1, sash:0}));
+    [3, 11, 25, 33].forEach(x => { g += k.win(x, 13, 4, 5.6, wo) + (x === 11 || x === 25 ? '' : k.win(x, 3.4, 4, 5.6, wo)); });
+    g += k.door(18.3, 1.6, 3.4, 7.2, doorC, {glass:1, trim}) + `<rect x="${k.X(-0.5)}" y="${k.Y(10.2)}" width="${r1(41 * k.s)}" height="${r1(0.8 * k.s)}" fill="${trim}"/>` + k.slope(-0.5, 11, 41, 1.8, roof, {ov:0.6}) + [0, 13, 27, 39.4].map(x => k.col(x, 1.6, 0.6, 8.6)).join('');
+    g += `<g stroke="#2b2d31" stroke-width="1" fill="none"><circle cx="${k.X(30)}" cy="${k.Y(3.4)}" r="${r1(1.6 * k.s)}"/><circle cx="${k.X(34)}" cy="${k.Y(3.4)}" r="${r1(1.6 * k.s)}"/><path d="M${k.X(30)},${k.Y(3.4)} L${k.X(31.6)},${k.Y(5.2)} L${k.X(34)},${k.Y(3.4)} M${k.X(31.6)},${k.Y(5.2)} L${k.X(33.4)},${k.Y(5.4)}"/></g>`;
+    return {g, a:{addL:0, garR:40, deckX:-14, solar:[3, 22, 4, 1, 2.4, 2.4], chim:[32, 24, 8], eave:[0, 21, 40], found:[4, 34], bed:[[0.5, 8], [32, 8]], pool:[42, 8], fence:[[-12, -2], [44, 52]], yard:-7}}; }},
+  // a mid-rise condo building; the home is one of its units
+  condo:{w:56, s:4.6, draw:c => { const {k, trim, m, room} = c; const wc = c.o.paint || '#d9d4cb'; let g = k.tree(-10, 0, 24) + k.tree(66, 0, 26, 'tree', '#5c9443');
+    g += k.wall(0, 0, 56, 42, wc, 'stucco') + k.wall(0, 0, 56, 6, '#8c8a86', 'stone') + k.flat(0, 42, 56, '#3a3d42', 1);
+    for(let f = 0; f < 4; f++) for(let i = 0; i < 4; i++){ const x = 3 + i * 13.5, y = 8 + f * 8.6, mine = f === 2 && i === 1; g += k.win(x, y, 9, 6, {trim:'#3a3d42', cols:3, rows:1, sash:0, room:mine ? room : 0}) + `<rect x="${k.X(x - 0.6)}" y="${k.Y(y + 1.6)}" width="${r1(10.2 * k.s)}" height="${r1(1.6 * k.s)}" fill="${mine ? '#e9e6dc' : '#c9c4ba'}" stroke="#7d838a" stroke-width=".6"/>`; }
+    g += k.door(25, 0, 6, 5.6, '#2b2d31', {glass:1, trim:'#3a3d42'}) + `<rect x="${k.X(23)}" y="${k.Y(6.6)}" width="${r1(10 * k.s)}" height="${r1(1 * k.s)}" fill="#3a3d42"/>`;
+    return {g, a:{bed:[[1, 18], [37, 18]], solar:[4, 43, 10, 1, 4.6, 1], eave:[0, 42, 56]}}; }},
+  'condo-rental':{w:50, s:5, draw:c => { const {k, trim, room} = c; const wc = c.o.paint || '#c9b8a2'; let g = k.tree(-10, 0, 24) + k.tree(60, 0, 24, 'tree', '#5c9443');
+    g += k.wall(0, 0, 50, 34, wc, 'brick') + k.flat(0, 34, 50, '#3a3d42', 0.8);
+    for(let f = 0; f < 3; f++) for(let i = 0; i < 5; i++){ if(f === 0 && i === 2) continue; g += k.win(3 + i * 9.4, 3 + f * 10.6, 5, 6.4, {trim:'#efe9dd', cols:2, rows:2, sash:0, room:f === 1 && i === 3 ? room : 0}); }
+    g += k.door(22, 0, 6, 7.6, '#2b2d31', {glass:1, trim:'#efe9dd'}) + `<rect x="${k.X(20.5)}" y="${k.Y(8.8)}" width="${r1(9 * k.s)}" height="${r1(1 * k.s)}" fill="#1f3a5a"/>`;
+    return {g, a:{bed:[[1, 18], [31, 18]], solar:[4, 34.6, 9, 1, 4.6, 1], eave:[0, 34, 50], yard:-6}}; }},
+  // garden apartments: three stories, stair towers, balconies
+  apt12:{w:90, s:4.2, draw:c => { const {k, trim} = c; const wc = c.o.paint || '#d8cdb8'; let g = k.tree(-10, 0, 26) + k.tree(100, 0, 26, 'tree', '#5c9443');
+    g += k.wall(0, 0, 90, 30, wc, 'siding') + k.slope(0, 30, 90, 7, '#4a4e55', {inset:8, ov:1.2});
+    [28, 58].forEach(x => { g += k.wall(x, 0, 6, 30, '#a85f4a', 'brick') + k.door(x + 1.4, 0, 3.2, 7, '#2b2d31', {glass:1, trim}); });
+    for(let f = 0; f < 3; f++) for(const x of [3, 14, 38, 49, 66, 77]) g += k.win(x, 2.5 + f * 9.6, 7, 5.6, {trim, cols:3, rows:1, sash:0}) + `<rect x="${k.X(x - 0.5)}" y="${k.Y(2.5 + f * 9.6 + 1.6)}" width="${r1(8 * k.s)}" height="${r1(1.4 * k.s)}" fill="none" stroke="${trim}" stroke-width="1.2"/>`;
+    return {g, a:{bed:[[0.5, 26], [35, 22], [65, 24]], solar:[10, 31, 14, 1, 4.6, 1], eave:[0, 30, 90], yard:-6}}; }},
+  // a one-story retail building
+  commercial:{w:56, s:6.4, scene:'city', draw:c => { const {k, trim} = c; const wc = c.o.paint || '#c9a27a'; let g = '';
+    g += k.wall(0, 0, 56, 18, wc, 'brick') + `<rect x="${k.X(-0.5)}" y="${k.Y(19.5)}" width="${r1(57 * k.s)}" height="${r1(1.6 * k.s)}" fill="#3a3d42"/>` + `<rect x="${k.X(8)}" y="${k.Y(16.6)}" width="${r1(40 * k.s)}" height="${r1(3 * k.s)}" rx="3" fill="#2b2d31"/><text x="${k.X(28)}" y="${k.Y(14.4)}" font-size="${r1(1.8 * k.s)}" font-weight="700" text-anchor="middle" fill="#f4e6c8" font-family="Arial,sans-serif">RETAIL SPACE</text>`;
+    g += `<path d="${rpath(k.P([[2, 13, 0], [54, 13, 0], [52, 10, 0], [4, 10, 0]]), true)}" fill="#c43a3a"/>` + Array.from({length:13}, (_, i) => `<path d="${rpath(k.P([[4 + i * 4, 13, 0], [6 + i * 4, 13, 0], [6 + i * 4, 10, 0], [4 + i * 4, 10, 0]]), true)}" fill="#f4f4f0"/>`).join('');
+    g += k.win(3, 1.4, 30, 8, {trim:'#2b2d31', cols:4, rows:1, sash:0}) + k.door(37, 0, 5.4, 8.6, '#2b2d31', {glass:1, trim:'#2b2d31'}) + k.win(45, 1.4, 8, 8, {trim:'#2b2d31', cols:1, rows:1, sash:0});
+    return {g, a:{solar:[4, 20.6, 12, 1, 4, 0.8], eave:[0, 18, 56], yard:-6}, noShrubs:1}; }},
+  // a strip mall with a parking lot
+  stripmall:{w:110, s:4.6, scene:'city', draw:c => { const {k} = c; const wc = c.o.paint || '#d9cbb3'; let g = '';
+    g += k.wall(0, 0, 110, 18, wc, 'stucco') + `<rect x="${k.X(-1)}" y="${k.Y(20)}" width="${r1(112 * k.s)}" height="${r1(2 * k.s)}" fill="#8a5a3a"/>`;
+    ['#c43a3a', '#2f6db0', '#e0a03a', '#3f8a4a', '#7a4a8a', '#c4683a'].forEach((cc, i) => { const x = 2 + i * 18; g += `<rect x="${k.X(x)}" y="${k.Y(16.4)}" width="${r1(16 * k.s)}" height="${r1(3 * k.s)}" fill="${cc}"/>` + k.win(x + 0.6, 0.8, 9, 9.6, {trim:'#2b2d31', cols:2, rows:1, sash:0}) + k.door(x + 10.6, 0, 4.4, 8.4, '#2b2d31', {glass:1, trim:'#2b2d31'}); });
+    const front = Array.from({length:22}, (_, i) => `<line x1="${k.X(-8 + i * 6)}" y1="${k.Y(-1.5)}" x2="${k.X(-6 + i * 6)}" y2="${k.Y(-11)}" stroke="#f4f4f0" stroke-width="1.6"/>`).join('');
+    return {g, front, a:{solar:[4, 18.6, 24, 1, 4.4, 0.8], eave:[0, 18, 110]}, noShrubs:1}; }},
+  // the top floors of a glass tower, with a terrace, above the city
+  penthouse:{w:44, s:5.2, scene:'city', draw:c => { const {k, trim, m, room} = c; let g = '';
+    g += k.wall(0, -12, 44, 42, '#9fb4c6', 'glass');
+    for(let f = 0; f < 5; f++) g += k.win(0.5, -18.5 + f * 9.5, 43, 8.4, {trim:'#5f6f7e', cols:6, rows:1, sash:0});
+    g += `<rect x="${k.X(-2)}" y="${k.Y(30.8)}" width="${r1(48 * k.s)}" height="${r1(1 * k.s)}" fill="#e9ecef"/>` + k.wall(6, 30.8, 30, 10, '#f2f2ee', 'stucco') + k.win(8, 31.4, 26, 8.2, {trim:'#2b2d31', cols:4, rows:1, sash:0, room}) + k.flat(4, 40.8, 34, '#2b2d31', 2);
+    g += `<rect x="${k.X(-2)}" y="${k.Y(34)}" width="${r1(48 * k.s)}" height="${r1(3.2 * k.s)}" fill="#bfe0f2" opacity=".35" stroke="#e9ecef"/>` + k.tree(39, 30.8, 8, 'tree', '#5c9443') + k.tree(2, 30.8, 7, 'tree', '#5c9443');
+    return {g, a:{solar:[8, 41.8, 7, 1, 4, 1], eave:[6, 40.8, 36]}, noShrubs:1}; }},
+};
+// which drawing a make and model uses
+function vehSpec(key, i){
+  const m = (VEH_MODELS[key] || [])[i]; if(!m) return null;
+  const id = m[0] + '|' + m[1];
+  if(key === 'used' && VEH_SPECS[id + '|old']) return [drawCar, VEH_SPECS[id + '|old']];
+  return VEH_SPECS[id] ? [drawCar, VEH_SPECS[id]] : MOTO_SPECS[id] ? [drawTwo, MOTO_SPECS[id]] : RV_SPECS[id] ? [drawRV, RV_SPECS[id]] : BOAT_SPECS[id] ? [drawBoat, BOAT_SPECS[id]] : JET_SPECS[id] ? [drawJet, JET_SPECS[id]] : null;
+}
+const vehColorOf = x => { const c = x.color && VEH_COLORS.find(v => v[0] === x.color); if(c) return c[1]; const sp = vehSpec(x.key, ownedModelIndex(x)); return sp ? sp[1].col : '#b8bdc3'; };
+function vehicleArt(key, color, i){
+  if(i == null) i = vehPick(key);
+  const sp = vehSpec(key, i), m = (VEH_MODELS[key] || [])[i]; if(!sp) return '';
+  return `<svg class="art" viewBox="0 0 ${DW} ${DH}" role="img" aria-label="${m ? m[0] + ' ' + m[1] : key}">${sp[0](sp[1], color || sp[1].col, 'va' + (++artSeq))}</svg>`;
+}
+// x: the home you own (its paint, add-ons, solar and furnishings show in the drawing)
+function propertyArt(key, seed, x){
+  const o = x ? {paint:x.paint ? (HOME_PAINT.find(p => p[0] === x.paint) || [])[1] : null, mods:x.mods || {}, solar:x.solar, furnish:x.furnish || 0} : {};
+  return `<svg class="art" viewBox="0 0 ${DW} ${DH}" role="img" aria-label="${(findCatalog(key) || {name:key}).name}">${drawHouse(key, seed, o, 'pa' + (++artSeq))}</svg>`;
 }
 // Floor plans and ages, the same every time for the same property.
 const PROP_DETAIL = {cabin:[2, 1, 900, 1], condo:[2, 2, 1100, 0], starter:[3, 2, 1400, 0.15], suburb:[4, 3, 2600, 0.3], lux:[5, 5, 4800, 0.7], mansion:[8, 10, 12000, 5], beach:[4, 3, 2400, 0.25],
@@ -4571,68 +5362,8 @@ function propDetails(key, seed, units, cond, baseYear){
   return [d[0] + ' bd · ' + d[1] + ' ba', sq.toLocaleString() + ' sq ft', lot, 'built ' + built].filter(Boolean).join(' · ');
 }
 
-const PHOTOS = {"v:scooter:1":{"f":"img/v/scooter-1.jpg","a":"Khaosaming","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Honda_Zoomer_Ruckus_Motor_Scooter_50cc_Snowy_Winter.JPG"},
-  "v:scooter:2":{"f":"img/v/scooter-2.jpg","a":"Travis Rigel Lukas Hornung","l":"CC BY 2.0","u":"https://commons.wikimedia.org/wiki/File:Genuine_Buddy_01.jpg"},
-  "v:scooter:3":{"f":"img/v/scooter-3.jpg","a":"Khaosaming","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Vespa_Primavera_125.jpg"},
-  "v:used:2":{"f":"img/v/used-2.jpg","a":"M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Ford_Focus_Trend_(III)_%E2%80%93_Frontansicht,_17._September_2011,_Ratingen.jpg"},
-  "v:motorcycle:0":{"f":"img/v/motorcycle-0.jpg","a":"Chris Woodrich","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Honda_CMX500_Rebel_parked_at_Hogs_for_Hospice,_Leamington,_Ontario,_2025-08-02.jpg"},
-  "v:motorcycle:4":{"f":"img/v/motorcycle-4.jpg","a":"Cjp24","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:BMW_R_1300_GS_Adventure_Triple_Black_(1).jpg"},
-  "v:newsed:0":{"f":"img/v/newsed-0.jpg","a":"Cutlass","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:2023_Hyundai_Elantra_Limited_in_Silver,_front_left,_04-04-2026.jpg"},
-  "v:newsed:1":{"f":"img/v/newsed-1.jpg","a":"EurovisionNim","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2018_Toyota_Corolla_(MZEA12R)_Ascent_Sport_hatchback_(2018-11-02)_01.jpg"},
-  "v:newsed:2":{"f":"img/v/newsed-2.jpg","a":"TTTNIS","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Mazda3_SKYACTIV-G.jpg"},
-  "v:newsed:3":{"f":"img/v/newsed-3.jpg","a":"Elise240SX","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Honda_Civic_Touring_in_Lunar_Silver_Metallic,_Front_Left,_05-10-2022.jpg"},
-  "v:minivan:0":{"f":"img/v/minivan-0.jpg","a":"MercurySable99","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Kia_Carnival_Hybrid_EX,_front_right,_10-12-2025.jpg"},
-  "v:minivan:1":{"f":"img/v/minivan-1.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Toyota_Sienna_XLE_Hybrid,_front_12.21.21.jpg"},
-  "v:minivan:2":{"f":"img/v/minivan-2.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Honda_Odyssey_EX-L_(facelift),_front_1.1.21.jpg"},
-  "v:minivan:3":{"f":"img/v/minivan-3.jpg","a":"Mr.choppers","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:2020_Chrysler_Pacifica_Touring-L_in_Bright_White,_front_left.jpg"},
-  "v:suv:0":{"f":"img/v/suv-0.jpg","a":"Mr.choppers","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2024_Toyota_RAV4_Prime_XSE_Premium_in_Silver_Sky_with_Midnight_Black_roof,_front_left.jpg"},
-  "v:suv:1":{"f":"img/v/suv-1.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Honda_CR-V_e-HEV_Elegance_AWD_(VI)_%E2%80%93_f_14072024.jpg"},
-  "v:suv:2":{"f":"img/v/suv-2.jpg","a":"Elise240SX","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Jeep_Grand_Cherokee_Summit_Reserve_4x4_in_Bright_White,_Front_Left,_01-16-2022.jpg"},
-  "v:suv:4":{"f":"img/v/suv-4.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Chevrolet_Tahoe_RST,_front_3.7.22.jpg"},
-  "v:ev:0":{"f":"img/v/ev-0.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Chevrolet_Equinox_EV,_front_left_4.26.25.jpg"},
-  "v:ev:1":{"f":"img/v/ev-1.jpg","a":"Vauxford","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Ford_Mustang_Mach-E_Standard_Range_Front.jpg"},
-  "v:ev:2":{"f":"img/v/ev-2.jpg","a":"Alexander-93","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Tesla_Model_3_(2023)_Autofr%C3%BChling_Ulm_IMG_9282.jpg"},
-  "v:ev:3":{"f":"img/v/ev-3.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Hyundai_Ioniq_5_AWD_Techniq-Paket_%E2%80%93_f_31122024.jpg"},
-  "v:ev:4":{"f":"img/v/ev-4.jpg","a":"© M 93","l":"CC BY-SA 3.0 de","u":"https://commons.wikimedia.org/wiki/File:Tesla_Model_Y_Premium_(Facelift)_%E2%80%93_f_05052026.jpg"},
-  "v:ev:5":{"f":"img/v/ev-5.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2023_Rivian_R1S_Adventure,_front_1.29.23.jpg"},
-  "v:pickup:0":{"f":"img/v/pickup-0.jpg","a":"Alexander-93","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Toyota_Tacoma_(N300)_TRD_1X7A2438.jpg"},
-  "v:pickup:2":{"f":"img/v/pickup-2.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_Ford_F-150_SuperCrew,_front_4.28.21.jpg"},
-  "v:classic:1":{"f":"img/v/classic-1.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:1965_Ford_Mustang_Convertible_Classic-Gala_2021_1X7A0275.jpg"},
-  "v:classic:2":{"f":"img/v/classic-2.jpg","a":"Noah Wulf","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Blue_1957_Chevrolet_Bel_Air_Convertible_in_Las_Vegas.jpg"},
-  "v:classic:3":{"f":"img/v/classic-3.jpg","a":"Berthold Werner","l":"CC BY-SA 3.0","u":"https://commons.wikimedia.org/wiki/File:Mercedes-Benz_W113_280_SL_2014-09-07_12-45-34.jpg"},
-  "v:classic:4":{"f":"img/v/classic-4.jpg","a":"Charles from Port Chester, New York","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_Sting_Ray_427_Cabriolet_(C2,_1967)_(55219368966).jpg"},
-  "v:sports:0":{"f":"img/v/sports-0.jpg","a":"Kazyakuruma","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Nissan_FAIRLADY_Z_(Z34)_Version_ST,_2022,_left-front.jpg"},
-  "v:sports:1":{"f":"img/v/sports-1.jpg","a":"WMrapids","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Seventh_generation_2024_Ford_Mustang_(cropped).jpg"},
-  "v:sports:2":{"f":"img/v/sports-2.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Chevrolet_Corvette_C8_IAA_2021_1X7A0156.jpg"},
-  "v:sports:3":{"f":"img/v/sports-3.jpg","a":"Vauxford","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2021_BMW_M4_Competition_Automatic_3.0_Front.jpg"},
-  "v:sports:4":{"f":"img/v/sports-4.jpg","a":"Alexander Migl","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2025_Porsche_992_Carrera_convertible_DSC_7026.jpg"},
-  "v:luxcar:0":{"f":"img/v/luxcar-0.jpg","a":"Kevauto","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2019_Lexus_LS_500_AWD_beige,_front_Hagerty_6.1.19.jpg"},
-  "v:luxcar:1":{"f":"img/v/luxcar-1.jpg","a":"Damian B Oh","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Genesis_G90_3.5T_RS4_Savile_Silver_(1)_(cropped).jpg"},
-  "v:supercar:0":{"f":"img/v/supercar-0.jpg","a":"MrWalkr","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2017_Lamborghini_Huracan_LP610.jpg"},
-  "v:supercar:1":{"f":"img/v/supercar-1.jpg","a":"Max Baillie","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:2022_Ferrari_296_(cropped).jpg"},
-  "v:sailboat:0":{"f":"img/v/sailboat-0.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Hobie_Getaway_catamaran_sailboat_1997.jpg"},
-  "v:sailboat:1":{"f":"img/v/sailboat-1.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:J70_sailboat_3333.jpg"},
-  "v:sailboat:2":{"f":"img/v/sailboat-2.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Beneteau_First_285_sailboat_1728.jpg"},
-  "v:sailboat:3":{"f":"img/v/sailboat-3.jpg","a":"Ahunt","l":"CC0","u":"https://commons.wikimedia.org/wiki/File:Catalina_275_Sport_sailboat_2556.jpg"},
-  "v:speedboat:0":{"f":"img/v/speedboat-0.jpg","a":"Marius Vassnes","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Bayliner_in_Austevoll.jpg"},
-  "v:speedboat:1":{"f":"img/v/speedboat-1.jpg","a":"Matti Blume","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:Sea_Ray_SPX_210,_Interboot_2020,_Friedrichshafen_(IB200261).jpg"},
-  "v:speedboat:2":{"f":"img/v/speedboat-2.jpg","a":"Matti Blume","l":"CC BY-SA 4.0","u":"https://commons.wikimedia.org/wiki/File:MasterCraft,_Interboot_2020,_Friedrichshafen_(IB200217).jpg"},
-  "v:yacht:2":{"f":"img/v/yacht-2.jpg","a":"Monmar Comunicació from Vic","l":"CC BY-SA 2.0","u":"https://commons.wikimedia.org/wiki/File:Sunseeker_Predator_84_(7542162456).jpg"},
-  "v:jet:4":{"f":"img/v/jet-4.jpg","a":"Rob Hodgkins","l":"CC BY-SA 2.0","u":"https://commons.wikimedia.org/wiki/File:G-ULFS_Gulfstream_G650_CVT_05-05-16_(27046023031)_(cropped).jpg"}};
-// Real photographs, from Wikimedia Commons under free licenses; each shows its author and license.
 const photoEsc = s => String(s || '').replace(/[<>"&`]/g, '');
-function photoHtml(pid, alt){
-  const p = PHOTOS[pid]; if(!p) return '';
-  return `<figure class="photo"><img src="${p.f}" alt="${photoEsc(alt)}" loading="lazy" decoding="async" width="640" height="360"><figcaption>Photo: ${photoEsc(p.a)} · <a href="${photoEsc(p.u)}" target="_blank" rel="noopener noreferrer">${photoEsc(p.l)}</a></figcaption></figure>`;
-}
-// The exact model's photo, or the drawing if a photo is missing.
-const vehPhoto = (key, i, color) => photoHtml('v:' + key + ':' + i, (VEH_MODELS[key] && VEH_MODELS[key][i] ? VEH_MODELS[key][i].slice(0, 2).join(' ') : key)) || vehicleArt(key, color);
 const ownedModelIndex = x => { const l = VEH_MODELS[x.key] || []; const i = l.findIndex(m => m[0] === x.make && m[1] === x.model); return i < 0 ? 0 : i; };
-function housePhoto(key, seed){
-  const ids = Object.keys(PHOTOS).filter(k => k.startsWith('h:' + key + ':'));
-  if(!ids.length) return propertyArt(key, seed);
-  return photoHtml(ids[seedOf(seed || key) % ids.length], (findCatalog(key) || {name:key}).name);
-}
 // ---------- Homes: full details and customization ----------
 // Each home has a fixed set of facts (from its seed) that renovations and add-ons then change.
 const HOME_BASE = {
@@ -4795,8 +5526,9 @@ function assetCatalogRow(t, cat){
   const canFinance = financeable && state.money >= down && state.creditScore >= 580 && !state.bankrupt;
   return `<div class="invrow">
     <div class="itop"><span><b>${t.name}</b></span><span class="price">${fmt(price)}</span></div>
-    ${models ? vehPhoto(t.key, vehPick(t.key)) + `<select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
-    ${cat === 'Homes' ? housePhoto(t.key, 'h' + t.key + state.age) + '<div class="veh-specs">' + (HOME_BASE[t.key] ? HOME_BASE[t.key].style + ' · ' : '') + propDetails(t.key, 'h' + t.key + state.age) + '</div>' : ''}
+    ${models ? vehicleArt(t.key, vehColorPick(t.key) >= 0 ? VEH_COLORS[vehColorPick(t.key)][1] : null, vehPick(t.key)) + `<div class="veh-row"><select class="veh-select" aria-label="${t.name} make and model" onchange="pickModel('${t.key}', this.value)">` + models.map((m, i) => `<option value="${i}" ${i === vehPick(t.key) ? 'selected' : ''}>${m[7] ? m[7] + ' ' : ''}${m[0]} ${m[1]} · ${fmt(inflR(m[2], 100))}</option>`).join('') + '</select>' +
+      `<select class="veh-select" aria-label="${t.name} paint color" onchange="pickColor('${t.key}', this.value)"><option value="-1" ${vehColorPick(t.key) < 0 ? 'selected' : ''}>Factory color</option>` + VEH_COLORS.map((cl, i) => `<option value="${i}" ${i === vehColorPick(t.key) ? 'selected' : ''}>${cl[0]}</option>`).join('') + '</select></div><div class="veh-specs">' + vehSpecs(vehModel(t.key)) + '</div>' : ''}
+    ${cat === 'Homes' ? propertyArt(t.key, 'h' + t.key + state.age) + '<div class="veh-specs">' + (HOME_BASE[t.key] ? HOME_BASE[t.key].style + ' · ' : '') + propDetails(t.key, 'h' + t.key + state.age) + '</div>' : ''}
     <div class="owned">${t.appreciation >= 0 ? 'Tends to appreciate' : 'Tends to depreciate'} · ${riskLabel(t.vol)}${t.rentalYield ? ` · ${(t.rentalYield*100).toFixed(1)}% rental yield` : ''}${t.upkeepFlat ? ' · upkeep ' + fmt(t.upkeepFlat * state.econ.cumInflation) + '/yr' : ''}${t.speed ? ' · fast, riskier on the road' : ''}</div>
     <div class="assetbuy">
       <button onclick="buyAsset('${t.key}')" ${(locked || !afford) ? 'disabled' : ''}>${locked ? `Buy · ${fromAge(minA)}` : cat === 'Cars' ? 'Buy new' : 'Buy Cash'}</button>
@@ -4813,7 +5545,7 @@ function ownedAssetRow(x){
   const sellVal = x.value * (1 - fee);
   return `<div class="invrow">
     <div class="itop"><span><b>${x.category === 'Homes' && x.nickname ? photoEsc(x.nickname) + '</b> <span class="sub-meta">' + x.name + '</span>' : x.name + '</b>'}</span><span class="price ${dir}">${gp >= 0 ? '+' : ''}${gp.toFixed(0)}% ${fmt(x.value)}</span></div>
-    ${x.category === 'Homes' ? housePhoto(x.key, x.seed || x.id) + (() => { const f = homeFacts(x), chips = homeFeatureChips(x); return '<div class="veh-specs">' + [f.style, f.beds + ' bd · ' + f.baths + ' ba', f.sqft.toLocaleString() + ' sq ft', 'built ' + f.built].join(' · ') + '</div>' +
+    ${x.category === 'Homes' ? propertyArt(x.key, x.seed || x.id, x) + (() => { const f = homeFacts(x), chips = homeFeatureChips(x); return '<div class="veh-specs">' + [f.style, f.beds + ' bd · ' + f.baths + ' ba', f.sqft.toLocaleString() + ' sq ft', 'built ' + f.built].join(' · ') + '</div>' +
       (chips.length ? '<div class="chips">' + chips.map(c => '<span class="chip good">' + c + '</span>').join('') + '</div>' : '') +
       `<div class="assetbuy"><button onclick="toggleHome('${x.id}')">${state.openHome === x.id ? 'Hide details' : 'Details & customize'}</button></div>` + (state.openHome === x.id ? homeCustomizeHtml(x) : ''); })() : ''}
     <div class="owned">${x.category} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)}</div>
@@ -5475,6 +6207,8 @@ function nameVehicle(x, t, used){
   const m = vehModel(t.key); if(!m) return x;
   const year = m[7] || (used ? curYear() - rint(3, 9) : curYear());
   x.make = m[0]; x.model = m[1]; x.year = year; x.name = `${year} ${m[0]} ${m[1]}`;
+  const ci = vehColorPick(t.key);
+  if(used) x.color = pick(VEH_COLORS)[0]; else if(ci >= 0) x.color = VEH_COLORS[ci][0]; else delete x.color;
   return x;
 }
 function buyUsedVehicle(key){
@@ -5564,8 +6298,8 @@ function vehicleRowHtml(x){
   const btn = (key, label, dis) => `<button onclick="vehicleAct('${x.id}','${key}')" ${dis || done(key) || state.crime.prison ? 'disabled' : ''}>${label}${done(key) ? ' ✓' : ''}</button>`;
   return `<div class="invrow">
     <div class="itop"><span><b>${x.name}</b>${t.classic ? ' <span class="tick">CLASSIC</span>' : ''}</span><span class="price ${gp >= 0 ? 'up' : 'down'}">${fmt(x.value)}</span></div>
-    ${vehPhoto(x.key, ownedModelIndex(x), vehColorOf(x))}
-    ${ownedModel(x) ? '<div class="veh-specs">' + vehSpecs(ownedModel(x)) + '</div>' : ''}
+    ${vehicleArt(x.key, vehColorOf(x), ownedModelIndex(x))}
+    ${ownedModel(x) ? '<div class="veh-specs">' + (x.color || 'Factory color') + ' · ' + vehSpecs(ownedModel(x)) + '</div>' : ''}
     <div class="owned">${{car:'Car', bike:'Motorbike', bicycle:'Bicycle', rv:'Motorhome', boat:'Boat', plane:'Aircraft'}[k]} · bought at age ${x.boughtAge} for ${fmt(x.boughtPrice)} · upkeep ${fmt((t.upkeepFlat || 0) * state.econ.cumInflation)}/yr${t.classic ? ' · keeps its value only in good condition' : ''}</div>
     <div class="itop"><span class="owned">Condition</span><span class="price ${cond < 40 ? 'down' : ''}">${cond}/100</span></div>
     <div class="stat-track"><div class="stat-fill" style="width:${cond}%;background:var(--${cond < 40 ? 'red' : 'green'})"></div></div>
