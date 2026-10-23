@@ -4393,8 +4393,9 @@ function rpath(pts, closed, open){
 }
 const RIMS = {silver:['#eef0f2', '#a3a9b0', '#7d848c'], black:['#4a4d52', '#1d1e21', '#111214'], gunmetal:['#9aa0a7', '#4b5056', '#33373c'], chrome:['#ffffff', '#c3c9cf', '#8e959c'],
   bronze:['#d8b47a', '#8a6634', '#5e4422'], machined:['#f4f5f6', '#b9bec4', '#1d1e21'], white:['#ffffff', '#dcdfe2', '#a9aeb3'], gold:['#e8cf86', '#a8873e', '#6e5726']};
-// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style, n: spokes, fin: finish, cal: caliper color, ww: whitewall,
-// lugs: lug nuts (trucks run 6), drill: 0 for plain rotors, at: knobby all-terrain tread}
+// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style (split, y, forged, mesh, turbine, star, blade, wire, disc, steel, hubcap), n: spokes, fin: finish, cal: caliper color, ww: whitewall,
+// lugs: lug nuts (trucks run 6), drill: 0 for plain rotors, at: knobby all-terrain tread, facet: spokes lit on one edge,
+// cl: a center-lock nut instead of lug nuts, ccb: dark carbon-ceramic rotors}
 function drawWheel(id, cx, cy, R, rr, w){
   w = w || {}; const fin = RIMS[w.fin || 'silver'], n = w.n || 5, t = w.t || 'split', gid = id + 'r' + Math.round(cx), blk = w.fin === 'black', lugs = w.lugs || 5;
   const pt = (a, rad) => r1(cx + Math.cos(a) * rad) + ',' + r1(cy + Math.sin(a) * rad), C = (rad, f) => `<circle cx="${cx}" cy="${cy}" r="${r1(rad)}" ${f}/>`;
@@ -4402,7 +4403,7 @@ function drawWheel(id, cx, cy, R, rr, w){
   let s = `<defs><radialGradient id="${gid}" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="${fin[0]}"/><stop offset=".55" stop-color="${fin[1]}"/><stop offset="1" stop-color="${fin[2]}"/></radialGradient>` +
     `<radialGradient id="${gid}t"><stop offset="${r1(rr / R * 100) / 100}" stop-color="#34363a"/><stop offset="${r1((rr / R + (1 - rr / R) * 0.35) * 100) / 100}" stop-color="#202124"/><stop offset=".93" stop-color="#151618"/><stop offset="1" stop-color="#0d0e0f"/></radialGradient>` +
     `<radialGradient id="${gid}b" cx=".55" cy=".6" r=".6"><stop offset="0" stop-color="#3a3d42"/><stop offset=".75" stop-color="#1c1e21"/><stop offset="1" stop-color="#0b0c0d"/></radialGradient>` +
-    `<linearGradient id="${gid}d" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d3d7db"/><stop offset=".45" stop-color="#8d939a"/><stop offset=".7" stop-color="#a9aeb4"/><stop offset="1" stop-color="#6f757c"/></linearGradient></defs>`;
+    `<linearGradient id="${gid}d" x1="0" y1="0" x2="1" y2="1">${(w.ccb ? ['#8a8e94', '#4a4e54', '#62666c', '#33363b'] : ['#d3d7db', '#8d939a', '#a9aeb4', '#6f757c']).map((c, i) => `<stop offset="${['0', '.45', '.7', '1'][i]}" stop-color="${c}"/>`).join('')}</linearGradient></defs>`;
   // tire with a shaded sidewall and a glint on the tread
   if(w.at){
     // all-terrain tires: chunky shoulder blocks that just break the tire's outline
@@ -4418,14 +4419,17 @@ function drawWheel(id, cx, cy, R, rr, w){
   if(open){
     // a big cross-drilled brake rotor, its hat and the caliper
     s += C(rr * 0.8, `fill="url(#${gid}d)"`) + C(rr * 0.77, `fill="none" stroke="#5f656c" stroke-width=".5" opacity=".7"`) + C(rr * 0.42, `fill="#3b3f44"`) + C(rr * 0.42, `fill="none" stroke="#9ba1a7" stroke-width=".6"`);
-    if(rr > 14 && w.drill !== 0) for(let i = 0; i < 24; i++) s += `<circle cx="${pt(i * Math.PI / 12, rr * (i % 2 ? 0.58 : 0.66)).replace(',', '" cy="')}" r="${r1(Math.max(0.5, rr * 0.022))}" fill="#4a4f55"/>`;
+    if(rr > 14 && w.drill !== 0) for(let i = 0; i < (w.ccb ? 36 : 24); i++) s += `<circle cx="${pt(i * Math.PI / (w.ccb ? 18 : 12), rr * (w.ccb ? [0.56, 0.63, 0.7][i % 3] : i % 2 ? 0.58 : 0.66)).replace(',', '" cy="')}" r="${r1(Math.max(0.5, rr * 0.022))}" fill="${w.ccb ? '#23262a' : '#4a4f55'}"/>`;
     if(w.cal){ const a0 = 2.42, a1 = 3.5, ri = rr * 0.5, ro = rr * 0.86;
       s += `<path d="M${pt(a0, ro)} A${r1(ro)},${r1(ro)} 0 0 1 ${pt(a1, ro)} L${pt(a1 - 0.06, ri)} A${r1(ri)},${r1(ri)} 0 0 0 ${pt(a0 + 0.06, ri)}Z" fill="${w.cal}" stroke="${hexMix(w.cal, '#000000', 0.45)}" stroke-width=".7" stroke-linejoin="round"/>` +
         `<path d="M${pt(a0 + 0.12, ro * 0.95)} A${r1(ro * 0.95)},${r1(ro * 0.95)} 0 0 1 ${pt(a1 - 0.12, ro * 0.95)}" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="${r1(Math.max(0.6, rr * 0.03))}" stroke-linecap="round"/>`; }
   }
   // spokes: each is a tapered bar from hub (angle a0, radius r0, half width w0) to rim (a1, r1_, w1)
+  // with facet, the half of each spoke that faces the light (up and to the left) is drawn again, lighter
+  let pl = '';
   const bar = (a0, r0, w0, a1, ra, w1) => { const x0 = Math.cos(a0) * r0, y0 = Math.sin(a0) * r0, x1 = Math.cos(a1) * ra, y1 = Math.sin(a1) * ra, l = Math.hypot(x1 - x0, y1 - y0) || 1, nx = -(y1 - y0) / l, ny = (x1 - x0) / l;
-    const q = (x, y) => r1(cx + x) + ',' + r1(cy + y);
+    const q = (x, y) => r1(cx + x) + ',' + r1(cy + y), k = nx * 0.6 + ny * 0.8 > 0 ? -1 : 1;
+    if(w.facet) pl += `M${q(x0, y0)} L${q(x1, y1)} L${q(x1 + k * nx * w1, y1 + k * ny * w1)} L${q(x0 + k * nx * w0, y0 + k * ny * w0)}Z`;
     return `M${q(x0 - nx * w0, y0 - ny * w0)} L${q(x1 - nx * w1, y1 - ny * w1)} L${q(x1 + nx * w1, y1 + ny * w1)} L${q(x0 + nx * w0, y0 + ny * w0)}Z`; };
   const st = (w.rot || 0) - Math.PI / 2, hub = rr * 0.26, out = rr * 0.93, k = 2 * Math.PI / n;
   let p = '';
@@ -4433,17 +4437,21 @@ function drawWheel(id, cx, cy, R, rr, w){
   else if(t === 'y') for(let i = 0; i < n; i++){ const a = st + i * k, j = rr * 0.56; p += bar(a, hub, rr * 0.085, a, j, rr * 0.06) + bar(a - 0.03, j * 0.92, rr * 0.04, a - Math.min(0.24, k * 0.27), out, rr * 0.04) + bar(a + 0.03, j * 0.92, rr * 0.04, a + Math.min(0.24, k * 0.27), out, rr * 0.04); }
   else if(t === 'mesh'){ for(let i = 0; i < n * 2; i++){ const a = st + i * k / 2; p += bar(a, hub, rr * 0.04, a, out, rr * 0.03); } p += `M${pt(0, rr * 0.52)} A${r1(rr * 0.52)},${r1(rr * 0.52)} 0 1 1 ${pt(3.14159, rr * 0.52)} A${r1(rr * 0.52)},${r1(rr * 0.52)} 0 1 1 ${pt(0, rr * 0.52)}Z M${pt(0, rr * 0.46)} A${r1(rr * 0.46)},${r1(rr * 0.46)} 0 1 0 ${pt(3.14159, rr * 0.46)} A${r1(rr * 0.46)},${r1(rr * 0.46)} 0 1 0 ${pt(0, rr * 0.46)}Z`; }
   else if(t === 'turbine') for(let i = 0; i < n; i++){ const a = st + i * k; p += `M${pt(a - 0.14, hub)} Q${pt(a + 0.2, rr * 0.6)} ${pt(a + 0.34, out)} L${pt(a + 0.34 + k * 0.32, out)} Q${pt(a + 0.36, rr * 0.55)} ${pt(a + 0.16, hub)}Z`; }
+  // forged: thick spokes that fork halfway out, with a slim spoke between each pair of forks
+  else if(t === 'forged') for(let i = 0; i < n; i++){ const a = st + i * k, j = rr * 0.5, f = Math.min(0.2, k * 0.2);
+    p += bar(a, hub, rr * 0.09, a, j, rr * 0.07) + bar(a - 0.04, j * 0.95, rr * 0.05, a - f, out, rr * 0.035) + bar(a + 0.04, j * 0.95, rr * 0.05, a + f, out, rr * 0.035) + bar(a + k / 2, hub * 1.15, rr * 0.03, a + k / 2, out, rr * 0.028); }
   else if(t === 'star') for(let i = 0; i < n; i++){ const a = st + i * k; p += bar(a, hub, rr * Math.min(0.11, 0.55 / n), a, out, rr * Math.min(0.07, 0.36 / n)); }
   else if(t === 'blade') for(let i = 0; i < n; i++){ const a = st + i * k; p += bar(a, hub, rr * 0.1, a, out, rr * 0.16); }
   else if(t === 'wire'){ s += C(rr * 0.9, `fill="#2a2c30"`); for(let i = 0; i < 36; i++){ const a = i * Math.PI / 18; s += `<line x1="${pt(a, rr * 0.22).replace(',', '" y1="')}" x2="${pt(a + 0.5, rr * 0.9).replace(',', '" y2="')}" stroke="#d7dbe0" stroke-width=".7"/>`; } }
   if(p) s += `<path d="${p}" fill="#000" opacity=".45" transform="translate(${r1(rr * 0.035)},${r1(rr * 0.045)})"/>` +
-    `<path d="${p}" fill="${blk ? '#2a2c31' : `url(#${gid})`}" stroke="${blk ? '#62676e' : fin[2]}" stroke-width="${blk ? '.8' : '.6'}" stroke-linejoin="round"/>`;
+    `<path d="${p}" fill="${blk ? '#2a2c31' : `url(#${gid})`}" stroke="${blk ? '#62676e' : fin[2]}" stroke-width="${blk ? '.8' : '.6'}" stroke-linejoin="round"/>` + (pl ? `<path d="${pl}" fill="${blk ? '#666c74' : fin[0]}" opacity="${blk ? 0.5 : 0.65}"/>` : '');
   if(t === 'disc') s += C(rr * 0.9, `fill="url(#${gid})"`) + Array.from({length:n}, (_, i) => { const a = st + i * 2 * Math.PI / n; return `<path d="M${pt(a - 0.18, rr * 0.62)} A${r1(rr * 0.62)},${r1(rr * 0.62)} 0 0 1 ${pt(a + 0.18, rr * 0.62)} L${pt(a + 0.12, rr * 0.82)} A${r1(rr * 0.82)},${r1(rr * 0.82)} 0 0 0 ${pt(a - 0.12, rr * 0.82)}Z" fill="#26282c"/>`; }).join('');
   if(t === 'steel') s += C(rr * 0.9, `fill="url(#${gid})"`) + Array.from({length:n}, (_, i) => { const a = st + i * 2 * Math.PI / n; return `<circle cx="${pt(a, rr * 0.62).split(',')[0]}" cy="${pt(a, rr * 0.62).split(',')[1]}" r="${r1(rr * 0.11)}" fill="#2a2c30"/>`; }).join('');
   if(t === 'hubcap') s += C(rr * 0.92, `fill="url(#${gid})"`) + Array.from({length:n}, (_, i) => { const a = i * 2 * Math.PI / n; return `<line x1="${pt(a, rr * 0.3).replace(',', '" y1="')}" x2="${pt(a, rr * 0.85).replace(',', '" y2="')}" stroke="${fin[2]}" stroke-width=".9"/>`; }).join('') + C(rr * 0.42, `fill="${fin[0]}" stroke="${fin[2]}" stroke-width=".8"`);
   // hub with lug nuts and a center cap, then a bright lip on the rim edge
   if(open){ s += C(hub, `fill="${blk ? '#2a2c31' : `url(#${gid})`}" stroke="${blk ? '#62676e' : fin[2]}" stroke-width=".6"`);
-    if(rr > 12) for(let i = 0; i < lugs; i++) s += `<circle cx="${pt(st + i * 2 * Math.PI / lugs + Math.PI / lugs, rr * 0.18).replace(',', '" cy="')}" r="${r1(rr * 0.032)}" fill="#9aa0a6" stroke="#3b3e43" stroke-width=".4"/>`; }
+    if(w.cl) s += `<path d="M${Array.from({length:6}, (_, i) => pt(i * Math.PI / 3 + 0.26, rr * 0.16)).join(' L')}Z" fill="${blk ? '#41454b' : fin[1]}" stroke="${blk ? '#80868d' : fin[2]}" stroke-width=".8" stroke-linejoin="round"/>`;
+    else if(rr > 12) for(let i = 0; i < lugs; i++) s += `<circle cx="${pt(st + i * 2 * Math.PI / lugs + Math.PI / lugs, rr * 0.18).replace(',', '" cy="')}" r="${r1(rr * 0.032)}" fill="#9aa0a6" stroke="#3b3e43" stroke-width=".4"/>`; }
   s += C(rr * 0.1, `fill="${blk ? '#1b1c1f' : fin[1]}" stroke="${blk ? '#6a6f75' : fin[2]}" stroke-width=".6"`) +
     C(rr * 0.925, `fill="none" stroke="#000" stroke-opacity=".5" stroke-width=".8"`) + C(rr, `fill="none" stroke="${blk ? '#8a8f95' : fin[0]}" stroke-width="${r1(Math.max(0.9, rr * 0.035))}" opacity=".85"`);
   return s;
@@ -4455,6 +4463,18 @@ function studio(id, cx, half, dark){
     `<filter id="${id}bl" x="-20%" y="-200%" width="140%" height="500%"><feGaussianBlur stdDeviation="5"/></filter></defs>` +
     `<rect width="${DW}" height="${DH}" fill="url(#${id}bg)"/><ellipse cx="${DW / 2}" cy="${DG - 50}" rx="300" ry="120" fill="url(#${id}sp)"/>` +
     `<ellipse cx="${cx}" cy="${DG + 2}" rx="${r1(half * 1.02)}" ry="9" fill="#1d2126" opacity=".42" filter="url(#${id}bl)"/>`;
+}
+// the stage for performance cars: a dark studio under one overhead light, with the car mirrored in a glossy floor
+function stage(id, cx, half){
+  return `<defs><linearGradient id="${id}bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121417"/><stop offset=".5" stop-color="#262a30"/><stop offset=".705" stop-color="#474e57"/><stop offset=".72" stop-color="#2c3036"/><stop offset="1" stop-color="#0c0d0f"/></linearGradient>` +
+    `<radialGradient id="${id}sp" cx=".5" cy=".05" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>` +
+    `<radialGradient id="${id}fl"><stop offset="0" stop-color="#a7b0ba" stop-opacity=".32"/><stop offset="1" stop-color="#a7b0ba" stop-opacity="0"/></radialGradient>` +
+    `<linearGradient id="${id}rg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>` +
+    `<mask id="${id}rm" maskUnits="userSpaceOnUse" x="0" y="${DG}" width="${DW}" height="${DH - DG}"><rect x="0" y="${DG}" width="${DW}" height="${DH - DG}" fill="url(#${id}rg)"/></mask>` +
+    `<filter id="${id}bl" x="-20%" y="-200%" width="140%" height="500%"><feGaussianBlur stdDeviation="5"/></filter></defs>` +
+    `<rect width="${DW}" height="${DH}" fill="url(#${id}bg)"/><rect width="${DW}" height="${DH}" fill="url(#${id}sp)"/><ellipse cx="${cx}" cy="${DG + 6}" rx="${r1(half * 1.3)}" ry="30" fill="url(#${id}fl)"/>` +
+    `<g mask="url(#${id}rm)"><use href="#${id}car" transform="matrix(1 0 0 -1 0 ${2 * DG})"/></g>` +
+    `<ellipse cx="${cx}" cy="${DG + 2}" rx="${r1(half * 1.02)}" ry="8" fill="#000" opacity=".7" filter="url(#${id}bl)"/>`;
 }
 const VEH_SPECS = {};
 // shape points for a car (all in inches; x runs from the rear bumper forward, y up from the ground)
@@ -4484,7 +4504,8 @@ function dloShape(p){
 function drawCar(p, c, id){
   const L = p.L, s = Math.min(580 / L, 150 / p.H), x0 = (DW - L * s) / 2, X = x => r1(x0 + x * s), Y = y => r1(DG - y * s), P = pts => pts.map(q => [X(q[0]), Y(q[1]), (q[2] || 0) * s]);
   const fx = L - p.FO, rx = fx - p.WB, sill = p.sill || 8.5;
-  // trucks and some SUVs have squared-off arches: straight sides, a flat top and rounded corners (sq is the flat top's half width, as a share of the arch radius)
+  // trucks and some SUVs have squared-off arches: straight sides, a flat top and rounded corners (sq is the flat top's half width, as a share of the arch radius;
+  // sqR below 1 sharpens the corners into the hexagonal arches of a Lamborghini)
   const sqY = (wr, R) => [wr + R * 0.22, wr + R * 0.97], sqHalf = (wr, R) => { const [yc, yt] = sqY(wr, R); return sill <= yc ? R : R - R * (1 - p.sq) * (sill - yc) / (yt - yc); };
   // each axle: [x, tire radius, arch radius, half width of the arch at the sill, large-arc flag, rim diameter]; sports cars run bigger rear tires
   const axle = (x, td, rim) => { const wr = td / 2, ar = wr + (p.gap || 1.6); return [x, wr, ar, p.sq ? sqHalf(wr, ar) : Math.sqrt(Math.max(1, ar * ar - (wr - sill) * (wr - sill))), wr > sill ? 1 : 0, rim]; };
@@ -4492,8 +4513,8 @@ function drawCar(p, c, id){
   // an arch's edge as points from the sill in front of the wheel, over it, to the sill behind it (e widens it, for flares)
   const archPts = (a, e) => { const x = a[0], wr = a[1], R = a[2] + (e || 0);
     if(!p.sq){ const t0 = Math.asin(Math.max(-1, Math.min(1, (sill - wr) / R))); return Array.from({length:25}, (_, i) => { const t = t0 + (Math.PI - 2 * t0) * i / 24; return [x + Math.cos(t) * R, wr + Math.sin(t) * R, 0]; }); }
-    const [yc, yt] = sqY(wr, R), hw = sqHalf(wr, R), k = p.sq, side = sill < yc;
-    return [[x + hw, sill, 0], ...(side ? [[x + R, yc, R * 0.4]] : []), [x + k * R, yt, R * 0.35], [x - k * R, yt, R * 0.35], ...(side ? [[x - R, yc, R * 0.4]] : []), [x - hw, sill, 0]]; };
+    const [yc, yt] = sqY(wr, R), hw = sqHalf(wr, R), k = p.sq, side = sill < yc, cr = p.sqR || 1;
+    return [[x + hw, sill, 0], ...(side ? [[x + R, yc, R * 0.4 * cr]] : []), [x + k * R, yt, R * 0.35 * cr], [x - k * R, yt, R * 0.35 * cr], ...(side ? [[x - R, yc, R * 0.4 * cr]] : []), [x - hw, sill, 0]]; };
   const top = P(carShape(p)), arc = (a, from) => p.sq ? rpath(P(archPts(a)), false, from) : `${from ? 'L' : 'M'}${X(a[0] + a[3])},${Y(sill)} A${r1(a[2] * s)},${r1(a[2] * s)} 0 ${a[4]} 0 ${X(a[0] - a[3])},${Y(sill)}`;
   const body = rpath(top, false) + arc(AF, 1) + arc(AR, 1) + 'Z';
   const cd = hexMix(c, '#000000', 0.55), belt = (p.belt[0] + p.belt[1]) / 2, sh0 = p.lines && p.lines[0] ? p.lines[0].reduce((t, q) => t + q[1], 0) / p.lines[0].length : belt - 3.5;
@@ -4501,15 +4522,28 @@ function drawCar(p, c, id){
   const yT = DG - p.H * s, yB = DG - sill * s, o = y => Math.max(0, Math.min(1, (DG - y * s - yT) / (yB - yT))).toFixed(3);
   const lum = parseInt(c.slice(1, 3), 16) * 0.3 + parseInt(c.slice(3, 5), 16) * 0.59 + parseInt(c.slice(5, 7), 16) * 0.11, dk = lum < 70, lt = lum > 200;
   const W = t => hexMix(c, '#ffffff', t), K = t => hexMix(c, '#000000', t);
+  // fills a shape can ask for by name; 'paint+0.2' and 'paint-0.3' are the paint lightened or darkened
+  const fill = f => f === 'chrome' ? `url(#${id}ch)` : f === 'paint' ? `url(#${id}p)` : f === 'carbon' ? `url(#${id}cf)` : f === 'mesh' ? `url(#${id}mh)` : f === 'shade' ? `url(#${id}sd)` :
+    f === 'shadeUp' ? `url(#${id}su)` : f === 'gloss' ? `url(#${id}gs)` : f === 'ti' ? `url(#${id}ti)` : /^paint[+-]/.test(f || '') ? (f[5] === '+' ? W(+f.slice(6)) : K(+f.slice(6))) : f || '#121315';
+  // on the stage the paint mirrors a dark room: bright tops, a crisp highlight on the shoulder and deep shadow below the horizon line
+  const stops = p.stage ? [[0, W(dk ? 0.42 : 0.5)], [o(sh + 1), W(dk ? 0.14 : 0.12)], [o(sh - 0.4), W(dk ? 0.5 : lt ? 0.75 : 0.62)], [o(sh - 2.6), lt ? K(0.03) : c], [o(hor + 0.4), K(dk ? 0.3 : lt ? 0.12 : 0.28)],
+    [o(hor - 0.4), K(dk ? 0.7 : lt ? 0.42 : 0.62)], [o(hor - 5), K(dk ? 0.5 : lt ? 0.26 : 0.42)], [o(sill + 3), K(dk ? 0.3 : 0.2)], [1, K(0.65)]] :
+    [[0, W(dk ? 0.38 : lt ? 0.45 : 0.32)], [o(sh + 1), W(dk ? 0.2 : lt ? 0.2 : 0.12)], [o(sh - 0.4), W(dk ? 0.42 : lt ? 0.6 : 0.4)], [o(sh - 3.5), W(dk ? 0.12 : 0.1)], [o(hor + 0.4), lt ? K(0.04) : c],
+    [o(hor - 0.4), K(dk ? 0.55 : lt ? 0.3 : 0.42)], [o(hor - 5), K(dk ? 0.35 : lt ? 0.16 : 0.24)], [o(sill + 3), K(dk ? 0.15 : 0.08)], [1, K(0.5)]];
   let g = `<defs><linearGradient id="${id}p" gradientUnits="userSpaceOnUse" x1="0" y1="${r1(yT)}" x2="0" y2="${r1(yB)}">` +
-    `<stop offset="0" stop-color="${W(dk ? 0.38 : lt ? 0.45 : 0.32)}"/><stop offset="${o(sh + 1)}" stop-color="${W(dk ? 0.2 : lt ? 0.2 : 0.12)}"/><stop offset="${o(sh - 0.4)}" stop-color="${W(dk ? 0.42 : lt ? 0.6 : 0.4)}"/>` +
-    `<stop offset="${o(sh - 3.5)}" stop-color="${W(dk ? 0.12 : 0.1)}"/><stop offset="${o(hor + 0.4)}" stop-color="${lt ? K(0.04) : c}"/><stop offset="${o(hor - 0.4)}" stop-color="${K(dk ? 0.55 : lt ? 0.3 : 0.42)}"/>` +
-    `<stop offset="${o(hor - 5)}" stop-color="${K(dk ? 0.35 : lt ? 0.16 : 0.24)}"/><stop offset="${o(sill + 3)}" stop-color="${K(dk ? 0.15 : 0.08)}"/><stop offset="1" stop-color="${K(0.5)}"/></linearGradient>` +
+    stops.map(([at, col]) => `<stop offset="${at}" stop-color="${col}"/>`).join('') + `</linearGradient>` +
     `<linearGradient id="${id}e" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".42"/><stop offset=".025" stop-color="#000" stop-opacity=".2"/><stop offset=".09" stop-color="#000" stop-opacity="0"/><stop offset=".9" stop-color="#000" stop-opacity="0"/><stop offset=".975" stop-color="#000" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".45"/></linearGradient>` +
     `<linearGradient id="${id}gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a9bab" stop-opacity=".85"/><stop offset=".38" stop-color="#3a4856" stop-opacity=".7"/><stop offset="1" stop-color="#1a2129" stop-opacity=".8"/></linearGradient>` +
     `<linearGradient id="${id}ch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfcfd"/><stop offset=".42" stop-color="#cdd3d8"/><stop offset=".5" stop-color="#6e757c"/><stop offset=".62" stop-color="#b9bfc5"/><stop offset="1" stop-color="#eef1f3"/></linearGradient>` +
+    `<pattern id="${id}cf" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="3" fill="#141518"/><rect width="1.5" height="1.5" fill="#2e3136"/><rect x="1.5" y="1.5" width="1.5" height="1.5" fill="#2e3136"/></pattern>` +
+    `<pattern id="${id}mh" width="2.8" height="2" patternUnits="userSpaceOnUse"><rect width="2.8" height="2" fill="#050607"/><path d="M0,1 L1.4,0 L2.8,1 L1.4,2Z" fill="none" stroke="#2c3035" stroke-width=".45"/></pattern>` +
+    `<linearGradient id="${id}sd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></linearGradient>` +
+    `<linearGradient id="${id}su" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient>` +
+    `<linearGradient id="${id}gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset=".45" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>` +
+    `<linearGradient id="${id}ti" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#e2dccf"/><stop offset=".35" stop-color="#b98d55"/><stop offset=".65" stop-color="#6d5c92"/><stop offset="1" stop-color="#3d5c8c"/></linearGradient>` +
+    `<filter id="${id}gw" x="-50%" y="-300%" width="200%" height="700%"><feGaussianBlur stdDeviation="1.6"/></filter><filter id="${id}sf" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="7"/></filter>` +
     `<clipPath id="${id}cb"><path d="${body}"/></clipPath></defs>`;
-  g += studio(id, (X(0) + X(L)) / 2, L * s / 2);
+  g += p.stage ? stage(id, (X(0) + X(L)) / 2, L * s / 2) + `<g id="${id}car">` : studio(id, (X(0) + X(L)) / 2, L * s / 2);
   // what shows under a body-on-frame truck: frame rails, tank, spare
   if(p.back) g += p.back(X, Y, s, c);
   // wheel wells (with the far-side liner), then the body over them
@@ -4519,8 +4553,10 @@ function drawCar(p, c, id){
   g += `<g clip-path="url(#${id}cb)">`;
   // surfaces above the shoulder crease face the sky, so they read lighter
   if(p.lines && p.lines[0]){ const ln = P(p.lines[0]); g += `<path d="${rpath(ln, false)} L${ln[ln.length - 1][0]},0 L${ln[0][0]},0Z" fill="#fff" opacity="${dk ? 0.1 : 0.14}"/>`; }
-  if(p.roof) g += `<path d="${rpath(P(p.roof), true)}" fill="${p.roofC || '#17191c'}"/>`;
-  if(p.under) g += p.under(X, Y, s, c);
+  // softbox reflections sweep down the flanks of a car on the stage
+  if(p.stage) g += `<g filter="url(#${id}sf)">` + [[0.28, 0.08, 0.7], [0.6, 0.04, 1]].map(([a, k, o]) => `<path d="M${X(L * a)},${Y(p.H + 2)} L${X(L * (a + k))},${Y(p.H + 2)} L${X(L * (a + k - 0.1))},${Y(0)} L${X(L * (a - 0.1))},${Y(0)}Z" fill="#fff" opacity="${r1(o * 0.14)}"/>`).join('') + '</g>';
+  if(p.roof) g += `<path d="${rpath(P(p.roof), true)}" fill="${p.roofC ? fill(p.roofC) : '#17191c'}"/>` + (p.roofC === 'carbon' ? `<path d="${rpath(P(p.roof), true)}" fill="url(#${id}gs)" opacity=".7"/>` : '');
+  if(p.under) g += p.under(X, Y, s, c, id);
   // the glass: dark cabin, seat headrests, then tinted glass with sky reflections
   const dlo = p.noDlo ? 'M0,0' : rpath(P(dloShape(p)), true), bp = (p.pil && p.pil[0]) ? p.pil[0][0] : p.dlo ? (p.dlo[0] + p.dlo[1]) / 2 : (p.w ? (p.w[0][0] + p.w[p.w.length - 1][0]) / 2 : p.L / 2);
   if(!p.noDlo) g += `<clipPath id="${id}cg"><path d="${dlo}"/></clipPath><path d="${dlo}" fill="#0e1013"/><g clip-path="url(#${id}cg)">` +
@@ -4535,6 +4571,8 @@ function drawCar(p, c, id){
   // a door edge is either an x (a straight cut) or a list of points (a cut that curves around the arch)
   (p.doors || []).forEach(x => { const b = belt - 0.6, d = Array.isArray(x) ? rpath(P(x), false) : `M${X(x)},${Y(b)} L${X(x - (p.lean || 1))},${Y(sill + 2)}`;
     g += `<path d="${d}" fill="none" stroke="${K(0.7)}" stroke-width="1.1" opacity=".8"/><path d="${d}" fill="none" stroke="#fff" stroke-width=".6" opacity=".25" transform="translate(1.1,0)"/>`; });
+  // panel gaps: hood, bumper and fender shut lines
+  (p.seams || []).forEach(ln => { const d = rpath(P(ln), false); g += `<path d="${d}" fill="none" stroke="${K(0.72)}" stroke-width=".9" opacity=".75"/><path d="${d}" fill="none" stroke="#fff" stroke-width=".5" opacity=".2" transform="translate(.9,.4)"/>`; });
   (p.handles || []).forEach(x => { g += `<rect x="${X(x)}" y="${Y(belt - (p.hy || 3.2))}" width="${r1(6.5 * s)}" height="${r1(1.3 * s)}" rx="${r1(0.6 * s)}" fill="${p.flush ? K(0.3) : W(0.35)}" stroke="${K(0.55)}" stroke-width=".6"/><rect x="${X(x) + 1}" y="${r1(Y(belt - (p.hy || 3.2)) + 1.3 * s)}" width="${r1(5 * s)}" height="${r1(0.5 * s)}" fill="#000" opacity=".25"/>`; });
   (p.lines || []).forEach(ln => { const d = rpath(P(ln), false); g += `<path d="${d}" fill="none" stroke="#ffffff" stroke-opacity="${lt ? 0.9 : 0.6}" stroke-width="1.2" transform="translate(0,-.9)"/><path d="${d}" fill="none" stroke="${K(0.6)}" stroke-opacity=".5" stroke-width="1"/>`; });
   if(p.clad) g += `<rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="${r1((p.clad.r || 4) * s)}" fill="#1e2023"/><rect x="${X(rx)}" y="${Y(sill + (p.clad.r || 4))}" width="${r1((fx - rx) * s)}" height="1" fill="#fff" opacity=".2"/>`;
@@ -4543,6 +4581,10 @@ function drawCar(p, c, id){
   // flared fenders catch a highlight above each arch
   if(p.hip && p.sq) AX.forEach(a => { g += `<path d="${rpath(P(archPts(a, 0.7)), false)}" fill="none" stroke="#fff" stroke-opacity="${lt ? 0.55 : 0.3}" stroke-width="${r1(p.hip * 0.45 * s)}"/>`; });
   else if(p.hip) AX.forEach(([x, wr, ar]) => { const r = ar + 0.7; g += `<path d="M${X(x - r * 0.99)},${Y(wr + r * 0.12)} A${r1(r * s)},${r1(r * s)} 0 0 1 ${X(x + r * 0.99)},${Y(wr + r * 0.12)}" fill="none" stroke="#fff" stroke-opacity="${lt ? 0.55 : 0.3}" stroke-width="${r1(p.hip * 0.45 * s)}"/>`; });
+  // haunch:[front, rear] swells the fenders: a soft band of light over each arch and a shadow where the lip tucks under
+  if(p.haunch) AX.forEach((a, i) => { const k = p.haunch[i], top = e => archPts(a, e).filter(q => q[1] > a[1] + a[2] * (p.sq ? 0.15 : 0.45)); if(!k) return;
+    g += [[6, 0.07], [3.6, 0.1], [1.6, 0.14]].map(([w, o]) => `<path d="${rpath(P(top(4.6)), false)}" fill="none" stroke="#fff" stroke-opacity="${r1(k * o * (lt ? 1.6 : 1) * 100) / 100}" stroke-width="${r1(w * s)}" stroke-linecap="round" filter="url(#${id}gw)"/>`).join('') +
+      `<path d="${rpath(P(top(1.4)), false)}" fill="none" stroke="#000" stroke-opacity="${r1(k * 0.4 * 100) / 100}" stroke-width="${r1(1.4 * s)}" stroke-linecap="round" filter="url(#${id}gw)"/>`; });
   // bumper details: lower intakes, reflectors and side markers
   const cf = p.cf || 8, cr = p.cr || 11;
   if(!p.noTrim) g += `<path d="${rpath(P([[L + 1, cf - 1, 0], [L - 14, cf - 1, 0], [L - 13, cf + 2.2, 2], [L - 2, cf + 3.2, 2], [L + 1, cf + 6, 0]]), true)}" fill="#141517" opacity=".85"/>` +
@@ -4550,20 +4592,23 @@ function drawCar(p, c, id){
     `<rect x="${X(L - 9)}" y="${Y(p.nose - 5)}" width="${r1(4 * s)}" height="${r1(1.2 * s)}" rx="1" fill="#e89a2c" opacity=".9"/><rect x="${X(2)}" y="${Y(cr + 7)}" width="${r1(4 * s)}" height="${r1(1.2 * s)}" rx="1" fill="#b3141f" opacity=".9"/>`;
   // lights
   if(p.hl) g += `<path d="${rpath(P(p.hl), true)}" fill="${p.hlc || '#c9d2da'}" stroke="#4f5862" stroke-width=".8"/><path d="${rpath(P(p.hl), true)}" fill="#fff" opacity="${p.hlc ? 0.2 : 0.55}" transform="translate(0,-1.2)"/>`;
-  if(p.drl) g += `<path d="${rpath(P(p.drl), false)}" fill="none" stroke="#ffffff" stroke-width="${r1(0.7 * s)}" stroke-linecap="round"/>`;
+  if(p.drl) g += (p.stage ? `<path d="${rpath(P(p.drl), false)}" fill="none" stroke="#d6ebff" stroke-width="${r1(1.8 * s)}" stroke-linecap="round" filter="url(#${id}gw)"/>` : '') + `<path d="${rpath(P(p.drl), false)}" fill="none" stroke="#ffffff" stroke-width="${r1(0.7 * s)}" stroke-linecap="round"/>`;
   if(p.tl) g += `<path d="${rpath(P(p.tl), true)}" fill="#a3121c" stroke="#4e080d" stroke-width=".8"/><path d="${rpath(P(p.tl), true)}" fill="#ff7a7a" opacity=".3" transform="translate(1,-1.2)"/>`;
   // extra panels and trim; f:'chrome' gets a polished fill, f:'paint' the body color's own shading
-  const shapes = list => (list || []).map(sh => { const f = sh.f === 'chrome' ? (sh.open ? '#e9ecef' : `url(#${id}ch)`) : sh.f === 'paint' ? `url(#${id}p)` : sh.f || '#121315';
-    return `<path d="${rpath(P(sh.p), !sh.open)}" fill="${sh.open ? 'none' : f}" ${sh.open ? `stroke="${f}" stroke-width="${r1((sh.w || 0.6) * s)}" stroke-linecap="round"` : sh.s ? `stroke="${sh.s}" stroke-width=".7"` : ''} opacity="${sh.o || 1}"/>`; }).join('');
+  // glow: a blurred copy in that color goes under the shape (LED strips); carbon gets a clear-coat sheen on top
+  const shapes = list => (list || []).map(sh => { const f = sh.f === 'chrome' && sh.open ? '#e9ecef' : fill(sh.f), d = rpath(P(sh.p), !sh.open);
+    return (sh.glow ? `<path d="${d}" fill="${sh.open ? 'none' : sh.glow}" ${sh.open ? `stroke="${sh.glow}" stroke-width="${r1((sh.w || 0.6) * 2.6 * s)}" stroke-linecap="round"` : ''} filter="url(#${id}gw)"/>` : '') +
+      `<path d="${d}" fill="${sh.open ? 'none' : f}" ${sh.open ? `stroke="${f}" stroke-width="${r1((sh.w || 0.6) * s)}" stroke-linecap="round"` : sh.s ? `stroke="${sh.s}" stroke-width=".7"` : ''} opacity="${sh.o || 1}"/>` +
+      (sh.f === 'carbon' && !sh.open ? `<path d="${d}" fill="url(#${id}gs)" opacity=".7"/>` : ''); }).join('');
   g += shapes(p.shapes);
   if(p.extra) g += p.extra(X, Y, s, c, cd);
   g += '</g>';
   // arch lips
   AX.forEach(a => { g += `<path d="${arc(a)}" fill="none" stroke="${p.clad ? '#1e2023' : K(0.35)}" stroke-width="${p.clad ? r1(2.4 * s) : 1.4}"/>`; });
-  // the mirror (mirrorS scales it up for trucks' tow mirrors; mirrorC 'chrome' gives it chrome caps)
+  // the mirror (mirrorS scales it up for trucks' tow mirrors; mirrorC gives the cap its own finish: 'chrome', 'carbon' or a color)
   if(p.mirror){ const [mx, my] = p.mirror, ms = p.mirrorS || 1, M = pts => P(pts.map(q => [mx + q[0] * ms, my + q[1] * ms, q[2] * ms]));
     g += `<path d="${rpath(M([[-2, -1.5, 0], [3, -1.5, 0], [1, 1.5, 0], [-3, 1.5, 0]]), true)}" fill="#141517"/>` +
-    `<path d="${rpath(M([[-7.5, 0.5, 1.5], [-6.5, 5, 2.2], [0.5, 4.6, 1.8], [0.2, 0.2, 1]]), true)}" fill="${p.mirrorC === 'chrome' ? `url(#${id}ch)` : p.mirrorC || W(0.12)}" stroke="${K(0.55)}" stroke-width=".7"/>` +
+    `<path d="${rpath(M([[-7.5, 0.5, 1.5], [-6.5, 5, 2.2], [0.5, 4.6, 1.8], [0.2, 0.2, 1]]), true)}" fill="${p.mirrorC ? fill(p.mirrorC) : W(0.12)}" stroke="${K(0.55)}" stroke-width=".7"/>` +
     `<path d="${rpath(M([[-7.2, 1.6, 1], [-0.2, 1.2, 1]]), false)}" stroke="#000" stroke-opacity=".25" stroke-width="1" fill="none"/>`; }
   // open-top cars: seat backs, a steering wheel and the windshield
   if(p.ws){ const [b, t, w] = p.ws;
@@ -4591,7 +4636,9 @@ function drawCar(p, c, id){
   // trim that stands proud of the body: bumpers, step pads, mud flaps
   g += shapes(p.ext);
   AX.forEach(([x, wr, , , , rim]) => { g += drawWheel(id, X(x), Y(wr), wr * s, (rim / 2) * s, Object.assign({cal:'#3d4248'}, p.wheel)) + `<ellipse cx="${X(x)}" cy="${DG + 1}" rx="${r1(wr * s * 0.8)}" ry="2.5" fill="#000" opacity=".5"/>`; });
-  return g;
+  // parts drawn over the wheels: wings' endplates, diffuser fins
+  g += shapes(p.top);
+  return g + (p.stage ? '</g>' : '');
 }
 // what shows under a pickup's bed: the frame rail, the spare slung beneath it and the hitch receiver
 const truckFrame = (top, x1, sx) => (X, Y, s) => `<rect x="${X(1)}" y="${Y(top)}" width="${r1((x1 - 1) * s)}" height="${r1(5.5 * s)}" fill="#17181b"/>` +
@@ -4724,24 +4771,99 @@ Object.assign(VEH_SPECS, {
     hl:[[193.6, 40.4, 1], [190.4, 43, 1], [178, 42.6, 2], [177.4, 40.8, 1], [186, 39.6, 1]], drl:[[193, 41], [179, 42]],
     tl:[[0.8, 46.6, 1], [14, 47.6, 1], [14, 45, 1], [1, 43.6, 1]], wheel:{t:'y', n:5, fin:'gunmetal', drill:0}, col:'#2e4a6b'},
   // ---- electric ----
-  'Chevrolet|Equinox EV':{L:190.6, H:64.3, WB:116.3, FO:36, TD:29, rim:19, cr:14, cf:11, sill:11.5, tail:[3, 57], tb:38, rearPts:[[8, 60, 6]], rr:[18, 62.8], rf:[117, 64], cowl:[148, 43.5], hood:[186, 39], nose:34,
-    belt:[47, 44], dlo:[16, 145], cIn:3, roof:[[8, 61.5, 0], [20, 64, 0], [125, 65, 0], [120, 62.2, 0], [22, 60.5, 0]], pil:[[100, 3.2, 0.6], [58, 3, 0.5]], doors:[142, 101, 60], clad:{r:4}, flush:1,
-    lines:[[[3, 44], [100, 45, 60], [186, 38.5]]], hl:[[190.3, 37, 1], [175, 38.5, 2], [177, 36, 1], [190.5, 35, 1]], tl:[[0.4, 46, 1], [12, 47, 1], [11, 43.5, 1], [0.3, 43, 1]], wheel:{t:'turbine', n:5, fin:'machined'}, col:'#2c6a9e'},
-  'Ford|Mustang Mach-E':{L:186, H:63.5, WB:117.5, FO:37, TD:29, rim:19, cr:13, cf:10.5, sill:11, tail:[3, 51], tb:36, rearPts:[[16, 55, 12]], rr:[42, 61.2], rrR:18, rf:[113, 63.3], cowl:[141, 42], hood:[181, 37], nose:31.5,
-    belt:[46, 43], dlo:[26, 138], cIn:6, roof:[[20, 58, 0], [44, 61.8, 0], [118, 64, 0], [112, 61.2, 0], [44, 59.6, 0]], pil:[[96, 3.2, 0.6]], doors:[134, 98, 58], handles:[],
-    lines:[[[3, 46], [40, 47, 30], [100, 43, 60], [181, 37.5]]], hl:[[185.7, 35.5, 1], [171, 37, 2], [173, 34, 1], [185.9, 33, 1]], tl:[[0.4, 48, 1], [8, 49, 1], [7, 44, 1], [0.3, 43.5, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#2457a8'},
-  'Tesla|Model 3':{L:185.8, H:56.7, WB:113.2, FO:33.5, TD:26.5, rim:18, cr:11, cf:7, sill:8.5, tail:[1.5, 40.5], tb:31, rearPts:[[10, 43, 10]], rr:[50, 55.2], rrR:20, rf:[104, 56.5], cowl:[139, 37.5], hood:[182, 30], nose:25.5,
-    belt:[42.5, 38.5], dlo:[33, 136], cIn:6, roof:[[36, 49, 0], [50, 55.6, 0], [106, 57, 0], [104, 54.8, 0], [52, 53.6, 0]], pil:[[99, 3, 0.6]], doors:[134, 100, 60], flush:1, noTrim:0,
-    lines:[[[2, 38], [90, 39, 60], [182, 30.5]]], hl:[[185.5, 29.5, 1], [170, 31.5, 2], [172, 28.5, 1], [185.7, 27, 1]], tl:[[0.4, 39, 1], [12, 40, 1], [11, 37, 1], [0.3, 36.5, 1]], wheel:{t:'turbine', n:10, fin:'gunmetal'}, col:'#4a4e54'},
-  'Hyundai|Ioniq 5':{L:182.5, H:63.2, WB:118.1, FO:31, TD:29.5, rim:20, cr:13, cf:10, sill:10.5, tail:[1.5, 58.5], tb:38, rr:[7, 62.8], rrR:4, rf:[117, 63.1], rfR:6, cowl:[146, 41.5], hood:[179, 37.5], nose:30.5,
-    belt:[44.5, 43.5], dlo:[8, 140], cIn:1.5, aIn:3.5, pil:[[96, 3.2, 0.4], [52, 3.4, 0.2, '#9aa1a8']], doors:[136, 98, 54], flush:1, lines:[[[148, 17], [55, 33]]], sh:41,
-    hl:[[182.2, 37, 0.5], [175, 37.5, 0.5], [175, 34, 0.5], [182.4, 33.5, 0.5]], tl:[[0.4, 52, 0.5], [6, 52.5, 0.5], [6, 46, 0.5], [0.3, 45.5, 0.5]], wheel:{t:'mesh', n:10, fin:'machined'}, col:'#3e6b6a'},
-  'Tesla|Model Y':{L:187, H:63.9, WB:113.8, FO:34, TD:29.5, rim:19, cr:13, cf:9.5, sill:10.5, tail:[2.5, 46], tb:35, rearPts:[[12, 51, 10]], rr:[42, 62], rrR:20, rf:[108, 63.8], cowl:[141, 41.5], hood:[183, 33.5], nose:28,
-    belt:[45, 42], dlo:[30, 138], cIn:6, roof:[[28, 57, 0], [44, 62.4, 0], [112, 64.3, 0], [106, 61.4, 0], [46, 60.2, 0], [32, 56, 0]], pil:[[100, 3, 0.6]], doors:[134, 101, 60], flush:1,
-    lines:[[[2, 43], [90, 44, 60], [183, 34]]], hl:[[186.7, 32.5, 1], [172, 34.5, 2], [174, 31.5, 1], [186.9, 30, 1]], tl:[[0.4, 44, 1], [12, 45, 1], [11, 41.5, 1], [0.3, 41, 1]], wheel:{t:'turbine', n:5, fin:'gunmetal'}, col:'#e9ebec'},
-  'Rivian|R1S':{L:200.8, H:71.5, WB:121.1, FO:36, TD:32.5, rim:21, cr:16, cf:13, sill:13, tail:[1.5, 69], tb:44, rr:[4, 71.3], rrR:4, rf:[133, 71.4], rfR:6, cowl:[160, 48.5], hood:[197, 45], nose:40.5,
-    belt:[50, 49], dlo:[6, 154], cIn:1.5, aIn:3.5, pil:[[110, 3.2, 0.6], [66, 3.2, 0.4]], doors:[152, 111, 67], flush:1, clad:{r:3}, rails:[20, 125], lines:[[[3, 47], [100, 47.5, 60], [197, 45]]],
-    hl:[[200.6, 44.5, 2], [197, 44.8, 2], [197, 40, 2], [200.7, 39.8, 2]], tl:[[0.4, 60, 1], [6, 60.4, 1], [5.5, 57.5, 1], [0.3, 57.2, 1]], wheel:{t:'turbine', n:5, fin:'black'}, col:'#2f4a3b'},
+  // drawn like the SUVs above: their own outline and window shape, flush handles, gloss-black roofs and the lighting each brand is known for
+  'Chevrolet|Equinox EV':{L:190.6, H:64.3, WB:116.3, FO:36, TD:29, rim:19, gap:1.8, cr:13, cf:12.5, sill:11.5, nose:38, tail:[0.8, 34], noTrim:1,
+    pts:[[10, 13, 0], [2.8, 15, 3], [0.4, 21, 5], [0, 30, 4], [0.8, 34, 3], [1.8, 44, 5], [4.6, 50.5, 3], [11.6, 59.4, 4], [9.8, 61.2, 1.2], [16, 62.8, 5], [64, 64.3, 50], [116, 63.6, 10],
+      [146.6, 45, 4], [168, 43.2, 30], [185.6, 41.6, 5], [189.8, 39.4, 4], [190.6, 30, 6], [189.6, 19, 5], [185.5, 13.6, 3], [176, 13, 0]],
+    belt:[48.6, 45.4], w:[[144.6, 45.8, 1.2], [117.6, 62.4, 4], [70, 63, 50], [28, 60.4, 4], [17.8, 53.2, 2], [25, 50.4, 4], [60, 48, 0], [104, 46.6, 0]], seats:[110, 76],
+    roof:[[-2, 50.8, 0], [17.2, 53, 0], [17.8, 53.2, 2], [28, 60.4, 4], [42, 61.6, 0], [42, 66, 0], [-2, 66, 0]],
+    pil:[[102, 3, 0.6], [60, 2.6, 0.4]], doors:[[[143.4, 45.8, 0], [139.6, 32, 6], [137.4, 13, 0]], [[102.4, 46.8, 0], [102, 13, 0]], [[60.6, 48.2, 0], [61, 36, 5], [55.8, 27.5, 0]]], handles:[105.5, 64], hy:3.2,
+    mirror:[146.2, 46], clad:{r:3.4}, flare:{w:1.6},
+    lines:[[[3, 47.4], [90, 45.4, 60], [187, 41.4]], [[52, 24.5], [100, 23.6, 40], [136, 22]]],
+    shapes:[{p:[[-1, 18.5, 0], [11, 18, 2], [22, 14.5, 0], [22, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[192, 19.5, 0], [181, 19, 2], [172, 15.5, 0], [172, 9, 0], [192, 9, 0]], f:'#1d1f22'},
+      {p:[[191, 16.4, 0], [178, 16, 0]], open:1, w:0.9, f:'chrome'},
+      // the main lamps sit low in a black wedge; a thin light bar runs along the hood's edge above them
+      {p:[[191, 34.8, 0.5], [184.6, 35, 1], [181.6, 30.4, 1], [184, 26.4, 1], [191, 26.2, 0.5]], f:'#16181b'},
+      {p:[[1, 24, 0.5], [7, 24, 0.5], [7, 22.8, 0.5], [1, 22.8, 0.5]], f:'#9c1520'}],
+    hl:[[190.6, 33.2, 1], [186, 33.4, 1], [184.4, 30.4, 1], [190.6, 30.2, 1]], hlc:'#2b3239', drl:[[190, 40.2], [180, 41.6]],
+    tl:[[0.6, 48.4, 1], [15, 49.2, 1], [15, 47.6, 1], [1, 46.8, 1]], wheel:{t:'blade', n:10, fin:'machined', drill:0}, col:'#2c6a9e'},
+  // the Mach-E is a Mustang first: a long nose, a fastback roof and hips that swell over the rear wheels
+  'Ford|Mustang Mach-E':{L:186, H:63.5, WB:117.5, FO:37, TD:29, rim:19, gap:1.6, cr:12.5, cf:11, sill:11, nose:35, tail:[0.6, 36], noTrim:1,
+    pts:[[9, 13, 0], [2.4, 15, 3], [0.3, 21, 5], [0, 30, 4], [0.6, 36, 3], [1.4, 44, 4], [2.6, 49.2, 2], [1.4, 50.6, 0.8], [6, 51.6, 2], [30, 56.6, 30], [70, 62.6, 40], [98, 63.5, 20], [112, 62.4, 6],
+      [139, 44.2, 4], [160, 41.4, 30], [178, 38.4, 6], [184.4, 35, 5], [186, 28, 6], [185, 18, 5], [181.6, 13.4, 3], [172, 12.8, 0]],
+    belt:[47.6, 45], w:[[137.4, 45.2, 1.2], [111, 61.4, 4], [90, 62.4, 30], [60, 60, 20], [32, 54, 6], [24, 51.2, 1], [40, 48.8, 4], [70, 46.6, 0], [104, 45.6, 0]], seats:[106, 72],
+    roof:[[2, 53, 0], [30, 58.4, 0], [70, 66, 0], [116, 66, 0], [111, 61.4, 0], [90, 62.4, 30], [60, 60, 20], [32, 54, 6], [20, 51.6, 0], [6, 51, 0]],
+    pil:[[96, 3, 0.6], [49, 2.4, 1.2]], doors:[[[135.8, 45.2, 0], [133.2, 30, 6], [131.2, 13, 0]], [[96.4, 46.2, 0], [96, 13, 0]], [[54, 47.8, 0], [54.6, 36, 5], [50, 28, 0]]],
+    mirror:[138.4, 45.6], clad:{r:3.2}, flare:{w:1.2}, haunch:[0, 0.5],
+    lines:[[[3, 45.8], [28, 46.8, 20], [70, 43.6, 40], [140, 41.6, 40], [182, 37.4]], [[56, 26], [128, 24.4]]],
+    shapes:[{p:[[-1, 18, 0], [10, 17.5, 2], [14.4, 14, 0], [14.4, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[188, 19, 0], [178, 18.6, 2], [168, 15.4, 0], [168, 9, 0], [188, 9, 0]], f:'#1d1f22'},
+      // no door handles, just a small fin on the front door
+      {p:[[99, 43.4, 0.4], [104.4, 43.6, 0.4], [104.4, 42.4, 0.4], [99.4, 42.2, 0.4]], f:'#16181b'},
+      {p:[[1, 25, 0.5], [7, 25, 0.5], [7, 23.8, 0.5], [1, 23.8, 0.5]], f:'#9c1520'},
+      // the three-bar taillights read as split bars where they wrap round the corner
+      {p:[[3, 49.8], [2.8, 44.2]], open:1, w:0.5, f:'#3a0508'}, {p:[[5.6, 50.2], [5.4, 44.4]], open:1, w:0.5, f:'#3a0508'}],
+    hl:[[185.4, 35.4, 1], [180, 37.4, 2], [170.6, 38.4, 2], [171.6, 36.4, 1], [181, 34.4, 1]], hlc:'#2b3239', drl:[[184.6, 35.8], [172.4, 37.8]],
+    tl:[[0.6, 49.4, 1], [8, 50.4, 1], [7.4, 44.4, 1], [0.4, 43.8, 1]], wheel:{t:'split', n:5, fin:'gunmetal', drill:0}, col:'#2457a8'},
+  // the Model 3 is the low one here: a sedan with a smooth wedge nose, an all-glass roof and frameless windows
+  'Tesla|Model 3':{L:185.8, H:56.7, WB:113.2, FO:33.5, TD:26.5, rim:18, gap:1.4, cr:11, cf:9, sill:8.5, nose:28, tail:[0.6, 36], noTrim:1,
+    pts:[[10, 11, 0], [2.6, 13, 3], [0.3, 19, 4], [0, 28, 4], [0.6, 36, 3], [1.6, 40.4, 1.5], [4, 41.6, 1], [12, 42.4, 4], [24, 44.8, 8], [50, 52.6, 20], [86, 56.7, 30], [104, 56.2, 10],
+      [138.6, 38, 4], [160, 35, 30], [178, 31.2, 6], [184.6, 28, 5], [185.8, 22, 5], [184.6, 15, 4], [180.4, 10.8, 3], [170, 10.4, 0]],
+    belt:[42.8, 40], w:[[136.6, 39.2, 1], [104.6, 55.4, 3], [86, 56, 30], [56, 53.2, 15], [36, 47.4, 6], [30, 44.4, 1], [44, 43, 4], [70, 41.6, 0], [100, 40.6, 0]], seats:[104, 70],
+    roof:[[2, 44, 0], [30, 52, 0], [86, 60, 0], [108, 60, 0], [104.6, 55.4, 0], [86, 56, 30], [56, 53.2, 15], [40, 48.6, 8], [20, 44.2, 4], [8, 42, 0]],
+    pil:[[99, 3, 0.6], [56, 2.2, 1]], doors:[[[134.4, 40, 0], [133, 24, 6], [134, 9.5, 0]], [[99.4, 41.2, 0], [99, 9.5, 0]], [[58, 42.6, 0], [58.6, 30, 5], [54.6, 22, 0]]], handles:[102, 62], hy:3, flush:1,
+    mirror:[137.4, 39.6],
+    lines:[[[2, 38.8], [90, 38.6, 60], [181, 30.6]]],
+    shapes:[{p:[[-1, 14, 0], [10, 13.6, 2], [18, 11, 0], [18, 8, 0], [-1, 8, 0]], f:'#1d1f22'}, {p:[[187, 13, 0], [176, 12.6, 1.5], [173, 10, 0], [173, 8, 0], [187, 8, 0]], f:'#1d1f22'},
+      {p:[[1, 21, 0.5], [6, 21, 0.5], [6, 19.8, 0.5], [1, 19.8, 0.5]], f:'#9c1520'}],
+    hl:[[184.6, 28.4, 1], [178, 30.6, 2], [170.4, 31.8, 2], [171.4, 30, 1], [180, 27.8, 1]], hlc:'#2b3239', drl:[[184, 28.8], [172, 31.4]],
+    tl:[[0.4, 40.4, 1], [10, 41, 1], [9, 38.6, 1.5], [0.3, 37.6, 1]], wheel:{t:'turbine', n:10, fin:'gunmetal', drill:0}, col:'#4a4e54'},
+  // the Ioniq 5 is a pixel-art hatchback: an upright tail, a clamshell hood, angular black cladding and the diagonal crease across the doors
+  'Hyundai|Ioniq 5':{L:182.5, H:63.2, WB:118.1, FO:31, TD:29.5, rim:20, gap:1.6, cr:13, cf:12, sill:10.5, nose:36, tail:[0.2, 34], noTrim:1,
+    pts:[[9, 12.6, 0], [2.4, 14.6, 2], [0.4, 20, 3], [0, 30, 3], [0.2, 44, 3], [1.4, 57, 2], [0.2, 60.4, 0.6], [1.6, 62.4, 0.8], [8, 63, 4], [60, 63.2, 60], [116, 62.8, 6],
+      [146, 42.4, 3], [166, 40.4, 30], [178, 38.4, 5], [181.8, 36, 3], [182.5, 30, 4], [182, 18, 4], [179, 13.6, 2], [171, 13, 0]],
+    belt:[45, 44.6], w:[[143.8, 44.8, 1], [115.8, 61.8, 3], [60, 62.2, 50], [10.6, 61.6, 2], [8.4, 58.4, 1], [8.2, 45.2, 1], [60, 45, 0], [100, 44.8, 0]], seats:[106, 66],
+    pil:[[96, 3.2, 0.3], [52, 3.6, 0.2], [9.4, 1.4, 0.4]], doors:[[[142, 44.8, 0], [137, 30, 4], [134.2, 12.5, 0]], [[96.4, 45, 0], [96, 12.5, 0]], [[54.4, 45.2, 0], [54.6, 38, 4], [50.6, 31, 0]]], handles:[100, 58], hy:3, flush:1,
+    mirror:[145.4, 45.2], clad:{r:4.6}, flare:{w:2.2},
+    // the clamshell hood's shut line runs along the top of the front fender
+    seams:[[[181, 36.6], [166, 39.4, 20], [145.4, 42]]],
+    sh:43,
+    shapes:[{p:[[138, 15.2, 0], [48, 32.6, 0], [44, 44.6, 0], [146, 44.6, 0]], f:'#fff', o:0.07},
+      {p:[[138, 15.2], [48, 32.6]], open:1, w:0.5, f:'#ffffff', o:0.6}, {p:[[138, 14.5], [48, 31.9]], open:1, w:0.4, f:'paint-0.6', o:0.6},
+      {p:[[-1, 19, 0], [10, 18.6, 1], [15.6, 15, 0], [15.6, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[184, 20, 0], [173, 19.4, 1], [168, 15.6, 0], [168, 9, 0], [184, 9, 0]], f:'#1d1f22'},
+      {p:[[183, 16.6, 0], [172, 16.2, 0]], open:1, w:0.8, f:'chrome'}, {p:[[0, 16.6, 0], [10, 16.4, 0]], open:1, w:0.8, f:'chrome'},
+      // pixel lamps: little lit squares in a black band
+      {p:[[176.6, 36, 0.3], [178.6, 36, 0.3], [178.6, 34, 0.3], [176.6, 34, 0.3]], f:'#eef4f8'}, {p:[[179.6, 36, 0.3], [181.6, 36, 0.3], [181.6, 34, 0.3], [179.6, 34, 0.3]], f:'#eef4f8'},
+      {p:[[0.6, 51.6, 0.3], [2.6, 51.6, 0.3], [2.6, 49.6, 0.3], [0.6, 49.6, 0.3]], f:'#ff5a5a'}, {p:[[3.2, 51.6, 0.3], [5.2, 51.6, 0.3], [5.2, 49.6, 0.3], [3.2, 49.6, 0.3]], f:'#ff5a5a'},
+      {p:[[0.6, 48.6, 0.3], [2.6, 48.6, 0.3], [2.6, 46.6, 0.3], [0.6, 46.6, 0.3]], f:'#ff5a5a'}, {p:[[3.2, 48.6, 0.3], [5.2, 48.6, 0.3], [5.2, 46.6, 0.3], [3.2, 46.6, 0.3]], f:'#ff5a5a'}],
+    hl:[[182.4, 36.8, 0.5], [175.6, 37, 0.5], [175.6, 33.2, 0.5], [182.6, 33, 0.5]], hlc:'#1b1e22',
+    tl:[[0.2, 52.6, 0.5], [5.8, 52.8, 0.5], [5.8, 45.6, 0.5], [0.2, 45.4, 0.5]], wheel:{t:'mesh', n:10, fin:'machined', drill:0}, col:'#3e6b6a'},
+  // the Model Y is the Model 3 grown tall: one smooth arc from the nose over the roof to the hatch lip, and a light bar across the front
+  'Tesla|Model Y':{L:187, H:63.9, WB:113.8, FO:34, TD:29.5, rim:19, gap:1.6, cr:12, cf:10, sill:10.5, nose:32, tail:[0.8, 36], noTrim:1,
+    pts:[[10, 12.6, 0], [2.6, 14.6, 3], [0.3, 21, 5], [0, 30, 4], [0.8, 40, 4], [2.6, 45.6, 2], [5.2, 47.4, 1], [14, 50.4, 6], [40, 59.4, 20], [80, 63.9, 30], [104, 63.2, 10],
+      [139.6, 42, 4], [162, 38.6, 30], [180, 35.2, 8], [186, 31.2, 5], [187, 24, 5], [185.6, 16, 4], [181.6, 12.4, 3], [172, 12, 0]],
+    belt:[47, 43.8], w:[[137.6, 43.2, 1], [104.6, 62.4, 3], [80, 63, 30], [50, 59.8, 15], [30, 53.4, 6], [24.6, 49, 1], [40, 47.8, 4], [70, 46, 0], [100, 44.8, 0]], seats:[105, 72],
+    roof:[[4, 48, 0], [30, 57, 0], [80, 66, 0], [108, 66, 0], [104.6, 62.4, 0], [80, 63, 30], [50, 59.8, 15], [34, 54.8, 6], [20, 50.2, 4], [8, 47.4, 0]],
+    pil:[[100, 3, 0.6], [57, 2.4, 1]], doors:[[[135.4, 43.2, 0], [133, 28, 6], [134.6, 11, 0]], [[100.4, 44.8, 0], [100, 11, 0]], [[58.4, 47.4, 0], [59, 34, 5], [56.6, 26, 0]]], handles:[103, 62], hy:3, flush:1,
+    mirror:[139.2, 43.4],
+    lines:[[[2, 44.4], [90, 44.6, 60], [182, 34.8]]],
+    shapes:[{p:[[-1, 17, 0], [10, 16.6, 2], [20, 13.6, 0], [20, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[189, 15, 0], [178, 14.6, 1.5], [172, 12, 0], [172, 9, 0], [189, 9, 0]], f:'#1d1f22'},
+      {p:[[1, 23, 0.5], [6, 23, 0.5], [6, 21.8, 0.5], [1, 21.8, 0.5]], f:'#9c1520'}],
+    hl:[[186.6, 27.4, 1], [181, 27.8, 1], [180, 25.4, 1], [186.8, 25, 1]], hlc:'#2b3239', drl:[[186.2, 31.8], [177, 35]],
+    tl:[[0.6, 44.8, 1], [9, 45.8, 1], [9, 44, 1], [0.6, 43, 1]], wheel:{t:'turbine', n:5, fin:'gunmetal', drill:0}, col:'#e9ebec'},
+  // the R1S is upright and friendly: tall glass, "stadium" headlamps on the nose and a light bar across the tail
+  'Rivian|R1S':{L:200.8, H:71.5, WB:121.1, FO:36, TD:32.5, rim:21, gap:2, cr:15, cf:15, sill:13, nose:44, tail:[0.4, 40], noTrim:1,
+    pts:[[13, 15, 0], [3.6, 16.6, 3], [0.6, 22, 4], [0, 32, 4], [0.4, 48, 4], [1, 58, 3], [2.6, 66.6, 3], [1.6, 69, 1], [5, 70.6, 3], [70, 71.5, 60], [130, 71.2, 8],
+      [160, 50.6, 4], [180, 49.4, 30], [194.4, 47.6, 5], [199.6, 44.6, 5], [200.8, 36, 6], [200.4, 22, 5], [197, 16.4, 3], [188, 15.4, 0]],
+    belt:[53, 51], w:[[157.8, 51.4, 1], [131.2, 70, 3], [70, 70.2, 50], [12, 69, 3], [9.6, 64, 2], [13.4, 53.4, 2], [30, 53, 0], [100, 52, 0]], seats:[118, 82],
+    pil:[[113, 3.4, 0.6], [70, 3.4, 0.4]], doors:[[[155.6, 51.4, 0], [150, 34, 6], [145.2, 15, 0]], [[113.4, 52.2, 0], [113, 15, 0]], [[71, 52.8, 0], [71.6, 40, 5], [66, 30, 0]]], handles:[117, 75], hy:3.2, flush:1,
+    mirror:[159, 51.8], clad:{r:3.6}, flare:{w:1.2},
+    lines:[[[3, 50.4], [100, 50, 60], [196, 47]], [[70, 27], [144, 26.4]]],
+    shapes:[{p:[[-1, 24, 0], [12, 23.4, 2], [24, 18, 0], [24, 9, 0], [-1, 9, 0]], f:'#1d1f22'}, {p:[[203, 24, 0], [192, 23, 2], [184, 18, 0], [184, 9, 0], [203, 9, 0]], f:'#1d1f22'},
+      {p:[[201, 19.6, 0], [190, 19.2, 0]], open:1, w:0.9, f:'chrome'},
+      {p:[[1, 28, 0.5], [7, 28, 0.5], [7, 26.8, 0.5], [1, 26.8, 0.5]], f:'#9c1520'}],
+    // the stadium lamp: a lit ring round a dark lens, wrapping the corner of the nose
+    hl:[[200.6, 48.4, 2], [196.8, 48.6, 2], [196.6, 38.2, 2], [200.6, 38, 2]], hlc:'#1b1e22', drl:[[200.4, 48], [197.4, 48.2, 1.6], [197.2, 38.6, 1.6], [200.4, 38.4], [200.4, 48]],
+    tl:[[0.4, 58.4, 0.6], [9, 58.8, 0.6], [9, 57, 0.6], [0.4, 56.6, 0.6]], wheel:{t:'split', n:6, fin:'gunmetal', drill:0}, col:'#2f4a3b'},
   // ---- minivans ----
   'Kia|Carnival':{L:203.7, H:69.9, WB:121.7, FO:39, TD:28.6, rim:19, cr:14, cf:11, sill:11, tail:[2, 66], tb:41, rr:[6, 69.5], rrR:4, rf:[136, 69.9], rfR:7, cowl:[166, 46], hood:[199, 41.5], nose:36,
     belt:[46, 45.5], dlo:[8, 160], cIn:1.5, aIn:3.5, roof:[[2, 58, 0], [6, 70, 0], [22, 70.5, 0], [26, 58, 0]], roofC:'#b8bec4', pil:[[116, 3.2, 0.6], [70, 3.2, 0.2]], doors:[158, 117, 70], lines:[[[3, 43.5], [110, 44, 60], [199, 41]]],
@@ -4756,87 +4878,221 @@ Object.assign(VEH_SPECS, {
     belt:[46, 45], dlo:[9, 160], cIn:2, aIn:3.5, pil:[[117, 3.2, 0.6], [69, 3.2, 0.2]], chromeDlo:1, doors:[158, 118, 69], lines:[[[3, 43], [110, 43.5, 60], [200, 39]]],
     hl:[[204, 37.5, 1], [188, 39.5, 2], [190, 35.5, 1], [204.2, 34.5, 1]], tl:[[0.4, 48, 1], [14, 48.5, 1], [13, 45, 1], [0.3, 44.5, 1]], wheel:{t:'split', n:5, fin:'silver'}, col:'#e8e9ea'},
   // ---- sports cars ----
-  // these carry their full outline in pts (rear bumper bottom, over the roof, to the front bumper bottom) and staggered tires
-  'Nissan|Z':{L:172.4, H:51.8, WB:100.4, FO:35.4, TD:27, TDr:26.6, rim:19, gap:1.2, cr:10, cf:6, sill:7.5, nose:29, tail:[0, 39.5],
-    pts:[[5, 10, 0], [1.4, 12, 3], [0.4, 20, 5], [0.8, 31, 4], [0, 36.6, 2], [1.6, 39.6, 1], [8, 40.2, 3], [30, 45, 20], [60, 50.4, 25], [82, 51.8, 25], [99, 50.7, 7], [127, 36.8, 4], [150, 34.2, 30], [165, 31.8, 8], [170.6, 29.6, 4], [172.4, 22, 8], [171.6, 11, 4], [168, 6, 0]],
+  // these carry their full outline in pts (rear bumper bottom, over the roof, to the front bumper bottom) and staggered tires;
+  // like the supercars they sit on the dark stage, with carbon aero (ext), mesh intakes and lit LEDs
+  'Nissan|Z':{L:172.4, H:51.8, WB:100.4, FO:35.4, TD:27, TDr:26.6, rim:19, gap:1.2, cr:10, cf:6, sill:7.5, nose:29, tail:[0, 39.5], stage:1, noTrim:1,
+    pts:[[5, 9, 0], [1.2, 11, 2], [0.4, 20, 4], [0.8, 31, 3], [0, 36.6, 1.5], [1.4, 39.6, 1], [8, 40.4, 3], [30, 45, 20], [60, 50.4, 25], [82, 51.8, 25], [99, 50.7, 7], [127, 36.8, 4],
+      [150, 34.2, 30], [164, 32, 8], [171.4, 29.6, 3], [172.4, 20, 6], [171.4, 10, 3], [169, 6, 1], [164, 5.2, 0]],
     belt:[40, 38.5], w:[[125, 38.2, 1.5], [99.5, 49.3, 3], [82, 50.4, 18], [60, 48.6, 15], [41, 44.3, 1.5], [55, 40.8, 8], [90, 39.3, 0]], seats:[72],
     roof:[[38, 44, 0], [58, 49.8, 15], [82, 51.8, 20], [101, 50.8, 2], [101, 60, 0], [38, 60, 0]], chrome:[[[40.6, 44.7], [58, 49.4, 15], [82, 51.1, 20], [100, 50.1]]], doors:[124, 77], handles:[79], hy:2.6, mirror:[120, 39.6],
-    lines:[[[3, 36.2], [40, 37.8, 20], [80, 35, 40], [125, 33.6, 40], [168, 30.4]], [[54, 18.5], [118, 16.5]]], hip:2, skirt:2,
-    hl:[[172, 28.6, 1], [163, 31.2, 3], [158.5, 30.4, 2], [163.5, 28.2, 2], [172.2, 26.8, 1]], drl:[[171.4, 26.2], [166, 27]],
-    tl:[[0.3, 36.4, 1], [9, 38.5, 1], [8.5, 35.8, 1], [0.3, 34.2, 1]], hlc:'#2b3239',
-    wheel:{t:'star', n:9, fin:'black', cal:'#c4282f'}, col:'#e8c21a'},
-  'Ford|Mustang GT':{L:189.4, H:54.4, WB:107.1, FO:39.5, TD:27, TDr:27.7, rim:19, gap:1.4, cr:10.5, cf:7, sill:8, nose:33, tail:[0, 41.5],
-    pts:[[5, 10.5, 0], [1.4, 13, 3], [0.6, 22, 5], [1.2, 33, 4], [0.2, 39, 2], [2.4, 41.8, 1], [10, 42.4, 4], [22, 44.2, 14], [50, 50.2, 25], [72, 53.7, 25], [92, 54.4, 25], [104.5, 53.4, 7], [132, 39.6, 4], [160, 37.6, 30], [184, 35.4, 5], [189.4, 33.6, 2], [188.2, 24, 10], [186.6, 12, 4], [182, 7, 0]],
+    seams:[[[159, 31.4, 0], [156, 26, 3], [151.6, 21.6, 0]], [[12, 40.6, 0], [10.6, 24, 4], [13, 15, 0]]],
+    lines:[[[3, 36.2], [40, 37.8, 20], [80, 35, 40], [125, 33.6, 40], [168, 30.4]], [[54, 18.5], [118, 16.5]]], hip:2,
+    shapes:[{p:[[-1, 15, 0], [8, 14.6, 2], [12, 10, 2], [14, 6, 0], [-1, 6, 0]], f:'#121316'},
+      {p:[[171.8, 15, 1], [163.6, 15.6, 2], [161.8, 9, 1], [170.8, 8.2, 1]], f:'mesh', s:'#000'}, {p:[[171.8, 15, 1], [163.6, 15.6, 2], [161.8, 9, 1], [170.8, 8.2, 1]], f:'shadeUp'},
+      {p:[[173, 23.6, 1], [170.2, 23.8, 1], [169.4, 16.6, 1], [172.6, 16.2, 1]], f:'mesh', s:'#000'}],
+    hl:[[172, 28.6, 1], [163, 31.2, 3], [158.5, 30.4, 2], [163.5, 28.2, 2], [172.2, 26.8, 1]], hlc:'#22282f', drl:[[171.4, 27.6], [166, 29.4], [161, 30.2]],
+    tl:[[0.3, 37, 0.5], [9, 38.4, 0.5], [8.5, 36.2, 0.5], [0.3, 35, 0.5]],
+    ext:[{p:[[173.6, 6.2, 0.3], [150, 6.6, 0], [150, 5.2, 0], [158, 4.5, 0], [174, 4.8, 0.3]], f:'carbon'}, {p:[[52, 8.6, 0.3], [121, 8.6, 0.3], [121.6, 6, 0.3], [54, 6, 0.3]], f:'carbon'},
+      {p:[[-1.2, 9.6, 0.4], [2, 9.6, 0.4], [16, 6.6, 0.4], [16.4, 5, 0], [9, 5, 0], [-0.8, 7.6, 0.4]], f:'carbon'},
+      {p:[[-0.6, 12.4, 1], [3, 12.4, 1], [3, 9.6, 1], [-0.6, 9.6, 1]], f:'chrome'},
+      {p:[[-0.6, 42.6, 0.4], [9, 42.2, 1], [12, 40.9, 0.5], [8, 40.3, 0.3], [0.2, 39.8, 0.3]], f:'carbon'},
+      {p:[[0.6, 36.6], [8.4, 37.8]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'star', n:9, fin:'black', cal:'#c4282f', facet:1}, haunch:[0.4, 0.9], col:'#e8c21a'},
+  'Ford|Mustang GT':{L:189.4, H:54.4, WB:107.1, FO:39.5, TD:27, TDr:27.7, rim:19, gap:1.4, cr:10.5, cf:7, sill:8, nose:33, tail:[0, 41.5], stage:1, noTrim:1,
+    pts:[[5, 10, 0], [1.2, 12, 2], [0.4, 22, 4], [1, 33, 3], [0.2, 39, 1.5], [0.8, 42.8, 0.5], [2.6, 43.6, 0.5], [10, 43, 4], [26, 44.8, 10], [50, 50.2, 25], [72, 53.7, 25], [92, 54.4, 25], [104.5, 53.4, 7],
+      [132, 39.6, 4], [160, 37.6, 30], [180, 35.8, 6], [188.4, 35, 2], [189.4, 32.6, 2], [187.6, 24, 8], [186.6, 12, 4], [184, 6.6, 1], [178, 5.8, 0]],
     belt:[42.6, 40.6], w:[[130, 40.6, 1.5], [104, 51.8, 3], [92, 52.7, 18], [72, 51.9, 15], [56, 44.7, 1.5], [70, 42.2, 10], [100, 40.4, 0]], seats:[80, 52], pil:[[66, 1.6, -1.5]],
-    doors:[129, 80], handles:[83], hy:2.8, mirror:[126, 42],
-    lines:[[[3, 38.8], [36, 40, 20], [72, 37.8, 30], [130, 35.8, 40], [184, 34.6]], [[54, 20], [124, 18.5]]], skirt:1.6,
-    hl:[[188.6, 34.4, 1], [176, 36.4, 3], [171.5, 35.4, 2], [178, 33.3, 2], [188.8, 32.2, 1]], drl:[[187.6, 31.4], [180, 32.6]],
-    tl:[[0.3, 39.6, 1], [2.8, 40.2, 1], [2.8, 31.6, 1], [0.5, 31, 1]], hlc:'#2b3239', hip:1.6,
-    wheel:{t:'y', n:5, fin:'gunmetal', cal:'#c4282f'}, col:'#b0121b'},
-  'Chevrolet|Corvette Stingray':{L:182.3, H:48.6, WB:107.2, FO:41.6, TD:25.8, TDr:27.2, rim:19, rimR:20, gap:1, cr:8, cf:4.5, sill:7, nose:23, tail:[0, 41.8],
-    pts:[[4, 9, 0], [1, 12, 3], [0, 22, 4], [0.5, 34, 3], [0.4, 39.6, 1], [2, 42, 1], [12, 42.2, 4], [30, 43, 15], [52, 44.8, 15], [72, 47.4, 15], [84, 48.6, 15], [96.5, 47.6, 6], [122, 34.6, 5], [140, 31.6, 25], [164, 27.8, 15], [178, 24, 6], [182.3, 19.5, 4], [181, 13, 6], [177, 6, 3], [172, 4.5, 0]],
-    belt:[37.5, 35.8], w:[[121, 35.6, 1.5], [96, 46.4, 3], [86, 47.3, 8], [79.5, 46.4, 2], [76, 39, 1.5], [100, 36.6, 0]], seats:[86],
-    doors:[121, 76], handles:[], mirror:[118, 37], hip:2, skirt:2,
-    lines:[[[2, 37], [50, 40.4, 30], [76, 38.4, 10], [120, 33.4, 30], [176, 25.5]], [[121, 27.5], [96, 27, 30], [76, 31.5]]],
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[76.4, 36.6, 2], [59, 36.8, 4], [53.5, 31.5, 6], [56, 25.4, 3], [68.4, 23.8, 3]], f:'#1d1f23'}, {p:[[72.6, 33.4], [58, 33.6]], open:1, f:'#3c4046', w:0.5}, {p:[[70.6, 29.4], [56, 29.6]], open:1, f:'#3c4046', w:0.5},
-      {p:[[77.1, 36.8], [69, 23.8]], open:1, f:'#ffffff', w:0.5, o:0.5}, {p:[[78.5, 46.4, 1], [62, 44.3, 2], [75.5, 39.4, 1]], f:'#101215'}], hlc:'#2b3239',
-    hl:[[181.8, 22.6, 1], [168, 27.3, 3], [163, 27.1, 2], [170, 24.6, 2], [182, 20.8, 1]], tl:[[0.4, 37, 1], [9, 38.2, 1], [8, 35, 1], [0.4, 33.4, 1]],
-    wheel:{t:'split', n:5, fin:'black', cal:'#d8b31f'}, col:'#1f6fd0'},
-  'BMW|M4':{L:189.1, H:54.8, WB:112.5, FO:33.5, TD:26.6, TDr:26.7, rim:19, rimR:20, gap:1.4, cr:10.5, cf:6.5, sill:8, nose:32, tail:[0, 41.6],
-    pts:[[5, 10.5, 0], [1.4, 13, 3], [0.5, 22, 5], [1, 34, 4], [0.4, 39.4, 2], [1.6, 41.7, 1], [10, 42.1, 4], [23, 42.8, 6], [45, 50.6, 15], [70, 54.2, 20], [92, 54.8, 25], [104, 53.6, 7], [128, 39.6, 4], [158, 37.6, 30], [182, 35.2, 8], [187.6, 33.8, 4], [189.1, 30, 4], [189.1, 18, 6], [188, 9, 4], [184, 6.5, 0]],
+    doors:[129, 80], handles:[83], hy:2.8, mirror:[126, 42], mirrorC:'#141518', hip:1.6,
+    seams:[[[171, 35.4, 0], [168, 28, 4], [164.6, 22.4, 0]], [[13, 43, 0], [11, 28, 4], [14, 16, 0]]],
+    lines:[[[3, 38.8], [36, 40, 20], [72, 37.8, 30], [130, 35.8, 40], [184, 34.6]], [[50, 31.6], [64, 28.4, 10], [128, 21.6]], [[54, 20], [124, 18.5]]],
+    shapes:[{p:[[50, 31.6, 0], [64, 28.4, 10], [128, 21.6, 0], [128, 6, 0], [44, 6, 0]], f:'paint-0.4', o:0.35},
+      {p:[[-1, 15, 0], [9, 14.6, 2], [13, 10.4, 2], [15, 6, 0], [-1, 6, 0]], f:'#121316'},
+      {p:[[187.8, 21, 1], [178, 21.6, 2], [176, 13.4, 2], [186.8, 12.4, 1]], f:'mesh', s:'#000'}, {p:[[187.8, 21, 1], [178, 21.6, 2], [176, 13.4, 2], [186.8, 12.4, 1]], f:'shadeUp'}],
+    hl:[[188.6, 34.4, 1], [176, 36.4, 3], [171.5, 35.4, 2], [178, 33.3, 2], [188.8, 32.2, 1]], hlc:'#22282f', drl:[[187.8, 33.4], [180, 34.6], [174, 35]],
+    tl:[[0.3, 39.6, 0.5], [2.8, 40.2, 0.5], [2.8, 31.6, 0.5], [0.5, 31, 0.5]],
+    ext:[{p:[[190.6, 6.4, 0.3], [166, 6.8, 0], [166, 5.4, 0], [174, 4.6, 0], [191, 4.9, 0.3]], f:'carbon'}, {p:[[58, 9, 0.3], [134, 9, 0.3], [134.6, 6.2, 0.3], [60, 6.2, 0.3]], f:'#141518'},
+      {p:[[-1.2, 10.6, 0.4], [2, 10.6, 0.4], [17, 7.2, 0.4], [17.4, 5.4, 0], [9, 5.4, 0], [-0.8, 8.4, 0.4]], f:'#141518'},
+      {p:[[-0.8, 13.4, 1.2], [3.6, 13.4, 1.2], [3.6, 10, 1.2], [-0.8, 10, 1.2]], f:'chrome'},
+      {p:[[1.4, 39.2], [1.6, 32]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'y', n:5, fin:'gunmetal', cal:'#c4282f', facet:1}, haunch:[0.4, 1], col:'#b0121b'},
+  // the C8 is mid-engined: cab-forward, a long rear deck, angular arches and a big side intake fed by a scoop in the door
+  'Chevrolet|Corvette Stingray':{L:182.3, H:48.6, WB:107.2, FO:41.6, TD:25.8, TDr:27.2, rim:19, rimR:20, gap:1, sq:0.42, sqR:0.6, cr:8, cf:4.5, sill:7, nose:23, tail:[0, 41.8], stage:1, noTrim:1,
+    pts:[[4, 7.5, 0], [1, 10, 2], [0, 18, 2], [0.4, 32, 2], [0, 39.6, 1], [1.6, 41.8, 1], [14, 42.4, 6], [36, 43.4, 15], [56, 45, 15], [74, 47.6, 15], [88, 48.6, 15], [97, 47.6, 5], [121.5, 34.8, 4],
+      [140, 31.6, 25], [160, 28.2, 14], [174, 24.8, 4], [180.6, 21.2, 2], [182.3, 17.6, 1.5], [182, 12, 2], [179, 5.6, 1], [172, 4.4, 0]],
+    belt:[37.5, 35.8], w:[[121, 35.6, 1.5], [96, 46.4, 3], [86, 47.3, 8], [79.5, 46.4, 2], [76, 39, 1.5], [100, 36.6, 0]], seats:[86], doors:[121, 76], handles:[], mirror:[118, 37], hip:2,
+    seams:[[[163, 27.6, 0], [166, 15, 3], [169.6, 5, 0]], [[12.6, 42.2, 0], [11, 26, 4], [12.6, 16, 0]]],
+    lines:[[[2, 37], [50, 40.4, 30], [76, 38.4, 10], [120, 33.4, 30], [176, 25.5]], [[127, 27.5], [96, 27, 30], [76.4, 31.5]], [[52, 12.4], [126, 11.6]]],
+    shapes:[{p:[[127, 27.5, 0], [96, 27, 30], [76.4, 31.5, 0], [68.4, 23.8, 0], [56, 25.4, 0], [50, 6, 0], [130, 6, 0]], f:'paint-0.4', o:0.45},
+      {p:[[78.5, 46.2, 1], [62, 44.2, 2], [75.6, 39.6, 1]], f:'mesh'}, {p:[[78.5, 46.2, 1], [62, 44.2, 2], [75.6, 39.6, 1]], f:'shadeUp'},
+      {p:[[76.4, 36.6, 2], [59, 36.8, 4], [53.5, 31.5, 6], [56, 25.4, 3], [68.4, 23.8, 3]], f:'mesh', s:'#000'}, {p:[[76.4, 36.6, 2], [59, 36.8, 4], [53.5, 31.5, 6], [56, 25.4, 3], [68.4, 23.8, 3]], f:'shadeUp'},
+      {p:[[73, 31], [55.4, 31.6]], open:1, f:'paint-0.2', w:1}, {p:[[73, 30.6], [55.4, 31.2]], open:1, f:'#fff', w:0.25, o:0.6},
+      {p:[[-1, 17, 0], [9, 16.4, 2], [13, 11, 2], [15, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 15, 0.5], [8, 14.6, 0.5], [9, 12, 0.5], [0.4, 12, 0.5]], f:'mesh'},
+      {p:[[181.6, 12.8, 1], [170, 14.2, 2], [166, 11, 2], [166.6, 6.4, 1], [178.8, 6.2, 1]], f:'mesh', s:'#000'}, {p:[[181.6, 12.8, 1], [170, 14.2, 2], [166, 11, 2], [166.6, 6.4, 1], [178.8, 6.2, 1]], f:'shadeUp'}],
+    hl:[[181.4, 22.8, 0.6], [168, 27.2, 1.5], [163, 27, 0.6], [170, 24.4, 1], [181.8, 21, 0.6]], hlc:'#22282f', drl:[[180.6, 22.4], [170, 25.8], [164.6, 26.6]],
+    tl:[[0.3, 38.6, 0.5], [9, 40, 0.5], [8.2, 37.4, 0.5], [0.3, 35.6, 0.5]],
+    ext:[{p:[[184, 5.2, 0.3], [152, 5.6, 0], [152, 4.4, 0], [160, 3.5, 0], [184.4, 3.9, 0.3]], f:'carbon'}, {p:[[49.6, 7.8, 0.3], [125, 7.8, 0.3], [126, 4.8, 0.3], [51.6, 4.8, 0.3]], f:'carbon'},
+      {p:[[-1.4, 11, 0.5], [3, 11, 0.5], [20, 6.8, 0.5], [20.6, 4.6, 0], [12, 4.6, 0], [-0.8, 8.4, 0.5]], f:'carbon'},
+      {p:[[-0.8, 14, 0.8], [3.4, 14, 0.8], [3.4, 10.8, 0.8], [-0.8, 10.8, 0.8]], f:'chrome'},
+      {p:[[-1.2, 44.8, 0.5], [11, 45, 1.5], [14, 43.6, 0.6], [10, 42.9, 0.4], [-0.6, 42.4, 0.4]], f:'carbon'},
+      {p:[[0.6, 37.6], [8.2, 38.8]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'split', n:5, fin:'black', cal:'#d8b31f', facet:1}, haunch:[0.4, 0.9], col:'#1f6fd0'},
+  'BMW|M4':{L:189.1, H:54.8, WB:112.5, FO:33.5, TD:26.6, TDr:26.7, rim:19, rimR:20, gap:1.4, cr:10.5, cf:6.5, sill:8, nose:32, tail:[0, 41.6], stage:1, noTrim:1,
+    pts:[[5, 10, 0], [1.2, 12, 2], [0.4, 22, 4], [1, 34, 3], [0.4, 39.4, 1.5], [1.4, 41.8, 0.8], [10, 42.2, 4], [23, 42.8, 6], [45, 50.6, 15], [70, 54.2, 20], [92, 54.8, 25], [104, 53.6, 7],
+      [128, 39.6, 4], [158, 37.6, 30], [180, 35.6, 8], [186, 34.2, 3], [188.2, 31, 2], [189.1, 22, 2], [188.6, 12, 3], [186.4, 6.8, 1], [181, 6, 0]],
     belt:[42.4, 40.8], w:[[127, 40.6, 1.5], [102.5, 52.3, 3], [80, 52.7, 15], [64, 49.2, 5], [56.4, 43.6, 1.2], [61, 42.2, 1.2], [90, 41.4, 0]], seats:[82, 58], pil:[[88, 2.4, 0.6]],
-    doors:[127, 72], handles:[76], hy:3, mirror:[124, 42.6], hip:1.6, skirt:2.6,
+    roof:[[46, 49.4, 0], [70, 53.4, 20], [92, 54, 25], [103, 53, 2], [106, 60, 0], [44, 60, 0]], roofC:'carbon',
+    doors:[127, 72], handles:[76], hy:3, mirror:[124, 42.6], mirrorC:'carbon', hip:1.6,
+    seams:[[[178, 35.6, 0], [175, 28, 4], [169.6, 21.6, 0]], [[14, 42.2, 0], [12, 28, 4], [15, 16, 0]]],
     lines:[[[2, 39.6], [100, 39.2, 60], [184, 35.4]], [[48, 21], [100, 21.6, 40], [138, 24.6]]],
-    shapes:[{p:[[140.4, 34.6, 0.6], [137.6, 34.2, 0.6], [136.4, 27.2, 0.6], [139.2, 26.4, 0.6]], f:'#121315'}, {p:[[189.2, 30.4, 1], [187.6, 30.6, 1], [187.4, 13.6, 1], [188.9, 13, 1]], f:'#1a1b1e'}], hlc:'#2b3239',
-    hl:[[188.2, 34, 1], [176, 35.7, 3], [173.6, 34, 2], [180, 32, 2], [188.6, 31.4, 1]], drl:[[187.4, 31], [181, 32]],
-    tl:[[0.4, 39.2, 1], [13, 40.4, 1], [12, 37.8, 1], [5, 37.2, 1], [3, 34.6, 1], [0.4, 34.4, 1]],
-    wheel:{t:'y', n:5, fin:'black', cal:'#1d4fa8'}, col:'#3f6b3a'},
-  'Porsche|911 Carrera':{L:177.9, H:51.1, WB:96.5, FO:37.4, TD:26.8, TDr:28.2, rim:20, rimR:21, gap:1.2, cr:9, cf:6, sill:7.5, nose:28, tail:[0, 35],
-    pts:[[5, 9, 0], [1, 11, 3], [0.3, 18, 4], [0.5, 30, 4], [2, 35, 3], [12, 38.8, 10], [30, 44, 20], [55, 49, 25], [75, 50.9, 20], [90, 51.1, 15], [100.5, 50.2, 6], [124, 36.2, 5], [140, 34.8, 20], [160, 34.6, 15], [171, 33.4, 6], [176.6, 28.6, 6], [177.9, 20, 8], [176.5, 10, 4], [170, 6.5, 0]],
+    shapes:[{p:[[48, 21, 0], [100, 21.6, 40], [138, 24.6, 0], [140, 6, 0], [46, 6, 0]], f:'paint-0.4', o:0.3},
+      {p:[[141, 35, 0.6], [138, 34.6, 0.6], [136.8, 27.4, 0.6], [139.6, 26.6, 0.6]], f:'#101113'}, {p:[[141, 35, 0.6], [138, 34.6, 0.6], [136.8, 27.4, 0.6], [139.6, 26.6, 0.6]], f:'gloss'},
+      {p:[[-1, 15, 0], [9, 14.6, 2], [13, 10.4, 2], [15, 6, 0], [-1, 6, 0]], f:'#121316'},
+      {p:[[189.4, 32.2, 1], [187.6, 32.4, 1], [187.4, 14.6, 1], [188.9, 14, 1]], f:'mesh', s:'#000'},
+      {p:[[187.8, 12.8, 1], [176, 13.8, 2], [173.6, 8.4, 1], [186.2, 7.6, 1]], f:'mesh', s:'#000'}, {p:[[187.8, 12.8, 1], [176, 13.8, 2], [173.6, 8.4, 1], [186.2, 7.6, 1]], f:'shadeUp'}],
+    hl:[[188.2, 34, 1], [176, 35.7, 3], [173.6, 34, 2], [180, 32, 2], [188.6, 31.4, 1]], hlc:'#22282f', drl:[[187.4, 32.6], [181, 33.6], [176, 34.6]],
+    tl:[[0.4, 39.2, 0.5], [13, 40.4, 0.5], [12, 37.8, 0.5], [5, 37.2, 0.5], [3, 34.6, 0.5], [0.4, 34.4, 0.5]],
+    ext:[{p:[[190.6, 6.8, 0.3], [168, 7, 0], [168, 5.6, 0], [176, 4.8, 0], [191, 5.2, 0.3]], f:'carbon'}, {p:[[58.6, 9.2, 0.3], [139, 9.2, 0.3], [140, 6.2, 0.3], [60.6, 6.2, 0.3]], f:'carbon'},
+      {p:[[-1.4, 12, 0.5], [3, 12, 0.5], [22, 7.6, 0.5], [22.6, 5.6, 0], [12, 5.6, 0], [-0.8, 9.4, 0.5]], f:'carbon'},
+      {p:[[-0.8, 13.4, 1.2], [3.6, 13.4, 1.2], [3.6, 10, 1.2], [-0.8, 10, 1.2]], f:'chrome'},
+      {p:[[-0.8, 43.6, 0.4], [9, 43, 1], [12, 42.2, 0.4], [1, 41.8, 0.3]], f:'carbon'},
+      {p:[[0.8, 35.4], [3.4, 35.6], [5.6, 38.2], [11.8, 39]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'y', n:5, fin:'black', cal:'#1d4fa8', facet:1}, haunch:[0.5, 0.9], col:'#3f6b3a'},
+  // the 992 with its rear spoiler raised, the light bar across the tail and the headlamps in the fender tops
+  'Porsche|911 Carrera':{L:177.9, H:51.1, WB:96.5, FO:37.4, TD:26.8, TDr:28.2, rim:20, rimR:21, gap:1.2, cr:9, cf:6, sill:7.5, nose:28, tail:[0, 35], stage:1, noTrim:1,
+    pts:[[5, 8.6, 0], [1.2, 10.6, 2], [0.3, 18, 3], [0.5, 30, 3], [1, 34.4, 1.5], [3, 36.4, 1], [12, 38.6, 8], [30, 44, 20], [55, 49, 25], [75, 50.9, 20], [90, 51.1, 15], [100.5, 50.2, 6],
+      [124, 36.2, 5], [140, 34.8, 20], [156, 35, 12], [166, 33.8, 6], [173.4, 30.4, 5], [176.8, 24.6, 4], [177.9, 17, 4], [176.6, 9.6, 3], [173.6, 6, 1], [167, 5.4, 0]],
     belt:[39.6, 37.6], w:[[122.5, 37.6, 1.5], [100.5, 49.2, 3], [80, 49.8, 20], [61, 46.6, 12], [52.5, 42.7, 1.5], [70, 39.6, 10], [100, 38.4, 0]], seats:[78], pil:[[71.5, 1.5, 1.6, '#c9ced3']], chromeDlo:1,
-    doors:[123, 74], handles:[78], hy:3, flush:1, mirror:[119.5, 39], hip:2.6, skirt:1.4,
-    lines:[[[2, 34], [28, 37.2, 15], [52, 38.4, 15], [80, 35.4, 30], [124, 34.6, 30], [168, 31.6]]],
-    hl:[[176.6, 29.4, 4], [171, 33, 4], [163.6, 32.6, 4], [167, 29, 4], [174.6, 27, 3]], drl:[[176.6, 14.6], [170.6, 14.9]],
+    doors:[123, 74], handles:[78], hy:3, flush:1, mirror:[119.5, 39], hip:2.6,
+    seams:[[[163, 33.6, 0], [160, 26, 3], [153.4, 22.4, 0]], [[12, 38.4, 0], [10.4, 24, 4], [13, 15.4, 0]]],
+    lines:[[[2, 34], [28, 37.2, 15], [52, 38.4, 15], [80, 35.4, 30], [124, 34.6, 30], [168, 31.6]], [[62, 14], [124, 12.8]]],
+    shapes:[{p:[[-1, 14, 0], [8, 13.6, 2], [12, 9.6, 2], [14, 6, 0], [-1, 6, 0]], f:'#121316'},
+      {p:[[177.6, 13, 1], [168, 13.6, 2], [166.6, 8.4, 1], [176.4, 7.6, 1]], f:'mesh', s:'#000'}, {p:[[177.6, 13, 1], [168, 13.6, 2], [166.6, 8.4, 1], [176.4, 7.6, 1]], f:'shadeUp'}],
+    hl:[[174.6, 30.6, 3], [170.6, 33.2, 3], [164, 34, 3], [164.6, 31.6, 3], [170, 29.4, 3]], drl:[[176.4, 12], [169.6, 12.4]],
     tl:[[0.4, 33.6, 0.5], [10, 36, 1], [10, 34.6, 1], [0.4, 32.2, 0.5]],
-    wheel:{t:'split', n:5, fin:'silver', cal:'#c4282f'}, col:'#b8bcc0'},
-  'Lamborghini|Huracán Tecnica':{L:179.8, H:47.2, WB:103.1, FO:41.6, TD:25.8, TDr:27.2, rim:20, gap:1, cr:7.5, cf:4.5, sill:6.5, nose:20, tail:[0, 39.6],
-    pts:[[4, 8, 0], [1, 11, 3], [0, 20, 4], [0.5, 33, 3], [0.3, 38, 2], [5, 39.6, 3], [25, 41.2, 15], [55, 44.5, 25], [80, 47, 20], [92, 47.2, 15], [100, 46, 6], [124, 32.5, 5], [150, 28.5, 25], [170, 24, 10], [178.5, 19.5, 4], [179.8, 16, 3], [178, 9, 4], [173, 5, 0]],
-    belt:[35.8, 34], w:[[122, 33.5, 1.5], [99.5, 45.2, 3], [86, 46, 10], [74, 42.5, 4], [71, 37.6, 1.5], [95, 35, 0]], seats:[88], doors:[123, 71], handles:[], mirror:[119, 35.5], hip:1.6, skirt:2,
-    lines:[[[2, 35], [50, 37.4, 30], [72, 35.5, 10], [124, 30, 30], [170, 25]], [[124, 26], [96, 29.5, 10], [72, 33]]], wing:[1, 20, 42.4],
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[72, 33, 1], [56, 35, 3], [50, 28, 3], [53, 22, 1], [64, 24, 2]], f:'#1d1f23'}, {p:[[69, 29.6], [54, 30.4]], open:1, f:'#3c4046', w:0.5}, {p:[[72.4, 43, 1], [60, 43, 2], [70, 38.8, 1]], f:'#101215'}],
-    hl:[[178.6, 20.2, 1], [164, 25.6, 2], [160, 25.4, 1], [166, 23.2, 2], [179, 18.6, 1]], hlc:'#2b3239', drl:[[177.5, 19.6], [167, 23.5]],
-    tl:[[0.3, 37, 1], [7, 38.4, 1], [6, 35.8, 1], [0.3, 35, 1]], wheel:{t:'y', n:5, fin:'black', cal:'#d8b31f'}, col:'#7bbf2a'},
-  'Ferrari|296 GTB':{L:179.7, H:46.7, WB:102.4, FO:40.6, TD:26.75, TDr:28.4, rim:20, gap:1, cr:7.5, cf:4.5, sill:6.5, nose:22, tail:[0, 39.8],
-    pts:[[4, 8, 0], [1, 11, 3], [0, 20, 4], [0.5, 32, 3], [0.6, 38, 2], [3, 39.8, 2], [20, 41, 10], [50, 43.5, 20], [78, 46.4, 20], [90, 46.7, 15], [100, 45.6, 5], [123, 33.5, 5], [140, 32.8, 15], [158, 31.6, 15], [172, 27.4, 8], [178.5, 22.5, 5], [179.7, 18, 4], [178, 9.5, 4], [173, 5, 0]],
-    belt:[36.4, 35], w:[[121, 34.8, 1.5], [99, 44.6, 3], [86, 45.4, 8], [80, 42, 3], [79, 37.3, 1.5], [100, 35.4, 0]], seats:[88], doors:[122, 79], handles:[], mirror:[118, 36.4], hip:2, skirt:1.8,
-    lines:[[[2, 35.6], [40, 37.4, 20], [79, 37.2, 10], [124, 32.4, 20], [172, 27]], [[122, 19.5], [98, 24.5, 20], [79, 32.8]]],
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[77, 43.5, 2], [58, 42.2, 6], [44, 40.6, 2], [62, 40, 4], [77, 39.4, 2]], f:'#141517'}, {p:[[78, 37.6, 1.5], [63, 37.8, 3], [67, 33.2, 2], [78.5, 32.6, 1]], f:'#1d1f23'}],
-    hl:[[178.4, 23, 1], [170, 27.4, 3], [164, 27.6, 2], [168, 25.4, 2], [178.8, 21, 1]], hlc:'#2b3239', drl:[[177.6, 22.6], [167.5, 26.6]],
-    tl:[[0.5, 37.6, 1], [3.6, 38.6, 1], [3.6, 35.8, 1], [0.5, 35.2, 1]], wheel:{t:'split', n:5, fin:'silver', cal:'#d8b31f'}, col:'#b8101a'},
-  'McLaren|750S':{L:179.9, H:47.1, WB:105.1, FO:40.5, TD:25.75, TDr:27.2, rim:19, rimR:20, gap:1, cr:7.5, cf:4.5, sill:6.5, nose:21, tail:[0, 41.2],
-    pts:[[4, 8, 0], [1, 11, 3], [0, 20, 4], [0.3, 33, 3], [0.5, 38.5, 1], [3, 41.2, 1], [16, 41.2, 4], [35, 41.8, 15], [60, 45, 20], [82, 47.1, 20], [96, 46.4, 10], [104, 44.6, 5], [128, 32, 5], [150, 28.6, 25], [168, 25, 10], [177, 21, 5], [179.9, 17, 4], [178, 9, 4], [173, 5, 0]],
-    belt:[35.6, 33.6], w:[[126, 33.2, 1.5], [103, 44, 4], [86, 46, 15], [68, 43.5, 10], [61, 40, 2], [80, 36.8, 10], [105, 34.6, 0]], seats:[86], doors:[127, 66], handles:[], mirror:[122, 35.8], hip:1.6, skirt:1.8,
-    lines:[[[2, 36], [40, 38, 20], [70, 36, 20], [126, 30, 20], [170, 25]], [[126, 22], [95, 26, 20], [68, 34.5]]],
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[68, 34.5, 2], [52, 33, 4], [46, 25, 4], [50, 20, 2], [62, 25, 4]], f:'#1d1f23'}, {p:[[68.6, 34.6], [62.4, 24.6]], open:1, f:'#ffffff', w:0.5, o:0.4}],
-    hl:[[178.6, 21.6, 1], [170, 25.2, 3], [166.5, 24.8, 2], [171, 22.6, 2], [179, 20, 1]], hlc:'#2b3239', drl:[[177.6, 21], [170.5, 23.6]],
-    tl:[[0.4, 37.6, 1], [3.6, 38.4, 1], [3.4, 36.4, 1], [0.4, 35.8, 1]], wheel:{t:'star', n:10, fin:'black', cal:'#c9cdd1'}, col:'#e0662b'},
-  'Lamborghini|Revuelto':{L:194.8, H:45.7, WB:109.4, FO:43, TD:28.3, TDr:29, rim:21, rimR:22, gap:1, cr:7, cf:4, sill:6, nose:18, tail:[0, 38.8],
-    pts:[[4, 7.5, 0], [1, 10.5, 3], [0, 20, 4], [0.4, 32, 3], [0.6, 36.5, 2], [4, 38.8, 2], [20, 39.6, 10], [50, 42, 20], [80, 45, 20], [96, 45.7, 15], [108, 44.2, 6], [138, 30.5, 5], [165, 26.5, 25], [185, 21.5, 10], [193, 18, 5], [194.8, 14.5, 3], [193, 8, 4], [188, 4.5, 0]],
-    belt:[35.2, 33], w:[[136, 31.8, 1.5], [107, 43, 4], [92, 44.2, 10], [80, 41.6, 4], [79, 36.4, 1.5], [105, 34, 0]], seats:[94], doors:[136, 79], handles:[], mirror:[131, 34.2], hip:1.6, skirt:2,
-    lines:[[[2, 34], [55, 36.5, 30], [79, 35, 10], [136, 28.5, 30], [185, 22]], [[136, 24.5], [104, 29, 10], [78, 34.5]]],
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[78, 34.5, 2], [60, 36.4, 3], [54, 30, 3], [57, 21, 2], [70, 23, 3]], f:'#1d1f23'}, {p:[[74, 30.4], [57, 31]], open:1, f:'#3c4046', w:0.5}, {p:[[78, 41.8, 1], [62, 41.6, 2], [76, 37.2, 1]], f:'#101215'}],
-    hl:[[193.8, 17.6, 1], [178, 23.4, 2], [174, 23.4, 1], [180, 21.2, 2], [194.2, 16, 1]], hlc:'#2b3239', drl:[[192.5, 17.4], [180.5, 22]],
-    tl:[[0.5, 36.2, 1], [7, 37.6, 1], [6, 34.8, 1], [0.4, 34, 1]], wheel:{t:'turbine', n:10, fin:'black', cal:'#e0662b'}, col:'#1f7a8c'},
-  // the Chiron is two-tone: the paint shows inside its chrome C-line, and the roof, tail and sills outside it are dark
-  'Bugatti|Chiron':{L:178.9, H:47.7, WB:106.7, FO:37.5, TD:26.7, TDr:28, rim:20, rimR:21, gap:1, cr:8, cf:5, sill:7, nose:24, tail:[0, 39.8],
-    pts:[[4, 8.5, 0], [1, 11.5, 3], [0, 22, 4], [0.5, 33, 3], [0.5, 38, 2], [3, 39.8, 2], [20, 40.8, 8], [45, 43.6, 20], [75, 47.3, 20], [88, 47.7, 15], [100, 46.6, 6], [124, 34, 5], [150, 30.6, 25], [170, 27, 10], [177, 24.5, 5], [178.9, 20, 4], [177.5, 10, 4], [172, 5.5, 0]],
-    belt:[37, 35.4], w:[[122, 35.2, 1.5], [99, 45.6, 4], [86, 46.4, 10], [74, 44.6, 8], [70, 39.5, 3], [74, 36.6, 2], [100, 35.4, 0]], seats:[88], doors:[123, 68], handles:[], mirror:[119, 36.8], hip:1.6, skirt:1.6,
-    lines:[[[2, 36], [45, 38.5, 20], [124, 32, 30], [170, 27]]],
-    under:(X, Y, s) => `<path d="M-50,-50 H700 V400 H-50Z ${rpath([[100, 60, 0], [100, 46.8, 0], [80, 47.4, 10], [66.2, 44, 12], [59, 32, 14], [61, 18, 10], [72, 10.8, 8], [120, 10.4, 0], [200, 10.4, 0], [200, 60, 0]].map(q => [X(q[0]), Y(q[1]), q[2] * s]), true)}" fill-rule="evenodd" fill="#06080c" opacity=".62"/>`,
-    shapes:[{p:[[-1, 17, 0], [8, 16.4, 3], [13, 7, 0], [-1, 7, 0]], f:'#16171a'}, {p:[[63.6, 42.4, 4], [57.4, 33, 10], [58.4, 20.4, 6], [54, 22.6, 4], [52.4, 32, 10], [57, 39.6, 4]], f:'#121315'},
-      {p:[[100, 46.8], [80, 47.4, 10], [66.2, 44, 12], [59, 32, 14], [61, 18, 10], [72, 10.8, 8], [120, 10.4]], open:1, f:'#e6e9ec', w:1.3}],
-    hl:[[178.4, 24.6, 1], [168, 28, 2], [165, 27.6, 1], [170, 25.6, 2], [178.8, 22.6, 1]], hlc:'#2b3239', drl:[[177.4, 24], [169, 26.8]],
-    tl:[[0.4, 37.6, 1], [3, 38.6, 1], [3, 36.2, 1], [0.4, 35.6, 1]], wheel:{t:'split', n:5, fin:'silver', cal:'#1d4fa8'}, col:'#1f3f8f'},
+    ext:[{p:[[178.6, 6, 0.3], [156, 6.4, 0], [156, 5.2, 0], [162, 4.6, 0], [179, 4.8, 0.3]], f:'#141518'}, {p:[[60.6, 8.6, 0.3], [124, 8.6, 0.3], [124.6, 6.2, 0.3], [62, 6.2, 0.3]], f:'#141518'},
+      {p:[[-1.2, 9.4, 0.4], [2, 9.4, 0.4], [16, 6.6, 0.4], [16.4, 5, 0], [9, 5, 0], [-0.8, 7.4, 0.4]], f:'#141518'},
+      {p:[[-0.6, 12, 1.4], [3.4, 12, 1.4], [3.4, 9.2, 1.4], [-0.6, 9.2, 1.4]], f:'chrome'},
+      {p:[[1.6, 37.6, 0], [16.2, 40.6, 0], [15, 39.4, 0], [3, 36.4, 0]], f:'#0d0e10'},
+      {p:[[0.4, 39.2, 0.3], [15, 41.6, 1], [16.6, 40.8, 0.3], [1.4, 37.8, 0.3]], f:'paint'},
+      {p:[[173.4, 31], [169.8, 32.8], [165.6, 33.4]], open:1, f:'#ffffff', w:0.5, glow:'#d6ebff'},
+      {p:[[0.8, 33.2], [9.4, 35.2]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'split', n:5, fin:'silver', cal:'#c4282f', facet:1}, haunch:[0.6, 1], col:'#b8bcc0'},
+  // ---- supercars ----
+  // on the stage with hexagonal arches (sqR sharpens their corners), mesh intakes, carbon splitter, skirts, diffuser and wing
+  'Lamborghini|Huracán Tecnica':{L:179.8, H:45.9, WB:103.1, FO:41.6, TD:25.8, TDr:27.2, rim:20, gap:1, sq:0.5, sqR:0.3, cr:7.5, cf:4.5, sill:6.5, nose:17, tail:[0, 38.6], stage:1, noTrim:1,
+    pts:[[4, 7.5, 0], [1, 10, 2], [0, 18, 2], [0.6, 32, 2], [0, 37.4, 1], [2.5, 38.8, 1], [22, 40.4, 14], [55, 43.6, 25], [80, 45.7, 20], [91, 45.9, 12], [99.5, 44.8, 4], [124, 31.2, 3],
+      [150, 27.2, 25], [168, 23.4, 8], [177.8, 19.2, 1.5], [179.8, 16.6, 1], [179.2, 11.5, 2], [176.8, 6.2, 1], [171, 4.6, 0]],
+    belt:[35.8, 34], w:[[121.6, 33.2, 1.2], [99.2, 44.2, 3], [86, 44.8, 10], [74, 41.6, 4], [70.4, 36.6, 1.2], [95, 34, 0]], seats:[88], doors:[123, 71], handles:[], mirror:[119, 35.5], mirrorC:'carbon', hip:1.8,
+    seams:[[[164, 22.8, 0], [167.4, 14, 3], [170.6, 5.2, 0]], [[14.6, 37.6, 0], [12.6, 24, 4], [13.4, 17, 0]]],
+    lines:[[[2, 34.4], [50, 36.8, 30], [72, 35, 10], [124, 29.6, 30], [170, 24.6]], [[124.4, 25.4], [96, 29, 10], [73, 32.6]], [[50, 12.4], [124, 11.4]]],
+    shapes:[{p:[[124.4, 25.4, 0], [96, 29, 10], [73, 32.6, 0], [64.4, 23.6, 0], [53, 20.6, 0], [48, 6, 0], [126, 6, 0]], f:'paint-0.4', o:0.45},
+      {p:[[70.6, 36.8, 0.5], [74, 41.4, 1.5], [60, 42.2, 3], [48, 40.6, 0.5]], f:'mesh'}, {p:[[70.6, 36.8, 0.5], [74, 41.4, 1.5], [60, 42.2, 3], [48, 40.6, 0.5]], f:'shadeUp'},
+      {p:[[73, 32.8, 1], [57, 34.6, 3], [50.4, 27.6, 3], [53, 20.6, 1], [64.4, 23.6, 2]], f:'mesh', s:'#000'}, {p:[[73, 32.8, 1], [57, 34.6, 3], [50.4, 27.6, 3], [53, 20.6, 1], [64.4, 23.6, 2]], f:'shadeUp'},
+      {p:[[70.6, 29.2], [53.6, 30.4]], open:1, f:'paint-0.2', w:1}, {p:[[70.6, 28.8], [53.6, 30]], open:1, f:'#fff', w:0.25, o:0.6},
+      {p:[[-1, 17.6, 0], [10, 17, 2], [14, 12, 2], [16, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 15.6, 0.5], [8.8, 15.2, 0.5], [9.6, 12.4, 0.5], [0.4, 12.4, 0.5]], f:'mesh'},
+      {p:[[178.8, 14.6, 1], [168, 16.8, 2], [160.6, 12.8, 2], [161.4, 6.4, 1], [176.6, 6.4, 1]], f:'mesh', s:'#000'}, {p:[[178.8, 14.6, 1], [168, 16.8, 2], [160.6, 12.8, 2], [161.4, 6.4, 1], [176.6, 6.4, 1]], f:'shadeUp'},
+      {p:[[177.6, 12.6], [165, 10.2]], open:1, f:'paint-0.2', w:0.9},
+      {p:[[168.5, 21.4], [171.6, 20.6]], open:1, f:'#ffffff', w:0.55, glow:'#d6ebff'}],
+    hl:[[178.6, 19.6, 0.6], [166, 24, 1], [161.6, 24.2, 0.6], [167.6, 22.2, 1], [179, 18.2, 0.6]], hlc:'#22282f', drl:[[177.6, 19.1], [170.5, 21.9], [166.4, 23.7]],
+    tl:[[0.3, 36.6, 0.5], [7, 37.8, 0.5], [6.4, 36.4, 0.5], [0.3, 35.4, 0.5]],
+    ext:[{p:[[181.4, 5.4, 0.3], [150, 5.6, 0], [150, 4.4, 0], [158, 3.5, 0], [181.8, 3.9, 0.3]], f:'carbon'}, {p:[[178.8, 9.4, 0.2], [173, 11, 0.2], [172.8, 10.2, 0.2], [179, 8.4, 0.2]], f:'carbon'},
+      {p:[[50, 7.6, 0.3], [124, 7.6, 0.3], [125, 4.6, 0.3], [53, 4.6, 0.3]], f:'carbon'},
+      {p:[[-1.4, 11, 0.5], [3, 11, 0.5], [21, 6.8, 0.5], [21.6, 4.6, 0], [12, 4.6, 0], [-0.8, 8.4, 0.5]], f:'carbon'},
+      {p:[[-2.2, 41.4, 0.5], [12, 41.6, 2], [16, 40.7, 0.8], [12, 40.2, 0.5], [-2, 39.9, 0.5]], f:'carbon'},
+      {p:[[0.6, 36.2], [6.4, 37.2]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'forged', n:5, fin:'black', cal:'#d8b31f', facet:1, ccb:1}, haunch:[0.4, 0.8], col:'#7bbf2a'},
+  // the 296: round arches, a flying buttress over the rear-fender intake, a door scoop feeding it and the active spoiler raised in the tail
+  'Ferrari|296 GTB':{L:179.7, H:46.7, WB:102.4, FO:40.6, TD:26.75, TDr:28.4, rim:20, gap:1, cr:7.5, cf:4.5, sill:6.5, nose:22, tail:[0, 39.8], stage:1, noTrim:1,
+    pts:[[4, 7.5, 0], [1, 10, 2], [0, 18, 3], [0.4, 32, 3], [0.6, 38, 1.5], [2.6, 39.8, 1], [20, 41, 10], [50, 43.5, 20], [78, 46.4, 20], [90, 46.7, 15], [100, 45.6, 5], [123, 33.5, 5],
+      [138, 32.6, 15], [156, 31.4, 15], [170, 27.8, 8], [177.6, 22.6, 4], [179.7, 17.6, 3], [178.6, 10, 3], [176, 5.4, 1], [170, 4.4, 0]],
+    belt:[36.4, 35], w:[[121, 34.8, 1.5], [99, 44.6, 3], [86, 45.4, 8], [80, 42, 3], [79, 37.3, 1.5], [100, 35.4, 0]], seats:[88], doors:[122, 79], handles:[], mirror:[118, 36.4], mirrorC:'carbon', hip:2,
+    seams:[[[166, 27.8, 0], [163, 18, 3], [160.6, 6, 0]], [[12, 40.4, 0], [10.4, 26, 4], [13, 15, 0]]],
+    lines:[[[2, 36], [22, 38.4, 12], [40, 39.6, 15], [60, 38.2, 15], [79, 36.6, 10], [124, 32.2, 20], [172, 27]], [[124, 19.4], [98, 24.5, 20], [79, 31.8]], [[52, 12], [122, 11]]],
+    shapes:[{p:[[124, 19.4, 0], [98, 24.5, 20], [79, 31.8, 0], [66, 32.6, 0], [60, 6, 0], [126, 6, 0]], f:'paint-0.4', o:0.42},
+      {p:[[77.6, 43.4, 2], [60, 42.4, 6], [46, 40.6, 2], [62, 39.8, 4], [77.6, 39.2, 2]], f:'#0a0b0d'}, {p:[[77.6, 43.4, 2], [60, 42.4, 6], [46, 40.6, 2], [62, 39.8, 4], [77.6, 39.2, 2]], f:'shadeUp'},
+      {p:[[79, 37.4, 1], [64, 38, 3], [66, 32.6, 3], [79.4, 31.6, 1]], f:'mesh', s:'#000'}, {p:[[79, 37.4, 1], [64, 38, 3], [66, 32.6, 3], [79.4, 31.6, 1]], f:'shadeUp'},
+      {p:[[-1, 20, 0], [10, 19.4, 2], [15, 13, 2], [17, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 18, 0.5], [9, 17.6, 0.5], [11, 13, 0.5], [11.6, 9, 0], [0.4, 9, 0]], f:'mesh'},
+      {p:[[179.2, 15, 1], [171, 16, 2], [168.4, 9, 1], [177, 7, 1]], f:'mesh', s:'#000'}, {p:[[179.2, 15, 1], [171, 16, 2], [168.4, 9, 1], [177, 7, 1]], f:'shadeUp'}],
+    hl:[[178.4, 23, 1], [170, 27.4, 3], [164, 27.6, 2], [168, 25.4, 2], [178.8, 21, 1]], hlc:'#22282f', drl:[[177.8, 23.2], [170.6, 26.8], [165.4, 27.6]],
+    tl:[[0.5, 37.4, 0.5], [6, 38.6, 0.5], [6, 36.8, 0.5], [0.5, 36, 0.5]],
+    ext:[{p:[[181.4, 5.4, 0.3], [150, 5.6, 0], [150, 4.4, 0], [158, 3.5, 0], [181.8, 3.9, 0.3]], f:'carbon'}, {p:[[179.2, 10, 0.2], [173, 11.4, 0.2], [172.8, 10.6, 0.2], [179.4, 9, 0.2]], f:'carbon'},
+      {p:[[52, 7.6, 0.3], [123, 7.6, 0.3], [124, 4.6, 0.3], [54, 4.6, 0.3]], f:'carbon'},
+      {p:[[-1.4, 11, 0.5], [3, 11, 0.5], [21, 6.8, 0.5], [21.6, 4.6, 0], [12, 4.6, 0], [-0.8, 8.4, 0.5]], f:'carbon'},
+      {p:[[-0.8, 42, 0.4], [9, 41.8, 1], [11.4, 40.6, 0.4], [0.4, 39.8, 0.3]], f:'#141518'},
+      {p:[[0.8, 37.2], [5.6, 38]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'forged', n:5, fin:'silver', cal:'#d8b31f', facet:1, ccb:1}, haunch:[0.6, 1], col:'#b8101a'},
+  // the 750S: a teardrop of glass, a door scooped out into the radiator intake, eye-socket headlamps and the airbrake raised
+  'McLaren|750S':{L:179.9, H:47.1, WB:105.1, FO:40.5, TD:25.75, TDr:27.2, rim:19, rimR:20, gap:1, cr:7.5, cf:4.5, sill:6.5, nose:21, tail:[0, 41.2], stage:1, noTrim:1,
+    pts:[[4, 7.5, 0], [1, 10, 2], [0, 18, 2], [0.2, 33, 2], [0.4, 38.6, 1], [2.4, 41.2, 1], [16, 41.4, 4], [35, 42, 15], [60, 45, 20], [82, 47.1, 20], [96, 46.4, 10], [104, 44.6, 5], [128, 32, 5],
+      [150, 28.6, 25], [166, 25.4, 10], [175.6, 21.6, 4], [179.9, 16.4, 2], [179, 10, 2], [176.4, 5.4, 1], [170, 4.4, 0]],
+    belt:[35.6, 33.6], w:[[126, 33.4, 1.5], [103, 44, 4], [86, 46, 15], [70, 44.6, 12], [58, 40.6, 1], [74, 36.4, 8], [104, 34.4, 0]], seats:[86], doors:[127], handles:[], mirror:[122, 35.8], mirrorC:'carbon', hip:1.6,
+    seams:[[[163, 25.8, 0], [164.6, 15, 3], [166.4, 5, 0]], [[13.6, 41.2, 0], [12, 26, 4], [13.6, 17.6, 0]]],
+    lines:[[[2, 36], [40, 38, 20], [70, 36, 20], [126, 30, 20], [170, 25]], [[127, 22.4], [100, 29.4, 10], [82, 34.2, 10], [64, 34.8]], [[64, 12], [124, 11]]],
+    shapes:[{p:[[127, 22.4, 0], [100, 29.4, 10], [82, 34.2, 10], [64, 34.8, 0], [56, 6, 0], [130, 6, 0]], f:'paint-0.4', o:0.4},
+      {p:[[100, 29.4, 1], [82, 34, 8], [64, 34.6, 6], [55, 28, 3], [57.6, 20.6, 4], [76, 22, 8]], f:'paint-0.55'}, {p:[[100, 29.4, 1], [82, 34, 8], [64, 34.6, 6], [55, 28, 3], [57.6, 20.6, 4], [76, 22, 8]], f:'shadeUp'},
+      {p:[[72, 33.6, 4], [64, 34.4, 5], [55.4, 28, 3], [57.8, 20.8, 3], [70, 22.4, 6], [74, 28, 6]], f:'mesh', s:'#000'}, {p:[[72, 33.6, 4], [64, 34.4, 5], [55.4, 28, 3], [57.8, 20.8, 3], [70, 22.4, 6], [74, 28, 6]], f:'shadeUp'},
+      {p:[[96, 29.4], [82, 32, 8], [64, 32]], open:1, f:'paint-0.2', w:0.9},
+      {p:[[-1, 18, 0], [10, 17.4, 2], [14, 12, 2], [16, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 16, 0.5], [9, 15.6, 0.5], [10, 12.4, 0.5], [0.4, 12.4, 0.5]], f:'mesh'},
+      {p:[[2, 40.8, 0.5], [14, 40.8, 0.5], [13.4, 39, 0.5], [1.6, 38.6, 0.5]], f:'mesh'},
+      {p:[[178.6, 18.4, 1], [171, 20.6, 2], [168, 17, 2], [176, 15.6, 1]], f:'mesh', s:'#000'},
+      {p:[[179, 12.4, 1], [168, 13.6, 2], [166, 8, 1], [176.4, 6.6, 1]], f:'mesh', s:'#000'}, {p:[[179, 12.4, 1], [168, 13.6, 2], [166, 8, 1], [176.4, 6.6, 1]], f:'shadeUp'}],
+    hl:[[178.8, 20.6, 0.6], [170, 24.8, 2], [165.6, 24.6, 0.6], [171, 22.2, 1.5], [179.2, 19.2, 0.6]], hlc:'#1d2228', drl:[[178, 20.4], [171, 23.6], [167, 24.4]],
+    tl:[[0.4, 38, 0.4], [4, 40, 0.4], [4, 38.6, 0.4], [0.4, 36.6, 0.4]],
+    ext:[{p:[[181.4, 5.4, 0.3], [150, 5.6, 0], [150, 4.4, 0], [158, 3.5, 0], [181.8, 3.9, 0.3]], f:'carbon'},
+      {p:[[48, 7.6, 0.3], [124, 7.6, 0.3], [125, 4.6, 0.3], [50, 4.6, 0.3]], f:'carbon'},
+      {p:[[-1.4, 11, 0.5], [3, 11, 0.5], [21, 6.8, 0.5], [21.6, 4.6, 0], [12, 4.6, 0], [-0.8, 8.4, 0.5]], f:'carbon'},
+      {p:[[4, 43.6], [7.4, 41.2]], open:1, f:'#141518', w:1.2},
+      {p:[[-1.6, 46, 0.4], [1.6, 45.8, 0.4], [15.4, 42, 0.4], [14.6, 41.2, 0.3], [-0.2, 44.6, 0.3]], f:'carbon'},
+      {p:[[0.8, 37.6], [3.6, 39.2]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'star', n:10, fin:'black', cal:'#c9cdd1', facet:1, ccb:1}, haunch:[0.6, 1], col:'#e0662b'},
+  // the Revuelto: hexagonal arches, Y-shaped lamps front and back, a Y in the side intake and the rear left open over the tires
+  'Lamborghini|Revuelto':{L:194.8, H:45.7, WB:109.4, FO:43, TD:28.3, TDr:29, rim:21, rimR:22, gap:1, sq:0.5, sqR:0.3, cr:7, cf:4, sill:6, nose:18, tail:[0, 38.8], stage:1, noTrim:1,
+    pts:[[4, 7, 0], [1, 10, 2], [0, 18, 2], [0.4, 30, 2], [0, 36, 1], [2.4, 38.8, 1], [20, 39.8, 10], [50, 42.2, 20], [80, 45, 20], [96, 45.7, 12], [107, 44.4, 4], [136, 30.6, 3],
+      [165, 26.4, 25], [184, 21.6, 8], [193, 17.4, 1.5], [194.8, 14.6, 1], [194.2, 10, 2], [191.8, 5.4, 1], [186, 4.2, 0]],
+    belt:[35.2, 33], w:[[134.4, 32, 1.2], [106.4, 43.4, 3], [94, 44.6, 10], [83, 42, 4], [79, 36.4, 1.2], [105, 33.6, 0]], seats:[94], doors:[136, 80], handles:[], mirror:[131, 34.2], mirrorC:'carbon', hip:1.8,
+    seams:[[[177, 22.4, 0], [180.6, 13.6, 3], [184, 5, 0]], [[16.6, 39.4, 0], [14.4, 28, 4], [18, 22, 0]]],
+    lines:[[[2, 33.6], [55, 36.4, 30], [79, 35, 10], [136, 28.6, 30], [185, 22.4]], [[136, 24.4], [106, 28.6, 10], [80, 32.6]], [[60, 12], [136, 11]]],
+    shapes:[{p:[[136, 24.4, 0], [106, 28.6, 10], [80, 32.6, 0], [70, 22, 0], [58, 19, 0], [54, 6, 0], [138, 6, 0]], f:'paint-0.4', o:0.45},
+      {p:[[79, 36.6, 0.5], [83, 41.8, 1.5], [64, 42.2, 3], [56, 40.6, 0.5]], f:'mesh'}, {p:[[79, 36.6, 0.5], [83, 41.8, 1.5], [64, 42.2, 3], [56, 40.6, 0.5]], f:'shadeUp'},
+      {p:[[80, 33, 1], [62, 34.8, 3], [54.4, 26, 3], [58, 19, 1], [70, 22, 2]], f:'mesh', s:'#000'}, {p:[[80, 33, 1], [62, 34.8, 3], [54.4, 26, 3], [58, 19, 1], [70, 22, 2]], f:'shadeUp'},
+      {p:[[78.6, 32.4], [67.6, 28, 2], [57, 30.4]], open:1, f:'paint-0.2', w:1}, {p:[[67.6, 28], [65.6, 21.2]], open:1, f:'paint-0.2', w:1},
+      {p:[[78.6, 32], [67.6, 27.6, 2], [57, 30]], open:1, f:'#fff', w:0.25, o:0.6},
+      {p:[[-1, 22, 0], [12, 21, 2], [18, 13, 2], [21, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 19.6, 0.5], [10.6, 19, 0.5], [14, 13, 0.5], [14.8, 8.6, 0], [0.4, 8.6, 0]], f:'mesh'},
+      {p:[[194, 13, 1], [182, 15.6, 2], [174.6, 12, 2], [175.4, 6, 1], [191.6, 6, 1]], f:'mesh', s:'#000'}, {p:[[194, 13, 1], [182, 15.6, 2], [174.6, 12, 2], [175.4, 6, 1], [191.6, 6, 1]], f:'shadeUp'},
+      {p:[[192.6, 11.4], [178, 9.4]], open:1, f:'paint-0.2', w:0.9},
+      {p:[[184.6, 20.2], [188.2, 16]], open:1, f:'#ffffff', w:0.55, glow:'#d6ebff'}],
+    hl:[[193.6, 17.6, 0.6], [180, 23, 1], [175, 23.2, 0.6], [181.6, 21, 1], [194, 16.2, 0.6]], hlc:'#22282f', drl:[[192.6, 17.2], [184.6, 20.2], [179.8, 22.6]],
+    tl:[[0.3, 35.8, 0.5], [8, 37.4, 0.5], [7, 35.6, 0.5], [0.3, 34.4, 0.5]],
+    ext:[{p:[[196.4, 5, 0.3], [164, 5.4, 0], [164, 4.2, 0], [172, 3.3, 0], [196.8, 3.7, 0.3]], f:'carbon'}, {p:[[193.8, 8.8, 0.2], [188, 10.4, 0.2], [187.8, 9.6, 0.2], [194, 7.8, 0.2]], f:'carbon'},
+      {p:[[58.6, 7.4, 0.3], [135.6, 7.4, 0.3], [136.6, 4.4, 0.3], [60.6, 4.4, 0.3]], f:'carbon'},
+      {p:[[-1.4, 10.4, 0.5], [3, 10.4, 0.5], [24, 6.6, 0.5], [24.6, 4.4, 0], [12, 4.4, 0], [-0.8, 8, 0.5]], f:'carbon'},
+      {p:[[-2.2, 41.4, 0.5], [14, 41.6, 2], [18, 40.6, 0.8], [14, 40, 0.5], [-2, 39.8, 0.5]], f:'carbon'},
+      {p:[[0.6, 35.4], [4, 36.1], [7.4, 36.8]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}, {p:[[4, 36.1], [2.6, 32.8]], open:1, f:'#ff7b7b', w:0.4, glow:'#ff2a2a'}],
+    wheel:{t:'turbine', n:10, fin:'black', cal:'#e0662b', facet:1, ccb:1}, haunch:[0.4, 0.8], col:'#1f7a8c'},
+  // the Chiron is two-tone: the paint shows inside its polished C-line, and the roof, tail and sills outside it are bare carbon
+  'Bugatti|Chiron':{L:178.9, H:47.7, WB:106.7, FO:37.5, TD:26.7, TDr:28, rim:20, rimR:21, gap:1, cr:8, cf:5, sill:7, nose:24, tail:[0, 39.8], stage:1, noTrim:1,
+    pts:[[4, 8, 0], [1, 11, 2], [0, 22, 3], [0.5, 33, 3], [0.5, 38, 1.5], [2.6, 39.8, 1.5], [20, 40.8, 8], [45, 43.6, 20], [75, 47.3, 20], [88, 47.7, 15], [100, 46.6, 6], [124, 34, 5],
+      [150, 30.6, 25], [168, 27.4, 10], [176.4, 24.6, 4], [178.9, 20, 3], [177.8, 10, 3], [175, 5.8, 1], [168, 5, 0]],
+    belt:[37, 35.4], w:[[122, 35.2, 1.5], [99, 45.6, 4], [86, 46.4, 10], [74, 44.6, 8], [70, 39.5, 3], [74, 36.6, 2], [100, 35.4, 0]], seats:[88], doors:[123, 68], handles:[], mirror:[119, 36.8], mirrorC:'carbon', hip:1.6,
+    seams:[[[164, 28, 0], [162, 18, 3], [160, 6, 0]]],
+    lines:[[[2, 36], [45, 38.5, 20], [124, 32, 30], [170, 27]], [[124, 20], [96, 21.4, 30], [70, 24]]],
+    under:(X, Y, s, c, id) => { const d = `M-50,-50 H700 V400 H-50Z ${rpath([[100, 60, 0], [100, 46.8, 0], [80, 47.4, 10], [66.2, 44, 12], [59, 32, 14], [61, 18, 10], [72, 10.8, 8], [120, 10.4, 0], [200, 10.4, 0], [200, 60, 0]].map(q => [X(q[0]), Y(q[1]), q[2] * s]), true)}`;
+      return `<path d="${d}" fill-rule="evenodd" fill="#06080c" opacity=".55"/><path d="${d}" fill-rule="evenodd" fill="url(#${id}cf)" opacity=".45"/>`; },
+    shapes:[{p:[[124, 20, 0], [96, 21.4, 30], [70, 24, 0], [72, 10.8, 0], [126, 10.4, 0]], f:'paint-0.4', o:0.35},
+      {p:[[63.6, 42.4, 4], [57.4, 33, 10], [58.4, 20.4, 6], [54, 22.6, 4], [52.4, 32, 10], [57, 39.6, 4]], f:'mesh', s:'#000'}, {p:[[63.6, 42.4, 4], [57.4, 33, 10], [58.4, 20.4, 6], [54, 22.6, 4], [52.4, 32, 10], [57, 39.6, 4]], f:'shadeUp'},
+      {p:[[100, 46.8], [80, 47.4, 10], [66.2, 44, 12], [59, 32, 14], [61, 18, 10], [72, 10.8, 8], [120, 10.4]], open:1, f:'chrome', w:1.3},
+      {p:[[-1, 18, 0], [10, 17.4, 2], [14, 12, 2], [16, 6, 0], [-1, 6, 0]], f:'#121316'}, {p:[[0.4, 16, 0.5], [9, 15.6, 0.5], [10, 12.4, 0.5], [0.4, 12.4, 0.5]], f:'mesh'},
+      {p:[[177.8, 17, 1], [166, 18, 2], [163.4, 10.4, 2], [164, 6.2, 1], [175, 6, 1]], f:'mesh', s:'#000'}, {p:[[177.8, 17, 1], [166, 18, 2], [163.4, 10.4, 2], [164, 6.2, 1], [175, 6, 1]], f:'shadeUp'}],
+    hl:[[178.4, 24.6, 1], [168, 28, 2], [165, 27.6, 1], [170, 25.6, 2], [178.8, 22.6, 1]], hlc:'#22282f', drl:[[177.6, 24.4], [173.4, 25.8], [169.4, 27]],
+    tl:[[0.4, 37.6, 0.5], [3, 38.6, 0.5], [3, 36.6, 0.5], [0.4, 35.8, 0.5]],
+    ext:[{p:[[179.2, 19.6, 1], [178, 19.6, 1], [177.4, 9.6, 1], [178.4, 9.6, 1]], f:'chrome'},
+      {p:[[180.4, 6, 0.3], [152, 6.4, 0], [152, 5, 0], [160, 4.2, 0], [180.8, 4.4, 0.3]], f:'carbon'},
+      {p:[[50, 8.2, 0.3], [125, 8.2, 0.3], [126, 5.2, 0.3], [52, 5.2, 0.3]], f:'carbon'},
+      {p:[[-1.4, 11, 0.5], [3, 11, 0.5], [21, 7, 0.5], [21.6, 4.8, 0], [12, 4.8, 0], [-0.8, 8.4, 0.5]], f:'carbon'},
+      {p:[[6, 42.6], [8.6, 40.6]], open:1, f:'#141518', w:1.4},
+      {p:[[-2.4, 43.8, 0.5], [14, 44, 2], [17, 43, 0.8], [13, 42.4, 0.5], [-2, 42.2, 0.5]], f:'carbon'},
+      {p:[[0.8, 37.2], [2.8, 37.8]], open:1, f:'#ff7b7b', w:0.45, glow:'#ff2a2a'}],
+    wheel:{t:'split', n:5, fin:'silver', cal:'#1d4fa8', facet:1, ccb:1}, haunch:[0.5, 1], col:'#1f3f8f'},
   // ---- pickups ----
   // full outlines like the SUVs: tailgate, bed rail, cab, raked windshield, high flat hood and an upright grille;
   // bumpers stand proud of the body (ext), and the frame, spare and hitch show under the bed (back)
