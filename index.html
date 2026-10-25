@@ -4393,7 +4393,7 @@ function rpath(pts, closed, open){
 }
 const RIMS = {silver:['#eef0f2', '#a3a9b0', '#7d848c'], black:['#4a4d52', '#1d1e21', '#111214'], gunmetal:['#9aa0a7', '#4b5056', '#33373c'], chrome:['#ffffff', '#c3c9cf', '#8e959c'],
   bronze:['#d8b47a', '#8a6634', '#5e4422'], machined:['#f4f5f6', '#b9bec4', '#1d1e21'], white:['#ffffff', '#dcdfe2', '#a9aeb3'], gold:['#e8cf86', '#a8873e', '#6e5726']};
-// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style (split, y, forged, mesh, turbine, star, blade, twin, vee, aero, wire, disc, steel, hubcap), n: spokes, fin: finish, cal: caliper color, ww: whitewall,
+// one wheel: tire, rim, spokes, brake and caliper. w = {t: spoke style (split, y, forged, mesh, turbine, star, blade, twin, vee, notch, aero, wire, disc, steel, hubcap), n: spokes, fin: finish, cal: caliper color, ww: whitewall,
 // lugs: lug nuts (trucks run 6), drill: 0 for plain rotors, at: knobby all-terrain tread, facet: spokes lit on one edge,
 // cl: a center-lock nut instead of lug nuts, ccb: dark carbon-ceramic rotors}
 function drawWheel(id, cx, cy, R, rr, w){
@@ -4448,6 +4448,9 @@ function drawWheel(id, cx, cy, R, rr, w){
   else if(t === 'vee') for(let i = 0; i < n; i++){ const a = st + i * k, f = Math.min(0.27, k * 0.3);
     s += `<path d="M${pt(a, hub * 0.9)} L${pt(a - f, out)} A${r1(out)},${r1(out)} 0 0 1 ${pt(a + f, out)}Z" fill="#141619"/>`;
     p += bar(a - 0.06, hub, rr * 0.05, a - f, out, rr * 0.065) + bar(a + 0.06, hub, rr * 0.05, a + f, out, rr * 0.065); }
+  // notch: broad spokes that flare out to the rim, each with a small window cut near its tip (wound the other way, so it stays open)
+  else if(t === 'notch') for(let i = 0; i < n; i++){ const a = st + i * k, h = k * 0.12, f = k * 0.27, wn = k * 0.095, ra = rr * 0.68, rb = rr * 0.86;
+    p += `M${pt(a - h, hub)} L${pt(a - f, out)} A${r1(out)},${r1(out)} 0 0 1 ${pt(a + f, out)} L${pt(a + h, hub)}Z M${pt(a + wn * 0.75, ra)} L${pt(a + wn, rb)} L${pt(a - wn, rb)} L${pt(a - wn * 0.75, ra)}Z`; }
   // aero: a dark faceted disc inside a wide silver ring, with sawtooth blades reaching in from the ring
   else if(t === 'aero'){ const ri = rr * 0.86; s += C(rr * 0.92, `fill="url(#${gid})"`) + C(ri, `fill="#141619"`);
     for(let i = 0; i < n * 2; i++){ const a = st + i * k / 2 + (i % 2 ? 0 : k / 4), b = rr * (i % 2 ? 0.25 : 0.42), c2 = b + rr * 0.14;
@@ -5573,20 +5576,80 @@ Object.assign(VEH_SPECS, {
     back:truckFrame(23.5, 213, 11),
     hl:[[231.4, 54.6, 1], [225, 55.2, 1.5], [224, 51.5, 1], [231.6, 50.6, 1]], hlc:'#2b3239', drl:[[231.2, 55.4], [225.4, 55.8]],
     tl:[[3.2, 55, 0.6], [6, 55, 0.6], [6, 40.5, 0.6], [3.2, 40, 0.6]], wheel:{t:'y', n:6, fin:'machined', lugs:6, drill:0}, col:'#9ea4aa'},
-  'Ford|F-150':{L:231.7, H:77.2, WB:145.4, FO:36, TD:32.5, rim:20, gap:2.2, sill:19.5, sq:0.62, nose:56, tail:[3, 56.9], noTrim:1,
-    pts:[[31.85, 19.5, 0], [31.4, 23, 1], [5.5, 23, 1.5], [3, 25.5, 1.5], [2.6, 40, 2], [3, 55.8, 1], [4, 56.9, 0.6], [71.4, 57.4, 0.6], [72.4, 57.6, 0.4], [73.6, 74.5, 3], [78, 77, 4], [120, 77.2, 40],
-      [148, 76.6, 5], [171.5, 59.6, 2.5], [200, 59.2, 30], [226.5, 57.8, 3], [231, 56.6, 2], [231.5, 46, 6], [231.3, 35.5, 2], [230, 24, 3], [226, 20, 2], [214.15, 19.5, 0]],
-    belt:[59.2, 58.6], w:[[166.5, 56.2, 0.8], [146.5, 74.6, 3], [110, 75.2, 40], [81.5, 74.8, 2.5], [79.6, 59.6, 1.5], [120, 59.1, 0], [152, 58.8, 2], [156.5, 56.2, 2]], seats:[140, 100],
-    pil:[[123.5, 3.6, 0.3]], doors:[[[170, 58.6, 0], [168.6, 21, 0]], [[123.8, 59, 0], [123.5, 21, 0]], [[79.8, 59.4, 0], [78.8, 21, 0]]], hy:4.2,
-    mirror:[163.5, 57], mirrorS:1.6, steps:[1.5, 2.6], hip:1.4,
-    lines:[[[3, 51.4], [72, 51.8], [228, 52.8]], [[80, 28], [168, 28]]],
-    shapes:[{p:[[71.5, 58, 0], [72.6, 58, 0], [72.6, 18, 0], [71.5, 18, 0]], f:'#141517'}, {p:[[173.6, 47, 0.5], [177.6, 47, 0.5], [176.2, 37.5, 0.5], [172.6, 37.5, 0.5]], f:'#1a1b1e'},
-      {p:[[232, 50, 0], [230.2, 50, 0.5], [230, 36.5, 0.5], [232, 36.5, 0]], f:'#18191c'}],
-    ext:[...truckBumper(231.7, 35.6, 20.6, '#2a2c30'),
-      ...truckStep(31, 'chrome')],
-    back:truckFrame(23, 214, 13),
-    hl:[[231.2, 55.8, 1], [224, 56.4, 1.5], [222.4, 53.4, 1], [224.4, 49.6, 1], [231.6, 49.2, 1]], hlc:'#2b3239', drl:[[231, 55], [224.8, 55.6]],
-    tl:[[3.2, 55, 0.6], [6, 55, 0.6], [6, 41.5, 0.6], [3.2, 41, 0.6]], wheel:{t:'split', n:6, fin:'machined', lugs:6, drill:0}, col:'#2c4a7c'},
+  // the F-150 is square-shouldered: a flat bed rail running into a tall cab, a long hood that steps down to the C-clamp lamps,
+  // and wide flared lips over both arches
+  'Ford|F-150':{L:231.7, H:77.2, WB:145.4, FO:37.7, TD:32.6, rim:18, gap:2.2, sill:17.6, nose:47, tail:[3, 57], noTrim:1,
+    // traced from a side photo of a SuperCrew with the 5.5 ft bed: the bumper ends, the tailgate's lamp bulge, the bed rail, the cab's rounded
+    // back corner, the long A-pillar and the hood falling onto the grille
+    pts:[[27, 22, 0], [9, 22.3, 1], [7.4, 23, 0.6], [0.7, 23.3, 1], [0.3, 25, 1], [0.3, 31.4, 1], [1.2, 32.8, 0.5], [4.4, 32.9, 0.3], [4, 35.5, 1], [3.3, 38.5, 1],
+      [3, 47, 2], [3.3, 55.3, 1.5], [4.6, 57, 0.8], [77.6, 57.1, 0.5], [79.4, 57.1, 0], [80.2, 61, 2], [80.6, 66, 3], [81.6, 72, 2], [83.7, 75.3, 2], [86.6, 76.4, 2],
+      [92.4, 76.8, 4], [120, 76.8, 20], [140, 75.4, 6], [146, 74.2, 3], [151, 72.4, 3], [156.3, 70.1, 3], [168, 62.4, 6], [178.3, 55.6, 1.5], [200, 52.75, 20],
+      [216.7, 49.8, 6], [223.3, 48.2, 2], [226.7, 46.4, 1], [228.4, 45.2, 0.6], [228.6, 31, 0.5], [230.6, 29.6, 0.5], [231.3, 28, 1], [231.4, 22.5, 1], [229.5, 18.4, 2],
+      [224, 17.2, 1], [216, 17, 0]],
+    arches:[[[19, 17, 0], [19, 20, 2], [18.6, 24, 3], [18.2, 26.8, 3], [16.6, 30.3, 4], [14, 33.2, 4], [11, 35.4, 5], [6, 38.2, 6], [0, 39, 8], [-6, 38.3, 6],
+        [-11.15, 35.6, 5], [-14.2, 32.8, 4], [-16.3, 30, 3], [-18, 26.7, 3], [-19.1, 23.2, 2], [-19.9, 19.8, 1], [-20, 17.6, 0]],
+      [[19.2, 17.6, 0], [19.2, 24, 2], [18.6, 29, 3], [17.7, 33, 4], [15.8, 36.6, 5], [12, 40, 5], [6, 42.3, 6], [0, 42.7, 8], [-6, 42.2, 6], [-11.5, 39.6, 5],
+        [-14.8, 35.5, 4], [-16.8, 31, 3], [-18.3, 26.5, 2], [-18.6, 22, 0]]],
+    flare:{w:3, c:'paint'}, haunch:[0.5, 0.6],
+    // the glasshouse: the rear door's glass with its rounded back corner, gloss-black appliques either side of the B-pillar and the front door's glass
+    // following the A-pillar down to the mirror
+    belt:[54.5, 54.1], w:[[87.6, 54.6, 0], [87.7, 70.2, 2.5], [90, 72.5, 2], [116, 72.9, 1], [126.6, 72.6, 2], [134, 71.4, 6], [142.8, 69.5, 4], [151.2, 64.5, 4],
+      [156.2, 60.3, 3], [158.9, 56.6, 1.5], [158.6, 54.1, 0]],
+    glass:[[[87.8, 54.6, 0.3], [87.8, 70, 2.3], [90.2, 72.4, 2.3], [117, 72.4, 0.3], [117, 54.6, 0.3]],
+      [[126.7, 72, 0.3], [134, 71.2, 6], [142.8, 69.3, 4], [151, 64.4, 4], [156, 60.2, 3], [158.4, 56.8, 1.2], [158.3, 54.2, 0.3], [126.7, 54.2, 0.3]]],
+    seats:[141, 101], handles:[[84.5, 48.25], [124.1, 47.2]], hw:10.4,
+    doors:[[[82, 54.4, 0], [82, 20.3, 0]], [[121, 72.8, 0], [121, 20.3, 0]], [[169.8, 49.8, 0], [169.3, 38, 4], [168.75, 28, 4], [167.9, 20.3, 0]]],
+    // the shoulder crease runs from the tail lamp to the front fender; a softer one runs low along the bed and doors
+    lines:[[[3.6, 44.3], [40, 44.1, 30], [78, 43.8, 20], [120, 43, 30], [158, 41.2, 20], [171, 40.5]], [[80.5, 32.2], [120, 32.2, 30], [166, 32]]],
+    // the hood's shut line along the fender, the tailgate's edge and the door bottoms
+    seams:[[[171, 55.2], [200, 53.3, 20], [222, 49.9]], [[4.6, 56.6], [4.4, 35]], [[82, 20.4], [167.9, 20.4]]],
+    shapes:[
+      // the gap between the bed and the cab, and the shadow under the bed ahead of the rear wheel
+      {p:[[78.3, 57.4, 0], [79.5, 57.4, 0], [79.5, 16, 0], [78.3, 16, 0]], f:'#0c0d0f'},
+      {p:[[67, 20.6, 0], [80.3, 20.6, 0], [80.3, 16, 0], [67, 16, 0]], f:'#0c0d0f'},
+      // the bed's low crease above the bumper
+      {p:[[7, 32.4], [31, 32.2]], open:1, w:0.3, f:'#ffffff', o:0.25},
+      // the fuel door
+      {p:[[65, 50.7, 1.2], [71.5, 50.7, 1.2], [71.5, 44, 1.2], [65, 44, 1.2]], f:'paint', s:'#08090a'},
+      // the tail lamp's bright front band and the silver C that splits it from the darker back half
+      {p:[[11.4, 51.7, 0.5], [15.8, 52, 1], [16.6, 51, 0.8], [16.4, 47, 2], [13, 41.5, 3], [10, 38.4, 1.5], [7.5, 38.1, 0.5], [9.2, 42, 3], [10.6, 47, 3]], f:'#d8343c'},
+      {p:[[11.2, 51.6], [10.3, 47, 3], [8.6, 42.5, 3], [6.8, 39.6, 2], [3.6, 39]], open:1, w:0.5, f:'#d9dde1'},
+      // the gloss-black appliques either side of the B-pillar, and a bright edge along the bottom of the glass
+      {p:[[117, 72.8, 0.3], [126.6, 72.6, 0.3], [126.6, 54.2, 0], [117, 54.4, 0]], f:'gloss', o:0.5},
+      {p:[[87.8, 54.7], [158.4, 54.2]], open:1, w:0.3, f:'#ffffff', o:0.4},
+      // the fender vent: a chrome bar over a dark slot with a curved chrome blade
+      {p:[[171.6, 46.6, 0.5], [177.4, 46.6, 0.5], [176, 42, 2], [173, 38.6, 0.5], [171.8, 39.5, 0.5]], f:'#121316'},
+      {p:[[171.4, 48.6, 0.8], [177.8, 48.6, 0.8], [177.8, 46.6, 0.5], [171.4, 46.4, 0.5]], f:'chrome', s:'#6e757c'},
+      {p:[[176.4, 46.4], [175.2, 42.5, 3], [172.6, 38.8]], open:1, w:0.9, f:'chrome'},
+      // the grille's edge behind the lamp, with two bright bars
+      {p:[[223.8, 40.5, 0.5], [228.6, 40.8, 0.5], [228.6, 31, 0.5], [224.5, 31, 0.5]], f:'#16181b'},
+      {p:[[224.6, 38.6], [228.4, 38.6]], open:1, w:0.4, f:'#8d949b'}, {p:[[225, 35.2], [228.4, 35.2]], open:1, w:0.4, f:'#8d949b'},
+      // the lamp's amber markers and its projector
+      {p:[[210.9, 45.6, 0.4], [213.2, 45.8, 0.4], [214.6, 41.5, 1], [214.2, 37.8, 0.4], [213.4, 37.9, 0.4]], f:'#d9861c', o:0.9},
+      {p:[[217, 38.8, 0.3], [221.6, 38.8, 0.3], [221.6, 37, 0.3], [217, 37, 0.3]], f:'#d9861c', o:0.85},
+      {p:[[217.5, 45.8, 1], [225.2, 46, 1], [225.2, 41, 1], [217.5, 41, 1]], f:'#c9d4dd', o:0.55},
+      // the mirror's shadow on the door
+      {p:[[157, 50.2, 0], [167.5, 50, 0], [166, 47.2, 2], [159, 47.4, 2]], f:'#000000', o:0.18}],
+    ext:[
+      // the black mirror on its door mount
+      {p:[[165, 55.7, 0.5], [168.3, 55, 0.5], [168.3, 48.6, 0.5], [165.4, 48.2, 0.5]], f:'#0f1012'},
+      {p:[[156.3, 55.5, 1.5], [157.5, 57.6, 1.5], [165.5, 57.8, 1.5], [167.5, 56.5, 1], [167.5, 51.2, 1], [165.5, 50.3, 1], [158, 50.4, 1.5], [156.4, 52, 1]], f:'#141619', s:'#0a0b0c'},
+      {p:[[158, 56.9], [161.5, 57.2, 1], [165.5, 56.9]], open:1, w:0.35, f:'#ffffff', o:0.4},
+      // the rear bumper's chrome end and the black step behind it
+      {p:[[6.1, 32.7, 0], [7.8, 32.6, 0.4], [8, 23.2, 0.4], [6.1, 23.2, 0]], f:'#141518'},
+      {p:[[0.3, 32.6, 1], [6.2, 32.75, 0.4], [6.3, 23.8, 0.4], [5.6, 23.2, 1], [0.6, 23.4, 1], [0.2, 25, 0.8]], f:'chrome', s:'#6e757c'},
+      // the splash guard ahead of the rear wheel
+      {p:[[68.4, 22.8, 0], [70.4, 22.8, 0], [70.4, 16.6, 0.5], [68.4, 16.1, 0.5]], f:'#121315'},
+      // the front bumper: a chrome bar with a black pocket at its end, a black valance under it and the air dam
+      {p:[[213.6, 22.8, 0], [230.5, 22.8, 0.5], [229.4, 18.4, 1.5], [224, 17.2, 1], [214, 17, 0]], f:'#232528'},
+      {p:[[214.4, 17.5, 0], [222.4, 17.5, 0], [221.8, 14.3, 0.8], [215, 14.3, 0.8]], f:'#121315'},
+      {p:[[213, 30, 1], [229.5, 30.6, 1.5], [231.3, 28.5, 1.2], [231.4, 24, 1.2], [230.5, 22.6, 1], [213.4, 22.6, 1]], f:'chrome', s:'#6e757c'},
+      {p:[[222.3, 29, 1], [230.2, 29.2, 1], [230.8, 27.5, 0.8], [230.8, 24, 0.8], [229.6, 23.4, 0.5], [223.5, 23.4, 1], [222, 25.5, 1]], f:'#15171a'}],
+    // the C-clamp lamp seen from the side: a wide lens under a chrome brow, its daytime light running along the top and down the front
+    hl:[[210.8, 46.6, 0.5], [226.3, 47.2, 1], [227.9, 46.4, 0.8], [228, 41.5, 0.8], [226, 40.5, 1], [223.5, 36.5, 2], [221.5, 33.6, 1], [219, 33.8, 1], [215.5, 36.8, 2],
+      [213.6, 37.4, 1], [210.6, 44.8, 1]], hlc:'#3a4652', drl:[[214, 46.3], [226.5, 46.6], [227.6, 45.4], [227.6, 41.6]],
+    tl:[[3.4, 51.6, 1.2], [15.8, 52.1, 1], [16.6, 51, 0.8], [16.4, 47, 2], [13, 41.5, 3], [10, 38.4, 1.5], [4.5, 37.9, 1], [3.3, 39, 1]],
+    wheel:{t:'notch', n:6, fin:'silver', lugs:6, drill:0, ccb:1}, col:'#1c1f24'},
   // the Ram keeps its round wheel arches and a hood that falls away toward the nose
   'Ram|1500':{L:232.9, H:77.6, WB:144.6, FO:38.3, TD:32, rim:20, gap:2.4, sill:19.5, nose:54, tail:[3, 56.8], noTrim:1,
     pts:[[31.94, 19.5, 0], [31.6, 23.5, 1], [5.5, 23.5, 1.5], [3, 26, 1.5], [2.6, 40, 2], [3, 55.6, 1.2], [4.2, 56.8, 0.8], [73.4, 57.4, 0.8], [74.5, 57.8, 0.4], [76.6, 74, 4], [82, 77, 6], [120, 77.6, 50],
