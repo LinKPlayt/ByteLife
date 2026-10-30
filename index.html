@@ -507,6 +507,7 @@
   .kv span{ display:block; font-size:10.5px; font-weight:700; color:var(--muted); letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .kv b{ display:block; font-family:'Fraunces',serif; font-size:19px; line-height:1.2; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .kv b.sm{ font-size:15.5px; line-height:1.5; }
+  .kv b.up{ color:var(--green); } .kv b.down{ color:var(--red); }
   .kv.kv2{ grid-template-columns:repeat(2,minmax(0,1fr)); margin-bottom:8px; }
   .kv.kv2 span, .kv.kv2 b{ white-space:normal; overflow:visible; }
   .kv.kv2 b{ font-size:17px; }
@@ -3248,6 +3249,7 @@ function ageUp(){
 }
 function ageUpYear(){
   yearStart = serialize();
+  state.yearSnap = {age: state.age, stats: Object.assign({}, state.stats), nw: netWorth(), cum: state.econ.cumInflation};   // for the Me tab's year in review
   state.age += 1;
   const a = state.age;
   if(!state.cheated){ ACH.stats.years++; saveAch(); }
@@ -3275,6 +3277,7 @@ function ageUpYear(){
   const prompted = healthYear(a, !schoolPrompted) || schoolPrompted || homeYear(a) || justiceYear(a) || crossroadsYear(a);   // a crossroads takes the year's main decision
   yearlyFinances(a);
   workYear(a);
+  jobHistYear(a);
   loansYear(a);
   creditCardYear(a);
   creditScoreYear(a);
@@ -9142,8 +9145,13 @@ function worldStart(a){
   else if(r() < 0.06){ fx.crackdown = true; headline('POLICE LAUNCH MAJOR CRACKDOWN', 'More officers on the streets this year.', 'crime', state.crime.heat > 0 || state.crime.skill > 0); }
   // tech: a new company goes public and can be traded
   if(r() < 0.25 && w.ipoCount < 14){
-    const pre = pick(['Quanta','Nimbus','Vertex','Lumina','Helix','Nova','Cobalt','Zephyr','Orbit','Pulse','Aether','Kinetic']);
-    const kind = pick([['Labs','Tech'],['AI','AI'],['Robotics','Tech'],['Bio','Biotech'],['Energy','Energy'],['Pay','Financial'],['Cloud','Tech'],['Motors','Automotive']]);
+    // a name already on the market is drawn again, so two listings never share one
+    const taken = new Set(ALL_INSTR.concat(state.ipos).map(x => x.name));
+    let pre, kind, tries = 0;
+    do {
+      pre = pick(['Quanta','Nimbus','Vertex','Lumina','Helix','Nova','Cobalt','Zephyr','Orbit','Pulse','Aether','Kinetic']);
+      kind = pick([['Labs','Tech'],['AI','AI'],['Robotics','Tech'],['Bio','Biotech'],['Energy','Energy'],['Pay','Financial'],['Cloud','Tech'],['Motors','Automotive']]);
+    } while(taken.has(pre + ' ' + kind[0]) && tries++ < 40);
     let key = (pre.slice(0, 2) + kind[0].slice(0, 2)).toUpperCase(), i = 2;
     while(state.market[key]) key = (pre.slice(0, 3) + i++).toUpperCase().slice(0, 5);
     const stock = {key, name: pre + ' ' + kind[0], sector: kind[1], base: rint(12, 90), drift: 0.05 + Math.random() * 0.1, vol: 0.3 + Math.random() * 0.4, div: 0, ipo: true, worldIpo: true};
@@ -10812,6 +10820,27 @@ function attentionHtml(){
   return '<div class="plabel">Needs attention</div>' + list.map(r => { const st = call ? ixState(r, call) : {ok:false}, d = drift(r);
     return `<div class="invrow"><div class="itop"><span><b>${r.name}</b> <span class="tick">${relLabel(r).toUpperCase()}</span></span><span class="price down">${bondLabel(r)}</span></div><div class="owned">${d <= -8 ? 'Your bond has fallen ' + (-d) + ' points in the last few years.' : 'Your bond is weak.'} A call or some time together helps.</div><div class="assetbuy"><button onclick="interact('${r.id}','call')" ${st.ok ? '' : 'disabled'}>Call ${r.name}${st.ok ? '' : ' · ' + (st.why || 'not now')}</button></div></div>`; }).join('');
 }
+// People close to you who reached a milestone age this year, with a way to mark it
+const ordSuffix = n => (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({1:'st', 2:'nd', 3:'rd'}[n % 10] || 'th');
+const BIG_BDAYS = [1, 10, 13, 16, 18, 21, 30, 40, 50, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+const bdayCost = r => inflR(r.age >= 18 ? 180 : 90, 10);
+function birthdaysHtml(){
+  const close = ['Mother', 'Father', 'Sibling', 'Child', 'Spouse', 'Partner', 'Friend', 'Grandchild'];
+  const list = state.relationships.filter(r => close.includes(r.type) && BIG_BDAYS.includes(r.age)).slice(0, 5);
+  if(!list.length) return '';
+  return '<div class="plabel">Big birthdays</div>' + list.map(r => { const done = state.done['bday_' + r.id], c = bdayCost(r);
+    return iopt('🎂', `${r.name} turns ${r.age}`, done ? 'celebrated ✓' : fmt(c) + ' · ' + relLabel(r).toLowerCase() + ' · brings you closer', `celebrateBirthday('${r.id}')`, done || state.money < c, done); }).join('');
+}
+function celebrateBirthday(id){
+  const r = state.relationships.find(x => String(x.id) === String(id));
+  if(!r || state.done['bday_' + r.id] || state.crime.prison) return;
+  const c = bdayCost(r); if(state.money < c) return;
+  state.done['bday_' + r.id] = true;
+  r.closeness = Math.min(100, r.closeness + rint(6, 10));
+  const how = r.age <= 13 ? 'a party with cake and balloons' : r.age <= 21 ? 'a night out they will remember' : r.age >= 70 ? 'a family dinner in their honor' : 'a surprise party';
+  pushEntry(state.age, `${state.name} throws ${r.name} ${how} for their ${r.age}${ordSuffix(r.age)} birthday.`, {money:-c, happy:3});
+  render();
+}
 function socialPanelHtml(){
   const a = state.age, people = state.relationships;
   const strong = people.filter(r => r.closeness >= 70).length;
@@ -10839,6 +10868,7 @@ function socialPanelHtml(){
   }
   }
   h += attentionHtml();
+  if(!state.crime.prison) h += birthdaysHtml();
   h += groupActsHtml();
   if(!people.length) h += '<div class="status">No connections yet. Use "Meet people" to start.</div>';
   const groups = [["Partner", r => LOVE.includes(r.type)], ["Family", r => ["Mother","Father","Sibling","Child","Grandchild"].includes(r.type)], ["Friends", r => r.type === "Friend"], ["Coworkers", r => r.type === "Coworker"], ["Professional network", r => r.type === "Contact"]];
@@ -12066,12 +12096,14 @@ const loanForm = () => (state.loanForm = state.loanForm || {share:0.5, term:5});
 const loanMax = () => state.creditScore < 500 ? 0 : inflR(Math.min(50000, Math.max(1000, (state.creditScore - 500) * 60)), 100);
 const loanApr = term => Math.max(0.06, Math.min(0.24, state.econ.rate + (850 - state.creditScore) / 4000 + (term - 3) * 0.004 + (felon() ? 0.03 : 0)));
 const loanPay = (p, apr, term) => p <= 0 ? 0 : p * apr / (1 - Math.pow(1 + apr, -term));
+// what the loan will actually ask for next year: never less than clears it in the years left
+const loanDue = l => l.yearsLeft > 1 ? Math.max(l.yearlyPayment, Math.round(loanPay(l.balance, l.apr, l.yearsLeft))) : l.yearlyPayment;
 function setLoanForm(k, v){ loanForm()[k] = v; renderPanel(); }
 // All debts in one place, when they'll be gone, and a button to put spare cash on the most expensive one.
 function debtPlanHtml(){
   const ls = state.loans.filter(l => l.balance > 0), c = state.creditCard, card = c && c.balance > 0 ? c.balance : 0;
   if(!ls.length && !card) return '';
-  const total = ls.reduce((t, l) => t + l.balance, 0) + card, yearly = ls.filter(l => !l.deferred).reduce((t, l) => t + l.yearlyPayment, 0), n = ls.length + (card ? 1 : 0);
+  const total = ls.reduce((t, l) => t + l.balance, 0) + card, yearly = ls.filter(l => !l.deferred).reduce((t, l) => t + loanDue(l), 0), n = ls.length + (card ? 1 : 0);
   const free = ls.length ? state.age + Math.max(...ls.map(l => l.deferred ? 10 : Math.max(1, l.yearsLeft))) : state.age;
   const worst = ls.filter(l => !l.deferred).sort((x, y) => y.apr - x.apr)[0], cardWorse = card && (!worst || c.apr > worst.apr);
   const target = cardWorse ? {name:'credit card', apr:c.apr, bal:card} : worst ? {name:worst.type.toLowerCase() + ' loan', apr:worst.apr, bal:worst.balance} : null;
@@ -12132,6 +12164,8 @@ function loansYear(a){
   state.loans.slice().forEach(l => {
     if(l.deferred || (l.startAge && state.age < l.startAge)) return;
     const interest = l.balance * l.apr;
+    // older saves can hold a payment too small to clear the loan in the years left
+    l.yearlyPayment = loanDue(l);
     const due = Math.min(l.yearsLeft <= 1 ? Infinity : l.yearlyPayment, l.balance + interest);
     if(ensureCash(due)){
       state.money -= due;
@@ -12147,7 +12181,8 @@ function loansYear(a){
       const part = Math.max(0, Math.floor(Math.max(0, state.money) + state.savings));   // pay what there is; the rest is missed
       if(part > 0){ ensureCash(part); state.money -= part; if(state.flow) state.flow.loans += part; }
       l.balance = Math.max(0, l.balance + interest - part);
-      if(l.yearsLeft <= 1) l.yearlyPayment = Math.round(l.balance * (1 + l.apr));   // past due: the whole balance is owed
+      // past due: the whole balance is owed; otherwise the payment is reset so the loan still clears on time
+      l.yearlyPayment = l.yearsLeft <= 1 ? Math.round(l.balance * (1 + l.apr)) : Math.round(loanPay(l.balance, l.apr, l.yearsLeft));
       missed = true;
     }
   });
@@ -12743,6 +12778,7 @@ function yearlyFinances(a){
     // retirement contributions come out before tax, and the employer matches half of them up to 3% of salary
     const R = state.retirement, contrib = Math.round(state.job.salary * R.pct), match = Math.round(Math.min(contrib, state.job.salary * 0.06) / 2);
     const taxable = state.job.salary - contrib;
+    flow.gross = state.job.salary; flow.retire = contrib; flow.tax = Math.round(incomeTax(taxable));
     flow.salary = Math.round(taxable - incomeTax(taxable)); income += flow.salary;
     if(contrib > 0){ R.balance += contrib + match; R.contributed += contrib; }
   }
@@ -13555,6 +13591,20 @@ function changeMajor(){
   }})));
 }
 // The education record: every diploma and degree, and how a current student is doing.
+// High schoolers see where they stand with each kind of college, from the same odds the applications use.
+function collegeOutlookHtml(){
+  const e = ED();
+  if(e.school !== 'High School' || state.age < 13 || state.crime.prison) return '';
+  const fam = parentsWillPay();
+  const rows = COLLEGES.map(c => {
+    const p = admitChance(c), aid = aidFor(c), net = inflR(c.tuition * (1 - aid) * (1 - fam), 100);
+    const odds = p >= 0.97 ? 'certain' : Math.round(p * 100) + '%';
+    return `<div class="itop"><span><b>${c.name}</b></span><span class="price ${p >= 0.7 ? 'up' : p < 0.35 ? 'down' : ''}">${odds}</span></div>` +
+      `<div class="owned">${aid ? Math.round(aid * 100) + '% scholarship · ' : ''}${net ? 'about ' + fmt(net) + ' a year to pay' : 'free to attend'}${c.minGpa ? ' · wants a GPA near ' + c.minGpa : ' · open to everyone'}</div>`;
+  }).join('');
+  return '<div class="plabel">College outlook</div><div class="invrow">' + rows +
+    `<div class="owned" style="margin-top:6px">${fam ? 'Your parents would cover ' + Math.round(fam * 100) + '% of what is left. ' : ''}Clubs, teams, prizes, test prep, advanced classes and college tours all raise your odds; scholarship essays raise the aid.</div></div>`;
+}
 function transcriptHtml(){
   const e = ED(), lv = EDU_RANK[e.level] || 0, rows = [];
   if(lv >= EDU_RANK['High School']) rows.push(['📜', 'High school diploma', '']);
@@ -13565,6 +13615,7 @@ function transcriptHtml(){
     const g = Math.round(e.gpa), standing = g >= 85 ? ['Honors standing', 'up'] : g >= 65 ? ['Good standing', ''] : g >= 55 ? ['Struggling', 'down'] : ['Academic probation', 'down'];
     h += `<div class="plabel">How you're doing</div><div class="invrow"><div class="itop"><span><b>${standing[0]}</b></span><span class="price ${standing[1]}">GPA ${g}</span></div><div class="owned">${e.endAge ? 'Expected to finish at age ' + e.endAge + '. ' : ''}${g >= 85 ? 'Top grades open the best schools and scholarships.' : g >= 65 ? 'Studying hard and advanced classes push grades higher.' : 'Grades are slipping: studying hard and skipping less would help.'}</div></div>`;
   }
+  h += collegeOutlookHtml();
   if(rows.length) h += '<div class="plabel">Education record</div><div class="invrow">' + rows.map(r => `<div class="itop"><span>${r[0]} <b>${r[1]}</b></span></div>${r[2] ? '<div class="owned">' + r[2] + '</div>' : ''}`).join('') + '</div>';
   return h;
 }
@@ -13962,6 +14013,42 @@ function lifeGlanceHtml(){
     `<div><span>Family</span><b>${partner ? (partner.type === 'Spouse' ? 'Married' : 'Dating') : 'Single'}</b><span>${kids ? kids + ' child' + (kids > 1 ? 'ren' : '') : 'no children'}${gk ? ' · ' + gk + ' grandchild' + (gk > 1 ? 'ren' : '') : ''}</span></div>` +
     (wealth ? `<div><span>Wealth vs. others ${a}</span><b>${wealth[0].toUpperCase() + wealth.slice(1)}</b><span>typical: ${fmt(peer * cum)}</span></div>` : '') + '</div>';
 }
+// What changed over the last birthday: stats, net worth and how eventful the year was.
+function yearReviewHtml(){
+  const y = state.yearSnap, a = state.age;
+  if(!y || y.age !== a - 1 || a < 2) return '';
+  const names = {health:'Health', happy:'Happiness', smarts:'Smarts', looks:'Looks'};
+  const ch = Object.keys(names).map(k => [k, Math.round((state.stats[k] || 0) - (y.stats[k] || 0))]);
+  const sign = d => d > 0 ? '▲ ' + d : d < 0 ? '▼ ' + (-d) : 'no change';
+  const cls = d => d > 0 ? 'up' : d < 0 ? 'down' : '';
+  const nwNow = netWorth() / state.econ.cumInflation, nwThen = y.nw / (y.cum || state.econ.cumInflation), dNw = Math.round(nwNow - nwThen);
+  const n = state.log.filter(e => e.age === a).length;
+  const big = ch.slice().sort((p, q) => Math.abs(q[1]) - Math.abs(p[1]))[0];
+  const line = Math.abs(big[1]) >= 5 ? `The biggest change was ${names[big[0]].toLowerCase()}, ${big[1] > 0 ? 'up' : 'down'} ${Math.abs(big[1])}.` : 'A steady year: no stat moved more than a few points.';
+  return '<div class="plabel">Your year at ' + a + '</div><div class="kv kv2">' +
+    ch.map(([k, d]) => `<div><span>${names[k]}</span><b class="${cls(d)}">${sign(d)}</b><span>now ${Math.round(state.stats[k])}</span></div>`).join('') + '</div>' +
+    `<div class="invrow"><div class="itop"><span>Net worth</span><span class="price ${cls(dNw)}">${dNw >= 0 ? '+' : '-'}${fmt(Math.abs(dNw))}</span></div><div class="owned">${line} ${n} thing${n === 1 ? '' : 's'} happened this year. Money is in today's dollars.</div></div>`;
+}
+// One line per stretch in a career, kept year by year
+function jobHistYear(a){
+  const j = state.job; if(!j || state.crime.prison) return;
+  const hs = state.jobHist = state.jobHist || [], last = hs[hs.length - 1];
+  if(last && last.track === j.track && last.to === a - 1){ last.to = a; last.title = j.title; last.pay = j.salary; }
+  else hs.push({track: j.track, first: j.title, title: j.title, from: a, to: a, pay: j.salary});
+  if(hs.length > 40) hs.splice(0, hs.length - 40);
+}
+function workHistoryHtml(){
+  const hs = (state.jobHist || []).slice(), j = state.job, a = state.age;
+  const last = hs[hs.length - 1];
+  if(j && !(last && last.track === j.track && last.to >= a - 1)) hs.push({track: j.track, first: j.title, title: j.title, from: a, to: a, pay: j.salary});
+  if(!hs.length) return '';
+  const years = hs.reduce((t, x) => t + x.to - x.from + 1, 0), now = j && hs[hs.length - 1];
+  return '<div class="plabel">Work history</div><div class="invrow">' + hs.slice().reverse().map(x => {
+    const cur = x === now || (j && x === hs[hs.length - 1] && x.track === j.track && x.to >= a - 1), n = x.to - x.from + 1;
+    return `<div class="itop"><span><b>${cur ? j.title : x.title}</b> <span class="tick">${x.track.toUpperCase()}</span></span><span class="price">${cur ? 'now' : 'age ' + x.from + (x.to > x.from ? '–' + x.to : '')}</span></div>` +
+      `<div class="owned">${n} year${n === 1 ? '' : 's'}${x.first !== (cur ? j.title : x.title) ? ' · started as ' + x.first : ''} · ${cur ? 'paid ' + fmt(j.salary) : 'last paid ' + fmt(x.pay)} a year</div>`;
+  }).join('') + `<div class="owned" style="margin-top:6px">${years} year${years === 1 ? '' : 's'} of work across ${new Set(hs.map(x => x.track)).size} field${new Set(hs.map(x => x.track)).size === 1 ? '' : 's'}.</div></div>`;
+}
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
@@ -13971,7 +14058,7 @@ function mePanelHtml(){
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 12 ? "Not working" : "Work is available from age 12") + "</div>";
   if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
-  h += lifeGlanceHtml() + momentsGalleryHtml() + statsChartHtml() + goalsHtml() + selfHtml() + styleHtml();
+  h += lifeGlanceHtml() + yearReviewHtml() + momentsGalleryHtml() + statsChartHtml() + goalsHtml() + selfHtml() + styleHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
@@ -14139,14 +14226,19 @@ function activitiesHtml(){
   const low = ['happy', 'health', 'smarts', 'looks'].sort((p, q) => s[p] - s[q])[0];
   const tip = s[low] < 50 ? open.filter(([x]) => (x.delta[low] || 0) > 0 && !state.done[x.key] && state.money >= actCost(x)).sort((p, q) => q[0].delta[low] - p[0].delta[low])[0] : null;
   let h = tip ? `<div class="status">Your ${low === 'happy' ? 'happiness' : low} is low (${s[low]}). Try <b>${tip[0].label.toLowerCase()}</b> (${actEffects(tip[0])}).</div>` : '';
+  const live = Object.entries(state.actStreak || {}).filter(([k, v]) => v.n >= 2 && v.last >= a - 1 && ACTIVITIES.some(x => x.key === k)).sort((p, q) => q[1].n - p[1].n);
+  if(live.length) h += '<div class="status">🔥 ' + live.slice(0, 3).map(([k, v]) => `<b>${ACTIVITIES.find(x => x.key === k).label.toLowerCase()}</b> ${v.n} years`).join(' · ') +
+    '<br>Keep an activity up every year: from three years running it does a little more, and from five a little more again.</div>';
+  const row = ([x, i]) => { const done = state.done[x.key], c = actCost(x), st = (state.actStreak || {})[x.key];
+    const fire = st && st.n >= 2 && st.last >= a - 1 ? '🔥' + st.n + ' · ' : '';
+    return iopt(x.icon || '•', x.label, fire + (done ? 'done ✓' : (c ? fmt(c) : 'free') + ' · ' + actEffects(x)), `doActivity(${i})`, done || state.money < c, done); };
   ACT_GROUPS.forEach(([name, keys]) => {
     const rows = open.filter(([x]) => keys.includes(x.key));
     if(!rows.length) return;
-    h += '<div class="plabel">' + name + '</div>' + rows.map(([x, i]) => { const done = state.done[x.key], c = actCost(x);
-      return iopt(x.icon || '•', x.label, done ? 'done ✓' : (c ? fmt(c) : 'free') + ' · ' + actEffects(x), `doActivity(${i})`, done || state.money < c, done); }).join('');
+    h += '<div class="plabel">' + name + '</div>' + rows.map(row).join('');
   });
   const extra = open.filter(([x]) => !ACT_GROUPS.some(g => g[1].includes(x.key)));
-  if(extra.length) h += '<div class="plabel">More</div>' + extra.map(([x, i]) => { const done = state.done[x.key], c = actCost(x); return iopt(x.icon || '•', x.label, done ? 'done ✓' : (c ? fmt(c) : 'free') + ' · ' + actEffects(x), `doActivity(${i})`, done || state.money < c, done); }).join('');
+  if(extra.length) h += '<div class="plabel">More</div>' + extra.map(row).join('');
   return h;
 }
 function doActivity(i){
@@ -14175,6 +14267,14 @@ function doActivity(i){
   }
   if(x.key === 'volunteer' && Math.random() < 0.3 && state.relationships.length < 60){
     const f = newRel('Friend', {closeness: rint(30, 45), origin:'volunteering'}); text += ' One of them, ' + f.name + ', becomes a friend.';
+  }
+  // doing the same thing year after year becomes a habit: from three years running it does a little more
+  const sk = (state.actStreak = state.actStreak || {}), cur = sk[x.key] && sk[x.key].last === state.age - 1 ? sk[x.key].n + 1 : 1;
+  sk[x.key] = {n: cur, last: state.age};
+  if(cur >= 3 && !['gamble', 'surgery'].includes(x.key)){
+    const bonus = cur >= 5 ? 2 : 1;
+    ['happy', 'health', 'smarts', 'looks'].forEach(k => { if((delta[k] || 0) > 0) delta[k] += bonus; });
+    text = text.replace(/\.$/, '') + ` (${cur} years running).`;
   }
   pushEntry(state.age, text, delta);
   render();
@@ -14931,9 +15031,9 @@ function updateTabDots(){
 const SUBMENUS = {
   me:     [['you', 'You', null], ['story', 'Life story', /life so far|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world/i]],
   act:    [['do', 'Activities', /relax|health & fitness|friends & community|going out|treat yourself|^more$/i], ['travel', 'Travel', /^travel/i], ['hobbies', 'Hobbies', /hobbies|try something new/i]],
-  edu:    [['school', 'School', /keep learning|school life|campus life|how you're doing/i], ['record', 'Record', /education record/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
-  job:    [['work', 'My work', /performance|career ladder/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
-  soc:    [['social', 'Socialize', /needs attention|get together/i], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
+  edu:    [['school', 'School', /keep learning|school life|campus life|how you're doing|college outlook/i], ['record', 'Record', /education record/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
+  job:    [['work', 'My work', /performance|career ladder|work history/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
+  soc:    [['social', 'Socialize', /needs attention|big birthdays|get together/i], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['debt', 'Debt', /your debt/i], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
   inv:    [['mine', 'My portfolio', /^the market|your performance|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
   ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
@@ -15052,7 +15152,7 @@ function renderPanel(){
 
     if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
       Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
-    h += moneyTipsHtml() + netWorthHistHtml() + cashFlowHtml() + emergencyHtml() + creditHtml();
+    h += moneyTipsHtml() + netWorthHistHtml() + cashFlowHtml() + paycheckHtml() + emergencyHtml() + creditHtml();
     h += trustHtml() + savingsPanelHtml() + collegeFundHtml();
     if(a >= 16) h += retirementHtml();
 
@@ -15074,8 +15174,8 @@ function renderPanel(){
     if(a >= 18 && !state.loans.some(l => l.type === 'Builder'))
       h += bankRow('Credit builder loan', `${fmt(500)} at 8% over 2 years, about ${fmt(Math.round(loanPay(500, 0.08, 2)))} a year (${fmt(Math.round(loanPay(500, 0.08, 2) * 2 - 500))} interest in all). Always approved, even with bad credit. Paying it on time raises your credit score quickly.`, `<button onclick="applyBuilderLoan()">Take the builder loan</button>`);
     state.loans.forEach(l => {
-      const paid = l.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - l.balance / l.principal) * 100))) : 0, left = l.deferred ? 0 : Math.max(0, Math.round(l.yearlyPayment * l.yearsLeft - l.balance));
-      h += bankRow(`${l.type} loan`, `Owe ${fmt(l.balance)} · borrowed ${fmt(l.principal)}${l.balance > l.principal + 1 ? ' (unpaid interest has added ' + fmt(l.balance - l.principal) + ')' : ''} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'payments wait until you leave school' : fmt(l.yearlyPayment)+' a year · '+l.yearsLeft+' year' + (l.yearsLeft === 1 ? '' : 's') + ' left · about ' + fmt(left) + ' interest to go'}` +
+      const paid = l.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - l.balance / l.principal) * 100))) : 0, due = loanDue(l), left = l.deferred ? 0 : Math.max(0, Math.round(due * Math.max(1, l.yearsLeft) - l.balance));
+      h += bankRow(`${l.type} loan`, `Owe ${fmt(l.balance)} · borrowed ${fmt(l.principal)}${l.balance > l.principal + 1 ? ' (unpaid interest has added ' + fmt(l.balance - l.principal) + ')' : ''} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'payments wait until you leave school' : fmt(due)+' a year · '+l.yearsLeft+' year' + (l.yearsLeft === 1 ? '' : 's') + ' left · about ' + fmt(left) + ' interest to go'}` +
         `<div class="stat-track" style="margin:6px 0 2px;"><div class="stat-fill" style="width:${paid}%;background:var(--green)"></div></div><span class="sub-meta">${paid}% paid off</span>`,
         !l.deferred ? `<button onclick="payoffLoan('${l.id}')" ${state.money < l.balance ? 'disabled' : ''}>Pay Off ${fmt(l.balance)}</button>` +
           `<button onclick="extraPayment('${l.id}')" ${canPay(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1)))) ? '' : 'disabled'}>Pay extra ${fmt(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1))))}</button>` +
@@ -15130,6 +15230,7 @@ function renderPanel(){
         if(a >= 60) h += iopt('🌅', 'Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       }
       h += careerExtrasHtml();
+      h += workHistoryHtml();
       h += milHtml() + govHtml();
       h += '<div class="plabel">CAREER TRACKS</div>';
       for(const trackName in CAREERS){
@@ -17733,6 +17834,16 @@ function recordYearHistory(){
     sal: state.job && !state.crime.prison ? Math.round(state.job.salary / cum) : 0, fame: state.fame ? Math.round(state.fame.level) : 0,
     fol: state.social && state.social.account ? state.social.followers : 0, port: Math.round(portfolioValue() / cum), gpa: (e.school || e.program) ? Math.round(e.gpa) : null}]).slice(-120);
   state.relationships.forEach(r => { if(typeof r.closeness === 'number') r.bh = (r.bh || []).concat([Math.round(r.closeness)]).slice(-30); });
+}
+// Where last year's salary went before it reached the account
+function paycheckHtml(){
+  const f = state.flow; if(!f || !f.gross) return '';
+  const rate = f.tax / Math.max(1, f.gross - (f.retire || 0));
+  const row = (l, v, cls) => `<div class="itop"><span>${l}</span><span class="price ${cls || ''}">${fmt(v)}</span></div>`;
+  return '<div class="plabel">Your paycheck</div><div class="invrow">' + row('Salary before tax', f.gross) +
+    (f.retire ? row('Retirement account', -f.retire, 'down') : '') + row('Income tax', -f.tax, 'down') +
+    `<div class="itop" style="border-top:1px solid var(--line);padding-top:6px"><span><b>Take-home pay</b></span><span class="price up"><b>${fmt(f.salary)}</b></span></div>` +
+    `<div class="owned">Tax took ${Math.round(rate * 100)}% of taxable pay${f.retire ? '; retirement contributions are taken before tax, so they lower it' : '. Contributing to a retirement account lowers the tax bill'}.</div></div>`;
 }
 function cashFlowHtml(){
   const f = state.flow; if(!f || state.age < 16) return '';
