@@ -7835,6 +7835,17 @@ Object.assign(MOTO_SPECS, (() => {
       ]},
   };
 })());
+// traced parts, for the drawings measured from a photo: polygons {p, f, st, sw, o}, lines {k:'ln', p, f, w},
+// circles {k:'c', at, r, f} and ellipses {k:'e', at, rx, ry, f}; f is a fill keyword (body, eng, paint, paint2, glass) or a color
+function tracedParts(parts, P, X, Y, s, fills){
+  const fill = f => fills[f] || f;
+  return parts.map(q => {
+    if(q.k === 'ln') return `<path d="${rpath(P(q.p), false)}" fill="none" stroke="${fill(q.f || '#8d949b')}" stroke-width="${r1((q.w || 1) * s)}" stroke-linecap="round" stroke-linejoin="round" opacity="${q.o || 1}"/>`;
+    if(q.k === 'c') return `<circle cx="${X(q.at[0])}" cy="${Y(q.at[1])}" r="${r1(q.r * s)}" fill="${fill(q.f)}"${q.st ? ` stroke="${q.st}" stroke-width="${r1((q.sw || 0.6) * s)}"` : ''}/>`;
+    if(q.k === 'e') return `<ellipse cx="${X(q.at[0])}" cy="${Y(q.at[1])}" rx="${r1(q.rx * s)}" ry="${r1(q.ry * s)}" fill="${fill(q.f)}"${q.st ? ` stroke="${q.st}" stroke-width="${r1((q.sw || 0.6) * s)}"` : ''}/>`;
+    return `<path d="${rpath(P(q.p), true)}" fill="${fill(q.f)}"${q.st !== 0 ? ` stroke="${q.st || '#8d949b'}" stroke-width="${q.sw || 0.8}"` : ''} opacity="${q.o || 1}"/>`;
+  }).join('');
+}
 // ---- motorhomes ----
 // x runs forward from the rear wall, y up from the ground, in inches
 function drawRV(p, c, id){
@@ -7969,6 +7980,8 @@ function drawJet(p, c, id){
   const D = p.D, top = D / 2, bot = -D / 2;
   let g = skyScene(id) + `<defs><linearGradient id="${id}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#eef0f2"/><stop offset="1" stop-color="#b9c0c7"/></linearGradient>` +
     `<linearGradient id="${id}e" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f5f6"/><stop offset="1" stop-color="#9aa1a8"/></linearGradient></defs>`;
+  if(p.parts) return g + `<defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5d7184"/><stop offset=".5" stop-color="#26323d"/><stop offset="1" stop-color="#141b21"/></linearGradient></defs>` +
+    tracedParts(p.parts, P, X, Y, s, {body:`url(#${id}f)`, eng:`url(#${id}e)`, paint:c, paint2:p.c2 || '#9aa1a8', glass:`url(#${id}g)`});
   // far wing, tail fin and stabilizer
   g += `<path d="${rpath(P(p.wing), true)}" fill="#c9ced3" stroke="#9aa1a8" stroke-width=".8"/>`;
   g += `<path d="${rpath(P(p.fin), true)}" fill="url(#${id}f)" stroke="#9aa1a8" stroke-width=".8"/>`;
@@ -7992,10 +8005,26 @@ function drawJet(p, c, id){
 }
 const JET_SPECS = {
   'HondaJet|Elite II':{L:511, D:66, tailL:120, noseL:90, tailY:14, col:'#1f3f8f', c2:'#c9a24a',
-    fin:[[10, 30, 2], [40, 101, 4], [78, 101, 4], [92, 30, 0]], stab:[[16, 99, 2], [92, 101, 2], [94, 105, 2], [26, 105, 2]],
-    wing:[[230, -26, 0], [300, -26, 0], [330, -36, 0], [260, -36, 0]], wingNear:[[200, -22, 2], [330, -22, 4], [340, -32, 2], [240, -34, 2]],
-    pylon:[[214, -20, 0], [244, -20, 0], [240, 18, 0], [224, 18, 0]], eng:[160, 30, 110, 34], cockpit:[[440, 18, 2], [478, 10, 6], [490, 2, 2], [452, 4, 2]],
-    win:{n:5, x:290, gap:28, y:6, w:15, h:18, oval:0}, door:[400, 30], stripes:[[[90, -6, 0], [510, -4, 0], [500, -12, 0], [90, -14, 0]], Object.assign([[90, -16, 0], [500, -14, 0], [490, -18, 0], [90, -20, 0]], {c2:1})], finStripe:[[40, 79, 0], [76, 79, 0], [78, 91, 0], [42, 91, 0]]},
+    parts:[
+      // T-tail: stabilizer seen from a little above, then the swept fin
+      {p:[[1, 110, 2], [12, 111, 3], [60, 104, 10], [112, 77, 3], [100, 75, 2], [60, 84, 10], [15, 90, 6], [3, 103, 2]], f:'eng'},
+      {p:[[66, 29, 2], [46, 82, 3], [60, 86, 3], [96, 82, 6], [133, 53, 20], [172, 39, 10], [120, 36, 0], [85, 32, 0]], f:'body'},
+      // fuselage, tail cone to nose
+      {p:[[70, 24, 3], [80, 30, 8], [110, 35, 30], [170, 39, 40], [360, 38.5, 30], [395, 35.5, 20], [425, 26, 20], [450, 15, 15], [475, 6.5, 12], [500, -1, 8], [510, -8.4, 3], [502, -13, 6], [475, -16.7, 12], [450, -19, 15], [400, -22, 20],
+        [350, -24.4, 20], [300, -25.5, 20], [240, -25, 20], [190, -21, 15], [160, -16, 15], [128, -2, 15], [100, 7, 12], [80, 20, 6]], f:'body'},
+      {p:[[204, 39], [202, 46, 1], [207, 46.5, 1], [214, 39]], f:'body'}, {p:[[262, 39], [261, 45, 1], [266, 45.5, 1], [272, 39]], f:'body'},
+      // the cheat line sweeping down to the nose
+      {p:[[250, 34, 0], [340, 17, 20], [424, -2, 20], [485, -10, 8], [500, -11, 0], [484, -13, 8], [422, -6, 20], [338, 13, 20]], f:'paint', st:0},
+      // cabin windows and the cockpit glass
+      {p:[[269, 11, 3], [279, 11, 3], [279, 24, 3], [269, 24, 3]], f:'glass'}, {p:[[298, 11, 3], [308, 11, 3], [308, 24, 3], [298, 24, 3]], f:'glass'}, {p:[[327, 11, 3], [337, 11, 3], [337, 24, 3], [327, 24, 3]], f:'glass'},
+      {p:[[382, 28, 3], [392, 31, 4], [410, 31, 6], [432, 24, 6], [440, 18, 3], [425, 16, 4], [400, 16, 4], [386, 19, 3]], f:'glass'},
+      {k:'ln', p:[[413, 31], [415, 16]], f:'#c9ced3', w:1},
+      // the over-the-wing engine on its swept pylon, then the near wing
+      {p:[[222, 10, 1], [234, 10, 1], [268, -30, 1], [256, -34, 1]], f:'eng'},
+      {p:[[146, 9, 2], [160, 16, 8], [200, 22, 15], [232, 20, 6], [237, 13, 3], [236, 2, 3], [226, -3, 6], [190, -5, 12], [160, -1, 8]], f:'eng'},
+      {k:'e', at:[235.6, 9], rx:2, ry:10.5, f:'#55595f'}, {k:'c', at:[148, 8], r:3, f:'#3a3d42'},
+      {p:[[200, -33, 2], [208, -38, 2], [300, -34, 6], [330, -28, 6], [300, -22, 6], [240, -26, 6]], f:'eng'}
+    ]},
   'Embraer|Phenom 300E':{L:614, D:72, tailL:150, noseL:100, tailY:14, col:'#2b2e33', c2:'#9a1f2a',
     fin:[[20, 30, 2], [50, 108, 4], [90, 108, 4], [118, 30, 0]], stab:[[26, 107, 2], [112, 108, 2], [114, 112, 2], [36, 112, 2]],
     wing:[[290, -30, 0], [370, -30, 0], [400, -40, 0], [320, -40, 0]], wingNear:[[260, -26, 2], [400, -26, 4], [410, -38, 2], [300, -40, 2]],
