@@ -7316,6 +7316,10 @@ function drawMoto(p, c, id){
       let o = `<circle cx="${cX}" cy="${cY}" r="${r1(Rs)}" fill="#0f1012"/><circle cx="${cX}" cy="${cY}" r="${r1((Rs + rs) / 2 - (Rs - rs) * 0.06)}" fill="none" stroke="#212225" stroke-width="${r1((Rs - rs) * 0.66)}"/>` +
         `<path d="M${pt(0.35, (Rs + rs) / 2)} A${r1((Rs + rs) / 2)},${r1((Rs + rs) / 2)} 0 0 1 ${pt(1.45, (Rs + rs) / 2)}" fill="none" stroke="#4b4e53" stroke-width="${r1((Rs - rs) * 0.3)}" stroke-linecap="round" opacity=".75"/>` +
         `<circle cx="${cX}" cy="${cY}" r="${r1(rs + 0.25 * s)}" fill="#0c0d0e"/><circle cx="${cX}" cy="${cY}" r="${r1(rs)}" fill="url(#${id}w${fin})"/><circle cx="${cX}" cy="${cY}" r="${r1(rs - 0.75 * s)}" fill="url(#${id}br)"/>`;
+      // open: a bicycle wheel, a thin tire and rim with the background showing between the spokes
+      if(q.open){ const tw = Rs - rs, ring = (r, col, w) => `<circle cx="${cX}" cy="${cY}" r="${r1(r)}" fill="none" stroke="${col}" stroke-width="${r1(w)}"/>`;
+        o = ring(Rs - tw / 2, '#17181a', tw) + `<path d="M${pt(0.35, Rs - tw * 0.3)} A${r1(Rs - tw * 0.3)},${r1(Rs - tw * 0.3)} 0 0 1 ${pt(1.45, Rs - tw * 0.3)}" fill="none" stroke="#4b4e53" stroke-width="${r1(tw * 0.25)}" stroke-linecap="round" opacity=".75"/>` +
+          ring(rs - 0.45 * s, F[2], 0.9 * s) + ring(rs - 0.25 * s, F[0], 0.25 * s); }
       if(q.stripe) o += `<circle cx="${cX}" cy="${cY}" r="${r1(rs - 0.4 * s)}" fill="none" stroke="${q.stripe}" stroke-width="${r1(0.35 * s)}"/>`;
       const n = q.n || 5, rot = q.rot || 0.3, hub = (q.hub || 2.2) * s, sp = (a, w1, w2, ra, rb) => `M${pt(a - w1 / ra, ra)} L${pt(a - w2 / rb, rb)} L${pt(a + w2 / rb, rb)} L${pt(a + w1 / ra, ra)}Z`;
       let d = '';
@@ -7780,6 +7784,54 @@ Object.assign(MOTO_SPECS, (() => {
         {k:'tube', p:[[38.4, 30.6], [37.2, 34]], w:1.4, f:'#2b2d31'},
         {k:'bar', p:[[37.2, 34], [32, 35, 1], [26, 35.2]], grip:3.6, lever:[[33.6, 36], [31, 36.4], [28.6, 36]]},
         {k:'mirror', p:[[28.4, 35.4], [27.4, 39.6]], at:[27, 42.4], w:4, h:4.4},
+      ]},
+    'Specialized|Turbo Vado 4.0':{moto:1, WB:45.5, rr:14.4, rf:14.4, rake:20, H:48, x0:-17, x1:62, col:'#55634a', c2:'#1b1c1f', seat:'#26282b',
+      parts:[
+        {k:'wheel', w:'r', rim:12.9, open:1, t:'wire', n:32, fin:'black', spk:['#b7bcc2', '#8f959b'], hub:0.9},
+        {k:'wheel', w:'f', rim:12.9, open:1, t:'wire', n:32, fin:'black', spk:['#b7bcc2', '#8f959b'], hub:0.9, disc:3.2, di:0.78, cal:[2.3, '#2b2d31', 2.2]},
+        // fenders hug both tires
+        fender(0, 14.4, 14.9, 15.8, 1.15, 3.08, '#1d1e21'),
+        fender(45.5, 14.4, 14.9, 15.8, 1.55, 2.35, '#1d1e21'),
+        // the rear rack: top rail, the rear loop and the stays down to the dropout
+        {k:'tube', p:[[-9.6, 30], [5.7, 30]], w:0.6, f:'#1d1e21'},
+        {k:'tube', p:[[-9.2, 30], [-8.6, 28.2, 1], [-7.4, 26.4]], w:0.5, f:'#1d1e21'},
+        {k:'tube', p:[[-7.6, 29.6], [-1, 15.6]], w:0.5, f:'#1d1e21'},
+        {k:'tube', p:[[4.6, 30], [9.6, 27.4]], w:0.45, f:'#1d1e21'},
+        {p:[[-10.2, 28.4, 0.3], [-8.8, 28.4, 0.3], [-8.8, 29.6, 0.3], [-10.2, 29.6, 0.3]], f:'tail'},
+        // chain, cassette and derailleur
+        {k:'ln', p:[[16.5, 14.9], [0, 16.7]], f:'#7a7f85', w:0.25},
+        {k:'ln', p:[[16.5, 8.2], [0.6, 10.2]], f:'#7a7f85', w:0.25},
+        {k:'c', at:[0, 14.4], r:2.3, f:'#a39a72', st:'#5d6168', sw:0.3},
+        {p:[[-2.2, 13.6, 0.4], [-1.2, 14.2, 0.4], [-0.9, 9.4, 0.4], [-1.5, 6.4, 0.4], [-2.1, 6.6, 0.4], [-2.1, 10, 0.4]], f:'#2b2d31'},
+        // stays and seat tube
+        {k:'tube', p:[[0, 14.4], [8, 13.5], [15.5, 12.4]], w:1, f:'paint'},
+        {k:'tube', p:[[0.4, 15], [12.9, 28.6]], w:0.85, f:'paint'},
+        {k:'tube', p:[[16.4, 12], [13.6, 28], [12.7, 33.4]], w:1.4, f:'paint'},
+        // seatpost and saddle
+        {k:'tube', p:[[12.7, 33], [11.4, 39.2]], w:1, f:'alu'},
+        {k:'ln', p:[[7.6, 39.6], [11.4, 39.2], [14, 39.6]], f:'#3a3d42', w:0.35},
+        {p:[[4.6, 41, 0.8], [6, 41.6, 1], [10, 41.4, 2], [14, 40.8, 1], [15.7, 40.4, 0.6], [15.5, 39.7, 0.5], [12, 39.7, 1], [9, 39.6], [5.6, 39.7, 0.5], [4.6, 40.1, 0.5]], f:'seat'},
+        // top tube, then the big down tube that holds the battery
+        {k:'tube', p:[[13.4, 31], [35.4, 36.6]], w:2, f:'paint'},
+        {p:[[33, 36.9, 1], [36.4, 35.2, 1], [36.8, 32.4, 1], [32.4, 25.8, 2], [27.4, 18.6, 2], [24, 12.8, 2], [21.6, 9.2, 1.5], [18.4, 8.4, 1.5], [17.2, 11.4, 1], [19.6, 15.6, 2], [22.6, 19.6, 2], [27, 26, 2]], f:'paint', hl:[[33.4, 36.2], [27.4, 26.4], [20.2, 15.6]]},
+        {p:[[31.6, 29.2, 1], [33.3, 30.8, 1], [28.2, 22.6, 2], [24.6, 16.6, 2], [22.2, 12.2, 1], [21, 12.6, 1], [22.7, 15.8, 2], [26.2, 21.2, 2]], f:'paint2'},
+        // motor, chainring, crank and pedal
+        {k:'c', at:[16.5, 11.6], r:3.6, f:'#26282b', st:'#55595f', sw:0.3},
+        {k:'c', at:[16.5, 11.6], r:3.3, f:'none', st:'#8f959b', sw:0.35},
+        {k:'tube', p:[[16.5, 11.6], [14.4, 4.8]], w:0.8, f:'black'},
+        {k:'c', at:[16.5, 11.6], r:0.8, f:'#3a3d42', st:'#8f959b', sw:0.2},
+        {k:'tube', p:[[12.8, 4.4], [16, 4.4]], w:0.8, f:'#2b2d31'},
+        {k:'tube', p:[[14.8, 9.6], [13.1, 1.1]], w:0.6, f:'black'},
+        // head tube, suspension fork and its crown
+        {k:'tube', p:[[36.2, 32.6], [35.2, 39.6]], w:2, f:'paint'},
+        {k:'tube', p:[[37, 32.2], [38.2, 28.4]], w:1, f:'alu'},
+        {k:'tube', p:[[38, 29.2], [45.5, 14.4]], w:1.5, f:'paint'},
+        {k:'tube', p:[[35.8, 32.9], [37.6, 32.3]], w:1.1, f:'#2b2d31'},
+        // stem, swept bar and the cables
+        {k:'tube', p:[[35.3, 39.4], [35.6, 42.4], [37, 43.6]], w:1.1, f:'black'},
+        {k:'ln', p:[[37.6, 42.6], [39.6, 38, 3], [40.6, 31.6]], f:'#1b1c1f', w:0.25},
+        {k:'ln', p:[[36.8, 42.2], [38, 39.4, 2], [36.8, 36.6]], f:'#1b1c1f', w:0.25},
+        {k:'bar', p:[[37, 43.6], [33, 44.8], [29, 45.6]], w:0.9, grip:3.4}
       ]},
   };
 })());
