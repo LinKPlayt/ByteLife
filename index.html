@@ -183,6 +183,7 @@
   .invrow .price.up{ color:var(--green); }
   .invrow .price.down{ color:var(--red); }
   .invrow .owned{ font-size:12px; color:var(--muted); line-height:1.5; }
+  .fnote{ font-size:12px; color:var(--muted); line-height:1.5; margin:4px 2px 8px; }
   .invrow .steprow{ display:flex; align-items:center; gap:6px; }
   .invrow .steprow button{ padding:9px 11px; font-size:13px; background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:10px; }
   .invrow .steprow .qtyval{ flex:1; text-align:center; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); }
@@ -8757,6 +8758,19 @@ function assetSummaryHtml(){
     `<div><span>Upkeep</span><b>${fmt(Math.round(upkeep / 10) * 10)}</b><span>a year, about</span></div>` +
     `<div><span>Inventory</span><b>${[homes ? homes + ' home' + (homes > 1 ? 's' : '') : '', rent ? rent + ' rental' + (rent > 1 ? 's' : '') : '', veh ? veh + ' vehicle' + (veh > 1 ? 's' : '') : '', other ? other + ' other' : ''].filter(Boolean).slice(0, 2).join(', ')}</b><span>${[homes, rent, veh, other].filter(Boolean).length > 2 ? 'and more' : '&nbsp;'}</span></div></div>`;
 }
+// What each thing has gained or lost since it was bought, in today's money so inflation doesn't flatter it
+function assetGainsHtml(){
+  const cum = state.econ.cumInflation, own = state.assets.filter(x => x.boughtPrice > 0 && x.boughtAge != null && x.boughtAge < state.age);
+  if(own.length < 1) return '';
+  const real = x => { const then = (LH().find(h => h.age === x.boughtAge) || {}).cum || x.boughtCum || cum; return x.boughtPrice * cum / then; };
+  const rows = own.map(x => ({x, paid: real(x), gain: x.value - real(x)})).sort((p, q) => q.gain - p.gain);
+  const tot = rows.reduce((t, r) => t + r.gain, 0), show = rows.length > 6 ? rows.slice(0, 3).concat(rows.slice(-3)) : rows;
+  return '<div class="plabel">Gains and losses</div><div class="invrow">' + show.map(r => { const pct = Math.round(r.gain / Math.max(1, r.paid) * 100);
+    return `<div class="itop"><span>${r.x.name}</span><span class="price ${r.gain >= 0 ? 'up' : 'down'}">${r.gain >= 0 ? '+' : '-'}${fmt(Math.abs(r.gain))} (${pct >= 0 ? '+' : ''}${pct}%)</span></div>` +
+      `<div class="owned">bought at ${r.x.boughtAge} for ${fmt(r.x.boughtPrice)} · worth ${fmt(r.x.value)} now</div>`; }).join('') +
+    `<div class="itop" style="border-top:1px solid var(--line);padding-top:6px"><span><b>Overall</b></span><span class="price ${tot >= 0 ? 'up' : 'down'}"><b>${tot >= 0 ? '+' : '-'}${fmt(Math.abs(tot))}</b></span></div>` +
+    '<div class="owned">Compared with what you paid, adjusted for inflation since. Homes and collectibles tend to gain; vehicles lose value from the day they are bought.</div></div>';
+}
 function assetCatalogRow(t, cat){
   if(t.hidden) return '';
   const minA = t.minAge || CAT_MIN[cat], locked = state.age < minA;
@@ -9831,6 +9845,15 @@ function fameDashHtml(){
     `<div><span>Public image</span><b>${f.image}/100</b><span>${f.image >= 70 ? 'well liked' : f.image >= 40 ? 'mixed' : 'disliked'}</span></div>` +
     `<div><span>Followers</span><b>${fol ? fmtFollowers(fol) : 'none'}</b><span>${fol ? 'on social media' : 'no account yet'}</span></div></div>`;
 }
+// Every tier of fame and the spotlight work it opens up, from the same thresholds the buttons use
+function fameLadderHtml(lvl){
+  const tiers = FAME_TIERS.slice().reverse(), cur = tiers.filter(t => lvl >= t[0]).pop(), next = tiers.find(t => t[0] > lvl);
+  return '<div class="plabel">The fame ladder</div><div class="invrow">' + tiers.map((t, i) => {
+    const hi = i + 1 < tiers.length ? tiers[i + 1][0] : 101, opens = FAME_ACTS.filter(x => x.min >= t[0] && x.min < hi && x.min > 0).map(x => x.label.toLowerCase());
+    const here = t === cur;
+    return `<div class="itop"><span>${here ? '<b>' + t[1] + '</b> ← you' : lvl >= t[0] ? '✓ ' + t[1] : t[1]}</span><span class="price">${t[0]}+</span></div>` + (opens.length ? `<div class="owned">opens: ${opens.join(', ')}</div>` : '');
+  }).join('') + `<div class="owned" style="margin-top:6px">${next ? (next[0] - lvl) + ' points to ' + next[1].toLowerCase() + '. ' : 'The top of the ladder. '}Fame fades a little each year unless something keeps you in the news.</div></div>`;
+}
 function famePanelHtml(){
   const f = FM(), src = fameSources(), lvl = Math.round(f.level);
   const opt = (label, meta, fn, dis) => `<button class="opt" ${dis ? 'disabled' : ''} onclick="${fn}"><span>${label}</span><span class="meta">${meta}</span></button>`;
@@ -9846,6 +9869,7 @@ function famePanelHtml(){
   }
   h += '<div class="plabel">In the spotlight</div>';
   FAME_ACTS.forEach(x => { const st = fameActState(x), done = st.why === 'done this year'; if(lvl >= x.min - 15 || x.min === 0) h += iopt(FAME_ICONS[x.key] || '⭐', x.label, done ? 'done ✓' : st.ok ? (x.cost ? fmt(Math.round(inflR(x.cost, 100) * (x.key === 'gala' ? Math.max(1, f.level / 40) : 1))) + ' · ' : '') + x.meta : st.why, `fameAct('${x.key}')`, !st.ok, done); });
+  h += fameLadderHtml(lvl);
   if(f.products.length) h += '<div class="owned" style="margin:2px">Product lines: ' + f.products.map(p => p.kind).join(', ') + '. Royalties fade as they age and follow your fame and image.</div>';
   if(lvl >= 20 || f.publicist || f.security){
     h += '<div class="plabel">Your team</div>';
@@ -10960,6 +10984,8 @@ function addCondition(key, a, opts){
   const c = {key, since:a, known: !d.silent || !!(opts && opts.known), treated:false};
   if(d.kind === 'cancer') c.stage = 1;
   H().conditions.push(c);
+  (H().medHist = H().medHist || []).push({key, age:a, known:c.known});
+  if(H().medHist.length > 40) H().medHist.splice(0, H().medHist.length - 40);
   return c;
 }
 function condLabel(c){ const d = CONDITIONS[c.key]; return d.kind === 'cancer' ? 'stage ' + c.stage + ' cancer' : d.name; }
@@ -11189,6 +11215,23 @@ function healthReportHtml(){
     `<div><span>Fitness</span><b>${ex === 2 ? 'Training' : ex === 1 ? 'Active' : 'Inactive'}</b><span>${hb.diet === 'healthy' ? 'healthy diet' : hb.diet === 'junk' ? 'junk food diet' : 'normal diet'}</span></div>` +
     `<div><span>Body</span><b>${BUILDS[avatarLooks(state).build]}</b><span>${fmtHeight(heightNow(state))}</span></div></div>`;
 }
+// Every diagnosis over the years and how it turned out. A silent illness joins the list once it is found.
+function syncMedHist(){
+  const mh = H().medHist; if(!mh) return;
+  H().conditions.forEach(c => { if(!c.known) return; const e = mh.slice().reverse().find(x => x.key === c.key && x.age === c.since); if(e) e.known = true; });
+}
+function medHistHtml(){
+  syncMedHist();
+  const mh = (H().medHist || []).filter(x => x.known && CONDITIONS[x.key]);
+  if(!mh.length) return '';
+  const rows = mh.slice().reverse().slice(0, 12).map(x => {
+    const c = H().conditions.find(y => y.key === x.key && y.since === x.age), d = CONDITIONS[x.key];
+    const st = c ? (c.treated ? ['managed', ''] : ['ongoing', 'down']) : ['recovered', 'up'];
+    return `<div class="itop"><span>${d.name.replace(/^(an?|the) /, '').replace(/^./, m => m.toUpperCase())}</span><span class="price ${st[1]}">${st[0]}</span></div><div class="owned">diagnosed at ${x.age}${d.kind === 'cancer' ? ' · cancer' : d.kind === 'acute' ? ' · short-lived' : ''}</div>`;
+  }).join('');
+  const gone = mh.filter(x => !H().conditions.some(y => y.key === x.key && y.since === x.age)).length;
+  return '<div class="plabel">Medical history</div><div class="invrow">' + rows + `<div class="owned" style="margin-top:6px">${mh.length} diagnosis${mh.length === 1 ? '' : 'es'} in all, ${gone} behind you.</div></div>`;
+}
 function healthPanelHtml(){
   const hh = H(), hb = hh.habits, s = state.stats, a = state.age;
   const known = hh.conditions.filter(c => c.known);
@@ -11226,6 +11269,7 @@ function healthPanelHtml(){
       h += bankRow(condName(c) + (c.treated && d.kind !== 'cancer' ? ' <span class="tick">MANAGED</span>' : ''), body, acts);
     });
   }
+  h += medHistHtml();
   h += '<div class="plabel">Care and wellness</div>';
   if(state.crime.prison) h += '<div class="status">Not available while ' + (state.crime.prison.juvenile ? 'in juvenile detention' : 'in prison') + '.</div>';
   else WELLNESS.forEach(x => { if(a < x.min - 2) return; const st = wellState(x); h += iopt(x.icon, x.label, st.why, "wellnessAct('" + x.key + "')", !st.ok, st.done); });
@@ -11421,17 +11465,20 @@ function commitCrime(key){
   const before = serialize();                      // if the app closes mid-trial, the save goes back to before the crime
   const k = CR(), n = state.name;
   state.done['crime_' + key] = true; state.done.crimes = (state.done.crimes || 0) + 1;
-  const amt = crimePay(c);
+  const amt = crimePay(c), tl = ((k.tally = k.tally || {})[key] = k.tally[key] || {n:0, away:0, caught:0, made:0});
+  tl.n++;
   if(Math.random() < crimeRisk(c)){
+    tl.caught++;
     k.heat = Math.min(100, k.heat + 25); k.arrests++;
     yearStart = before;
     pushEntry(state.age, `${n} is caught ${c.ing} and arrested.`, {happy:-8});
     arrest(c, 0);
   } else if(Math.random() < 0.18 - k.skill / 600){
-    k.heat = Math.min(100, k.heat + 5); k.skill = Math.min(100, k.skill + 2);
+    k.heat = Math.min(100, k.heat + 5); k.skill = Math.min(100, k.skill + 2); tl.quit = (tl.quit || 0) + 1;
     pushEntry(state.age, `${n} tries to ${c.label.toLowerCase()} but loses their nerve and walks away with nothing.`, {happy:-2});
   } else {
     k.heat = Math.min(100, k.heat + (c.felony ? 14 : 6)); k.skill = Math.min(100, k.skill + rint(3, 6)); k.earned += amt;
+    tl.away++; tl.made += amt;
     const delta = {money: amt, happy: c.happy || (amt > 0 ? 3 : 1)};
     if(c.health) delta.health = c.health;
     pushEntry(state.age, amt > 0 ? `${n} gets away with ${c.ing} and comes out ${fmt(amt)} ahead.` : `${n} gets away with ${c.ing}.`, delta);
@@ -11896,6 +11943,13 @@ function crimePanelHtml(){
     const payTxt = c.key === 'fraud' || c.key === 'tax' ? "varies" : c.pay[1] ? fmt(inflR(c.pay[0], 10)) + "–" + fmt(inflR(c.pay[1], 10)) : "for fun";
     h += iopt(CRIME_ICONS[c.key] || '•', c.label + (c.felony ? ' <span class="tick">FELONY</span>' : ''), st.ok ? Math.round(crimeRisk(c) * 100) + "% risk · " + payTxt : st.why, `commitCrime('${c.key}')`, !st.ok);
   });
+  const tal = Object.keys(k.tally || {}).map(key => ({c: CRIMES.find(c => c.key === key), t: k.tally[key]})).filter(x => x.c && x.t.n > 0).sort((p, q) => q.t.n - p.t.n);
+  if(tal.length){
+    const tn = tal.reduce((s, x) => s + x.t.n, 0), tc = tal.reduce((s, x) => s + x.t.caught, 0), tm = tal.reduce((s, x) => s + x.t.made, 0);
+    h += '<div class="plabel">Track record</div><div class="invrow">' + tal.map(x => `<div class="itop"><span>${CRIME_ICONS[x.c.key] || '•'} ${x.c.label}</span><span class="price ${x.t.caught ? 'down' : 'up'}">${x.t.away} of ${x.t.n} clean</span></div>` +
+      `<div class="owned">caught ${x.t.caught} time${x.t.caught === 1 ? '' : 's'}${x.t.quit ? ' · backed out ' + x.t.quit : ''}${x.t.made ? ' · took ' + fmt(x.t.made) : ''}</div>`).join('') +
+      `<div class="owned" style="border-top:1px solid var(--line);padding-top:6px">${tn} attempt${tn === 1 ? '' : 's'} in all · caught ${Math.round(tc / tn * 100)}% of the time${tm ? ' · ' + fmt(tm) + ' taken' : ''}. Every job adds heat, and heat raises the odds next time.</div></div>`;
+  }
   if(k.record.length){
     h += '<div class="plabel">Your record</div><div class="invrow"><div class="owned">' + k.record.map(x => "Age " + x.age + ": " + x.crime.toLowerCase() + " · " + x.outcome + (x.expunged ? " (expunged)" : x.juvenile ? " (juvenile, sealed at 18)" : "")).join("<br>") + "</div>";
     if(k.record.some(x => !x.expunged && !x.juvenile))
@@ -15035,11 +15089,11 @@ const SUBMENUS = {
   job:    [['work', 'My work', /performance|career ladder|work history/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
   soc:    [['social', 'Socialize', /needs attention|big birthdays|get together/i], ['family', 'Family', /^partner|^family|family line/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['debt', 'Debt', /your debt/i], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
-  inv:    [['mine', 'My portfolio', /^the market|your performance|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
+  inv:    [['mine', 'My portfolio', /^the market|your performance|where this could go|your portfolio|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
   ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
   biz:    [['run', 'Overview', /last year/i], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
   media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
-  health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions/i], ['habits', 'Habits', /^habits/i]],
+  health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions|medical history/i], ['habits', 'Habits', /^habits/i]],
   crime:  [['law', 'Your record', /staying out|your record|prison|detention|felony/i], ['crimes', 'Crimes', /^crimes/i]],
 };
 function setSub(key){
@@ -15101,7 +15155,7 @@ function renderPanel(){
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
-      h += portfolioChartHtml() + marketOverviewHtml() + investPerfHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
+      h += portfolioChartHtml() + marketOverviewHtml() + investPerfHtml() + growthOutlookHtml() + portfolioHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
       h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
@@ -15136,6 +15190,7 @@ function renderPanel(){
     if(mine.length){
       h += '<div class="plabel">YOUR THINGS</div>';
       mine.forEach(x => h += ownedAssetRow(x));
+      h += assetGainsHtml();
     }
     for(const cat in ASSET_CATALOG){
       if(cat === 'Real Estate') continue;
@@ -15199,7 +15254,11 @@ function renderPanel(){
     else if(!b){
       h += '<div class="status">Name your company, then pick what kind of business to start. Each needs upfront capital.</div>';
       h += '<div class="invrow"><input id="bizName" class="amt-input" maxlength="32" placeholder="Business name (optional)" aria-label="Business name"><div class="assetbuy"><button onclick="fillBizName()">Suggest a name</button></div></div>';
-      BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => { const lic = felon() && LICENSED_BIZ.includes(t.key); h += opt(t.name, lic ? 'needs a license a felony bars' : fmt(bizCost(t)) + ' to start', `startBusiness('${t.key}')`, lic || state.money < bizCost(t)); });
+      h += '<div class="fnote">Profit per worker is a rough guide at market wages and normal prices. Risk is the yearly chance of real trouble. A hobby you have mastered (★) starts the business with a better reputation and a higher value.</div>';
+      BUSINESS_TYPES.filter(t => !t.law || (state.world.laws || []).includes(t.law)).forEach(t => { const lic = felon() && LICENSED_BIZ.includes(t.key);
+        const hk = Object.keys(HOBBY_BUSINESS).find(k => HOBBY_BUSINESS[k] === t.key), star = hk && state.hobbies[hk] && state.hobbies[hk].level >= 70 ? ' ★' : '';
+        const risk = t.risk <= 0.04 ? 'low risk' : t.risk <= 0.05 ? 'some risk' : 'high risk', per = inflR(t.revPerEmp * 0.2, 100);
+        h += opt(t.name + star, lic ? 'needs a license a felony bars' : `${fmt(bizCost(t))} · ${risk} · ${fmt(per)}/worker`, `startBusiness('${t.key}')`, lic || state.money < bizCost(t)); });
     } else h += bizPanelHtml();
   } else {
     if(a < 12){ h = ageLock('Work is available', 12); }
@@ -17756,6 +17815,16 @@ const MIXES = {
 };
 const MIX_INFO = {conservative:{ret:'about 4% a year', risk:'Low risk'}, balanced:{ret:'about 6% a year', risk:'Medium risk'}, growth:{ret:'about 8% a year', risk:'Higher risk'}};
 const instrName = k => (ALL_INSTR.find(i => i.key === k) || {name:k}).name;
+// What today's portfolio could grow into, in today's dollars, at three real rates of return
+function growthOutlookHtml(){
+  const pv = portfolioValue(), add = state.lastAutoInvested || 0; if(pv < 100 && add < 1) return '';
+  const to = state.age < 60 ? 65 : state.age + 10, yrs = to - state.age, cum = state.econ.cumInflation || 1, addR = add / cum;
+  const grow = r => { let v = pv / cum; for(let y = 0; y < yrs; y++) v = v * (1 + r) + addR; return v; };
+  const rates = [['Rough markets', 0.02], ['Typical', 0.05], ['Strong markets', 0.08]];
+  return '<div class="plabel">Where this could go</div><div class="kv kv2">' + rates.map(([n, r]) => `<div><span>${n}</span><b>${fmt(grow(r))}</b><span>${Math.round(r * 100)}% a year above inflation</span></div>`).join('') +
+    `<div><span>With no growth</span><b>${fmt(pv / cum + addR * yrs)}</b><span>${add ? 'today plus ' + fmt(addR) + ' a year' : 'what you hold today'}</span></div></div>` +
+    `<div class="fnote">Your portfolio at ${to}, in today's money${add ? ', if auto-invest keeps adding what it did last year' : ''}. A broad index fund has averaged about 5% a year above inflation; ${add ? 'raising auto-invest' : 'turning on auto-invest'} is the surest way to move these numbers.</div>`;
+}
 function buyMix(kind, share){
   const mix = MIXES[kind], total = Math.floor(Math.max(0, state.money) * share);
   if(!mix || state.crime.prison) return;
@@ -17832,7 +17901,7 @@ function recordYearHistory(){
   const cum = state.econ.cumInflation || 1, st = state.stats, e = state.edu;
   state.lifeHist = (state.lifeHist || []).concat([{age:state.age, h:st.health, hp:st.happy, sm:st.smarts, lk:st.looks,
     sal: state.job && !state.crime.prison ? Math.round(state.job.salary / cum) : 0, fame: state.fame ? Math.round(state.fame.level) : 0,
-    fol: state.social && state.social.account ? state.social.followers : 0, port: Math.round(portfolioValue() / cum), gpa: (e.school || e.program) ? Math.round(e.gpa) : null}]).slice(-120);
+    fol: state.social && state.social.account ? state.social.followers : 0, port: Math.round(portfolioValue() / cum), cum: Math.round(cum * 10000) / 10000, gpa: (e.school || e.program) ? Math.round(e.gpa) : null}]).slice(-120);
   state.relationships.forEach(r => { if(typeof r.closeness === 'number') r.bh = (r.bh || []).concat([Math.round(r.closeness)]).slice(-30); });
 }
 // Where last year's salary went before it reached the account
