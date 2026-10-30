@@ -3264,11 +3264,11 @@ function ageUpYear(){
     return;
   }
 
-  // slow, uneven physical aging
-  if(a > 55 && Math.random() < (a > 75 ? 0.9 : 0.55)) applyDelta({health: -1});
   document.getElementById('choices').innerHTML = '';
   state.lastDone = state.done || {};
   state.done = {};
+  // slow, uneven physical aging; staying active holds it off in most years
+  if(a > 55 && Math.random() < (a > 75 ? 0.9 : 0.55) * (exercisedThisYear() ? 0.4 : 1)) applyDelta({health: -1});
   if(hasMyTrait('Moody')) applyDelta({happy: rint(-5, 5)});
   if(hasMyTrait('Flaky') && state.edu.school) state.edu.gpa = clamp(state.edu.gpa - 2);
   updateEconomy(a);
@@ -3308,6 +3308,7 @@ function ageUpYear(){
   if(!state.alive) return;
   if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted){ render(); return; }
 
+  if(state.crash && !state.crime.prison){ crashChoice(a); render(); return; }
   // some years carry a second, smaller moment alongside the main one
   if(Math.random() < Math.min(0.85, 0.35 * evMult())){ const extra = generateEvent(a); pushEntry(a, extra.text, extra.delta); }
 
@@ -3704,6 +3705,7 @@ function updateMarket(a){
   }
   if(bias < 0) news.unshift({text:"A market crash wipes out years of gains", up:false});
   else if(bias > 0) news.unshift({text:"A roaring bull market lifts nearly everything", up:true});
+  const pv0 = portfolioValue();
   ALL_INSTR.forEach(x => {
     const m = state.market[x.key];
     m.prev = m.price;
@@ -3715,6 +3717,8 @@ function updateMarket(a){
     m.price = Math.max(0.0001, m.price * (1 + change));
   });
   state.marketNews = news.map(n => ({text:n.text, up:n.up, key:n.key || null, age:a}));
+  const pv1 = portfolioValue();
+  state.crash = pv0 >= 2000 && pv1 < pv0 * 0.82 && state.age >= 18 ? {from:pv0, to:pv1} : null;
   const mine = news.find(n => n.key && (state.portfolio[n.key] || 0) * state.market[n.key].price > 200);
   if(mine) pushEntry(a, mine.text + (mine.up ? `, and ${state.name}'s shares jump.` : `, and ${state.name}'s shares fall.`), {happy: mine.up ? 3 : -3});
   if(bias !== 0 && portfolioValue() > 300){
@@ -3727,6 +3731,16 @@ function updateMarket(a){
   processOrders(a);
 }
 
+// a big drop in the portfolio asks what to do about it
+const dipAmt = () => Math.round(Math.max(0, state.money) * 0.25 / 100) * 100;
+function crashChoice(a){
+  const c = state.crash, n = state.name, loss = Math.round((1 - c.to / c.from) * 100), dip = dipAmt(); state.crash = null;
+  presentCustom(`${n}'s portfolio drops ${loss}% this year, from ${fmt(c.from)} to ${fmt(c.to)}. Everyone on the news is panicking.`, [
+    {label:'Hold steady and wait it out', run:() => { state.crashHeld = (state.crashHeld || 0) + 1; pushEntry(state.age, `${n} holds steady through the crash and stops checking the news.`, {happy:-1}); }},
+    {label:'Sell everything before it falls further', run:() => { sellEverything(true); pushEntry(state.age, `Selling near the bottom locks in the loss, but ${n} sleeps better.`, {happy:2}); }},
+    dip >= 500 ? {label:`Buy the dip with ${fmt(dip)}`, run:() => { if(execBuy('IDXF', dip)){ state.crashHeld = (state.crashHeld || 0) + 1; pushEntry(state.age, `${n} buys the dip, putting ${fmt(dip)} into the index fund while prices are low.`, {happy:-2}); } }} : null,
+  ].filter(Boolean));
+}
 function payDividends(a){
   let total = 0;
   STOCKS.forEach(x => {
@@ -8903,6 +8917,7 @@ function relationshipsYear(a, prompted){
     if(!isFamily && rel.closeness <= 0){
       pushEntry(a, `${state.name} and ${rel.name} drift apart${rel.type === 'Partner' ? ' and go their separate ways' : ''}.`, {happy:-4});
       state.relationships = state.relationships.filter(r => r.id !== rel.id);
+      if(PEER.includes(rel.type)) (state.lostTouch = state.lostTouch || []).push({rel, age:a});
       return;
     }
     const careHealth = rel.care === "home" || rel.care === "you" ? 72 : rel.care === "other" ? 50 : 60;
@@ -8923,6 +8938,7 @@ function relationshipsYear(a, prompted){
     else if(rel.type === "Sibling" && rel.age >= 21 && state.age >= 18 && Math.random() < 0.025) moneyAsk(rel, moments);
   });
   loveYear(a, moments);
+  reconnectYear(a);
   // close bonds lift your mood; estranged family weighs on it
   const strong = state.relationships.filter(r => r.closeness >= 70).length;
   const estranged = state.relationships.filter(r => ["Mother","Father","Sibling","Child","Spouse","Partner"].includes(r.type) && r.closeness < 30).length;
@@ -8935,6 +8951,18 @@ function relationshipsYear(a, prompted){
   moments.forEach(m => { if(m !== shown && m.fallback) m.fallback(); });
   if(shown){ presentCustom(shown.prompt, shown.opts); return true; }
   return false;
+}
+
+// now and then someone you drifted away from gets back in touch
+function reconnectYear(a){
+  const lt = (state.lostTouch = (state.lostTouch || []).filter(x => x.rel.age + (a - x.age) < 85).slice(-12));
+  const ready = lt.filter(x => a - x.age >= 3);
+  if(!ready.length || state.relationships.length >= 60 || Math.random() >= 0.06) return;
+  const x = pick(ready), r = x.rel, was = r.type.toLowerCase();
+  state.lostTouch = lt.filter(y => y !== x);
+  r.age += a - x.age; r.type = 'Friend'; r.closeness = 40; delete r.pro;
+  state.relationships.push(r);
+  pushEntry(a, `${r.name}, an old ${was === 'contact' ? 'acquaintance' : was} ${state.name} lost touch with ${a - x.age} years ago, gets back in touch. They pick up right where they left off.`, {happy:5});
 }
 
 // ---------- World events: long-running changes the player lives through ----------
@@ -8958,6 +8986,9 @@ const WORLD_EVENTS = [
   {key:'housingboom', name:'Housing boom', icon:'🏗', chance:0.03, years:[2,4], blocks:['housingcrash'],
    fx:{housing:0.07, sectors:{'Real Estate':0.1}, tracks:{Trades:{hire:8, pay:0.05}}, bizTypes:{realestate:0.25, construction:0.2}},
    desc:'Home prices climb fast; builders and realtors are busy.', start:'HOUSING BOOM: PRICES HIT ALL-TIME HIGHS', end:'HOUSING BOOM LOSES STEAM'},
+  {key:'tourism', name:'Tourism boom', icon:'🧳', chance:0.03, years:[2,4],
+   fx:{sectors:{Transport:0.08, Entertainment:0.06}, tracks:{Culinary:{hire:8, pay:0.04}, Aviation:{hire:10, pay:0.05}}, bizTypes:{hotel:0.3, restaurant:0.15, bar:0.15, coffee:0.1}},
+   desc:'Travelers pour in: hotels, restaurants and airlines are busy and hiring.', start:'TOURISM HITS A RECORD HIGH', end:'TOURIST CROWDS THIN OUT'},
   {key:'bear', name:'Bear market', icon:'🐻', chance:0.035, years:[1,2],
    fx:{market:-0.06, sectors:{Tech:-0.04, AI:-0.06}}, desc:'Stocks grind lower for a year or more.', start:'BEAR MARKET GRIPS WALL STREET', end:'BULLS RETURN AS BEAR MARKET ENDS', onStart:() => { state.world.fx.marketShock = (state.world.fx.marketShock || 0) - 0.08; }},
   {key:'war', name:'War overseas', icon:'⚔️', chance:0.012, years:[2,5],
@@ -9717,8 +9748,7 @@ const fameSpecial = {
 function fameYear(a, canPrompt){
   const f = FM(), n = state.name;
   const target = fameTarget();
-  if(f.level < target) f.level += (target - f.level) * 0.35;
-  else f.level -= Math.max(1, (f.level - target) * 0.12) + (f.offGrid ? 5 : 0);
+  f.level = fameStep(f.level, target, f.offGrid);
   f.level = Math.max(0, Math.min(100, Math.round(f.level * 10) / 10)); f.peak = Math.max(f.peak, f.level);
   f.image = clampRep(f.image + (60 - f.image) * 0.05 + (f.publicist ? 1 : 0));
   // the business of being famous
@@ -9864,15 +9894,22 @@ function fameDashHtml(){
 // Every tier of fame and the spotlight work it opens up, from the same thresholds the buttons use
 // What each level of fame actually does, from the yearly fame rules
 // Where fame drifts with nothing new, by fameYear's pull toward what you are known for
+// fame that awards and a big peak keep alive: it fades no lower than this unless you go off grid
+function fameFloor(){ const f = FM(); return Math.min(30, (f.awards || []).length * 5 + (f.peak >= 80 ? 10 : 0)); }
+function fameStep(l, t, offGrid){
+  if(l < t) return l + (t - l) * 0.35;
+  const fl = offGrid ? 0 : fameFloor(), d = l - Math.max(1, (l - t) * 0.12) - (offGrid ? 5 : 0);
+  return l >= fl ? Math.max(fl, d) : d;
+}
 function fameOutlookHtml(){
   const f = FM(), src = fameSources(), t = fameTarget(); if(f.level < 1 && t < 1) return '';
   let l = f.level; const proj = [];
-  for(let y = 0; y < 5; y++){ if(l < t) l += (t - l) * 0.35; else l -= Math.max(1, (l - t) * 0.12) + (f.offGrid ? 5 : 0); l = Math.max(0, Math.min(100, l)); proj.push(Math.round(l)); }
+  for(let y = 0; y < 5; y++){ l = Math.max(0, Math.min(100, fameStep(l, t, f.offGrid))); proj.push(Math.round(l)); }
   const now = Math.round(f.level), dir = n => n > now ? 'up' : n < now ? 'down' : '';
   return '<div class="plabel">Where your fame is headed</div><div class="kv kv2">' +
     `<div><span>Next year</span><b class="${dir(proj[0])}">${proj[0]}</b><span>from ${now} now</span></div>` +
     `<div><span>In 5 years</span><b class="${dir(proj[4])}">${proj[4]}</b><span>${fameTier(proj[4]).toLowerCase()}</span></div></div>` +
-    `<div class="fnote">${src.length ? `Fame settles toward ${Math.round(t)}: ${src[0][1]} counts in full${src.length > 1 ? ', and ' + src.slice(1).map(x => x[1]).join(', ') + ' add a little' : ''}.` : 'Nothing keeps you in the public eye now, so fame fades a little every year.'} Stunts and awards lift it for a while.</div>`;
+    `<div class="fnote">${src.length ? `Fame settles toward ${Math.round(t)}: ${src[0][1]} counts in full${src.length > 1 ? ', and ' + src.slice(1).map(x => x[1]).join(', ') + ' add a little' : ''}.` : 'Nothing keeps you in the public eye now, so fame fades a little every year.'}${fameFloor() && !f.offGrid ? ` Your awards and a big peak mean it never fades below ${fameFloor()}.` : ''} Stunts and awards lift it for a while.</div>`;
 }
 function famePerksHtml(lvl){
   const f = state.fame, scandal = Math.max(1, Math.round(lvl / 6 * (f.publicist ? 0.6 : 1)));
@@ -10014,8 +10051,9 @@ function rehomePet(id, ok){
   render();
 }
 // yearly: costs, aging, illness, goodbyes, and what pets do for you. Returns the cost.
+const WALKED_PETS = ['dog', 'horse'];
 function petsYear(a, canPrompt){
-  let cost = 0, lift = 0, asked = false;
+  let cost = 0, lift = 0, asked = false, walked = false;
   const n = state.name;
   myPets().slice().forEach(p => {
     const s = speciesOf(p.species);
@@ -10031,6 +10069,8 @@ function petsYear(a, canPrompt){
       return;
     }
     lift += s.happy * (0.5 + p.bond / 100);
+    if(p.bond >= 80 && !p.devoted){ p.devoted = true; pushEntry(a, `${p.name} has become ${n}'s shadow, following them from room to room.`, {happy:3}); }
+    if(p.bond >= 80 && WALKED_PETS.includes(p.species)) walked = true;
     if(!p.sick && Math.random() < (old ? 0.18 : 0.06)) p.sick = true;
     if(p.sick){
       const bill = inflR(rint(4, 30) * 100 * (s.key === 'horse' ? 4 : s.key === 'dog' || s.key === 'cat' ? 1 : 0.4), 50);
@@ -10052,6 +10092,7 @@ function petsYear(a, canPrompt){
     else if(r < 0.075 && p.species === 'dog' && p.bond >= 60) pushEntry(a, `${p.name} barks the house awake during a kitchen fire. Everyone gets out safely.`, {happy:6, family:4});
   });
   if(lift) applyDelta({happy: Math.min(6, Math.round(lift))});
+  if(walked) applyDelta({health:1});                             // a devoted dog or horse gets you outside every day
   return {cost, asked};
 }
 function petsHtml(){
@@ -11475,14 +11516,15 @@ function lifeOutlook(hp = state.stats.health, skip = null){
 function healthFactors(){
   const hh = H(), hb = hh.habits, a = state.age, out = [], add = (good, t) => out.push([good, t]);
   if(a >= 12){
-    if(exercisedThisYear() || state.done.gym || state.done.sport || state.done.hc_trainer) add(1, 'Exercises'); else add(0, 'No regular exercise');
+    if(exercisedThisYear() || state.done.gym || state.done.sport || state.done.hc_trainer) add(1, a >= 50 ? 'Exercises, which slows aging' : 'Exercises'); else add(0, a >= 50 ? 'No exercise, so aging hits harder' : 'No regular exercise');
     if(hb.diet === 'healthy') add(1, 'Healthy diet'); else if(hb.diet === 'junk') add(0, 'Junk food');
   }
   if(hb.smoke) add(0, 'Smoking');
   if(hb.drink === 2) add(0, 'Heavy drinking');
   if(a >= 30) add(recently(hh.lastCheckup, 3), recently(hh.lastCheckup, 3) ? 'Regular checkups' : 'Overdue for a checkup');
   if(recently(hh.fluShot, 1)) add(1, 'Flu shot');
-  if(myPets().some(p => p.bond >= 50)) add(1, 'A loved pet');
+  if(myPets().some(p => p.bond >= 80 && WALKED_PETS.includes(p.species))) add(1, 'A devoted ' + myPets().find(p => p.bond >= 80 && WALKED_PETS.includes(p.species)).species + ' keeps you moving');
+  else if(myPets().some(p => p.bond >= 50)) add(1, 'A loved pet');
   if(CALM_HOBBIES.some(k => hobbyLevel(k) >= 35)) add(1, 'A calming hobby');
   if(state.job && (CAREERS[state.job.track][state.job.rank] || {}).stress >= 70) add(0, 'A high-stress job');
   if(state.stats.happy < 35) add(0, 'Low mood');
@@ -11573,7 +11615,7 @@ function commitCrime(key){
   const c = CRIMES.find(x => x.key === key); if(!c || !crimeState(c).ok) return;
   const before = serialize();                      // if the app closes mid-trial, the save goes back to before the crime
   const k = CR(), n = state.name;
-  state.done['crime_' + key] = true; state.done.crimes = (state.done.crimes || 0) + 1;
+  state.done['crime_' + key] = true; state.done.crimes = (state.done.crimes || 0) + 1; k.lastCrime = state.age;
   const amt = crimePay(c), tl = ((k.tally = k.tally || {})[key] = k.tally[key] || {n:0, away:0, caught:0, made:0});
   tl.n++;
   if(Math.random() < crimeRisk(c)){
@@ -11667,6 +11709,13 @@ function crimeYear(a){
   k.heat = Math.max(0, k.heat - 15);
   if(k.probation > 0){ k.probation--; if(!k.probation) pushEntry(a, `${state.name} completes their probation.`, {happy:3}); }
   if(a === 18 && k.record.some(x => x.juvenile)) pushEntry(a, `${state.name}'s juvenile record is sealed.`, {happy:2});
+  // years away from crime: the skills go rusty, and five clean years mark a fresh start
+  const clean = k.lastCrime != null && !k.prison ? a - k.lastCrime : 0;
+  if(clean >= 3 && k.skill > 0) k.skill = Math.max(0, k.skill - 4);
+  if(clean >= 5 && !k.reformed && a >= 18 && (k.arrests || k.record.length)){
+    k.reformed = true; k.heat = 0;
+    pushEntry(a, `Five years without a crime: ${state.name} has truly turned their life around.`, {happy:6});
+  }
   if(k.wanted){
     if(Math.random() < 0.3){ captureFugitive(a); return; }
     applyDelta({happy:-2});
@@ -12016,7 +12065,7 @@ function crimeDashHtml(){
     `<div><span>Record</span><b>${recs.length ? recs.length + ' conviction' + (recs.length > 1 ? 's' : '') : 'Clean'}</b><span>${felonyCount() ? felonyCount() + ' felon' + (felonyCount() > 1 ? 'ies' : 'y') : k.arrests ? k.arrests + ' arrest' + (k.arrests > 1 ? 's' : '') + ' in all' : 'never arrested'}</span></div>` +
     `<div><span>Police attention</span><b>${heatLabel(k.heat)}</b><div class="meter"><span style="width:${Math.min(100, heat)}%;background:var(--red)"></span></div></div>` +
     `<div><span>Made from crime</span><b>${fmt(k.earned || 0)}</b><span>over a lifetime</span></div>` +
-    `<div><span>Experience</span><b>${skillTier(k.skill)}</b><span>${k.probation ? 'on probation ' + k.probation + ' more yr' : k.wanted ? 'wanted by police' : 'free and clear'}</span></div></div>`;
+    `<div><span>Experience</span><b>${skillTier(k.skill)}</b><span>${k.probation ? 'on probation ' + k.probation + ' more yr' : k.wanted ? 'wanted by police' : k.lastCrime != null && a - k.lastCrime >= 2 ? 'crime-free ' + (a - k.lastCrime) + ' years' : 'free and clear'}</span></div></div>`;
 }
 function crimePanelHtml(){
   const k = CR(), a = state.age, recs = k.record.filter(x => !x.expunged && !(x.juvenile && a >= 18));
@@ -12573,6 +12622,12 @@ function businessYear(a){
   const costs = Math.round(b.employees * empCost(b) + b.locations * BIZ_OVERHEAD_PER_LOC * cum + (U.manager ? managerCost() : 0));
   const profit = revenue + royalties - costs;
   b.lastRevenue = revenue + royalties; b.lastCosts = costs; b.lastProfit = profit;
+  const open = b.startAge != null ? a - b.startAge : 0;
+  if(open > 0 && open % 5 === 0){ b.reputation = clampRep(b.reputation + 3); pushEntry(a, `${bizName(b)} celebrates ${open} years in business, and regulars turn out for the party.`, {happy:3}); }
+  if(b.reputation >= 80 && profit > 0 && Math.random() < 0.12){
+    b.awards = (b.awards || 0) + 1; b.reputation = clampRep(b.reputation + 4); b.growth = Math.min(0.8, b.growth + 0.05);
+    pushEntry(a, `${bizName(b)} is voted the best ${t.name.toLowerCase()} in town${b.awards > 1 ? ' for the ' + (['second', 'third', 'fourth', 'fifth'][b.awards - 2] || b.awards + 'th') + ' time' : ''}. New customers line up.`, {happy:6});
+  }
   b.history.push(profit); if(b.history.length > 12) b.history.shift();
   // profits kept in the business grow it; the rest is paid out to the owner
   const kept = profit > 0 ? Math.round(profit * (b.reinvest || 0)) : 0;
@@ -12827,7 +12882,7 @@ function bizSinceHtml(b){
     `<div><span>Open for</span><b>${yrs} year${yrs === 1 ? '' : 's'}</b><span>${b.startAge != null ? 'since age ' + b.startAge : '&nbsp;'}</span></div>` +
     `<div><span>Total profit</span><b class="${tot >= 0 ? 'up' : 'down'}">${fmt(tot)}</b><span>last ${hs.length} years</span></div>` +
     `<div><span>Best year</span><b class="${best >= 0 ? 'up' : 'down'}">${fmt(best)}</b><span>${good} of ${hs.length} years in profit</span></div>` +
-    `<div><span>Worst year</span><b class="${worst >= 0 ? 'up' : 'down'}">${fmt(worst)}</b><span>&nbsp;</span></div></div>`;
+    `<div><span>Worst year</span><b class="${worst >= 0 ? 'up' : 'down'}">${fmt(worst)}</b><span>${b.awards ? '🏆 voted best in town ×' + b.awards : yrs > 0 ? (5 - yrs % 5) + ' yr to the next anniversary' : '&nbsp;'}</span></div></div>`;
 }
 function bizDashHtml(b){
   if(b.lastRevenue === undefined || !b.history || !b.history.length) return '';
@@ -12909,9 +12964,9 @@ function emergencyYear(a){
   if(sev === 'medical' && state.insurance.health) covered = 0.8;
   if(sev === 'car' && state.insurance.auto && roadVehicles().length) covered = 0.8;
   if(sev === 'home' && state.insurance.home && state.assets.some(x => x.category === 'Homes')) covered = 0.8;
-  const out = Math.round(cost * (1 - covered));
+  const out = Math.round(cost * (1 - covered)), fund = fundMonths() >= 3;
   const msgs = {medical:'a medical emergency', car:'a car breakdown', home:'a home repair emergency', family:'a family emergency'};
-  pushEntry(a, `${state.name} deals with ${msgs[sev]}${covered > 0 ? ', largely covered by insurance' : ''}, costing ${fmt(out)}.`, {money:-out, happy:-3});
+  pushEntry(a, `${state.name} deals with ${msgs[sev]}${covered > 0 ? ', largely covered by insurance' : ''}, costing ${fmt(out)}.${fund ? ' Their emergency fund absorbs it without much worry.' : ''}`, {money:-out, happy: fund ? -1 : -3});
 }
 function negotiateRaise(){
   if(!state.job || state.done.negotiate) return;
@@ -13553,7 +13608,8 @@ function schoolYear(a){
   if(a === 12 && e.school){ e.school = 'High School'; pushEntry(a, `${state.name} moves up to high school.`, {}); }
   if(a >= 18 && e.school === 'High School' && !e.program){
     setLevel('High School'); e.school = null;
-    pushEntry(a, `${state.name} graduates high school (GPA ${Math.round(e.gpa)}).`, {happy:6});
+    if(e.gpa >= 97 && state.stats.smarts >= 80){ e.valedictorian = true; pushEntry(a, `${state.name} graduates at the top of the class (GPA ${Math.round(e.gpa)}) and gives the valedictorian speech. A merit scholarship comes with it.`, {happy:10, smarts:2}); }
+    else pushEntry(a, `${state.name} graduates high school (GPA ${Math.round(e.gpa)})${e.gpa >= 88 ? ' with honors' : ''}.`, {happy: e.gpa >= 88 ? 8 : 6});
     collegeApplications(true);
     return true;
   }
@@ -13655,7 +13711,7 @@ function admitChance(c){
   const p = 0.5 + (e.gpa - c.minGpa) / 22 + (s.smarts - 60) / 200 + extra;
   return Math.max(0.03, Math.min(c.key === 'elite' ? 0.75 : 0.97, p));
 }
-function aidFor(c){ return Math.min(1, baseAid(c) + Math.min(0.1, (ED().essays || 0) * 0.05)); }      // essays add a little on top
+function aidFor(c){ return Math.min(1, baseAid(c) + Math.min(0.1, (ED().essays || 0) * 0.05) + (ED().valedictorian ? 0.1 : 0)); }      // essays and a valedictorian's merit scholarship add a little on top
 function baseAid(c){
   const g = ED().gpa, poor = (state.famEstate || 0) < 120000;
   if(c.key === 'community') return g >= 85 ? 1 : 0;
@@ -13818,7 +13874,8 @@ function collegeBoostHtml(){
     [hob ? 5 : 0, 5, 'A hobby at level 50'], [e.toured ? 4 : 0, 4, 'College tours'], [e.seasons ? 3 : 0, 3, 'A season on a team'], [e.council ? 3 : 0, 3, 'Student council']];
   const got = B.reduce((t, x) => t + x[0], 0), max = B.reduce((t, x) => t + x[1], 0);
   return '<div class="plabel">College applications</div><div class="chips">' + B.map(x => `<span class="chip${x[0] >= x[1] ? ' good' : ''}">${x[0] >= x[1] ? '✓ ' : ''}${x[2]} · +${x[1]}%</span>`).join('') +
-    `<span class="chip${es >= 2 ? ' good' : ''}">${es >= 2 ? '✓ ' : ''}Scholarship essays ${es}/2 · +10% aid</span></div>` +
+    `<span class="chip${es >= 2 ? ' good' : ''}">${es >= 2 ? '✓ ' : ''}Scholarship essays ${es}/2 · +10% aid</span>` +
+    `<span class="chip${e.gpa >= 97 && state.stats.smarts >= 80 ? ' good' : ''}">${e.gpa >= 97 && state.stats.smarts >= 80 ? '✓ ' : ''}Top of the class, GPA 97+ and 80 smarts · +10% aid</span></div>` +
     `<div class="fnote">So far these add <b>+${got}%</b> of a possible +${max}% to your odds at every selective college. Grades still count most.</div>`;
 }
 function collegeOutlookHtml(){
@@ -14204,7 +14261,11 @@ function workYear(a){
     if(Math.random() < 0.35){ leaveOffice(j.rank, true); pushEntry(a, `${state.name} is forced to resign as ${rank.title}.`, {happy:-8}); return; }
   }
 
-  if(!info.elect && j.track !== 'Military' && Math.random() < (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + wfx().layoffs + trackFx(j.track).layoff){
+  if(j.years % 5 === 0 && !info.elect){                      // every five years with the same employer
+    const bump = Math.round(j.salary * 0.03 / 100) * 100; j.salary += bump;
+    pushEntry(a, `${state.name} marks ${j.years} years on the job and gets a loyalty raise of ${fmt(bump)}.`, {happy:3});
+  }
+  if(!info.elect && j.track !== 'Military' && Math.random() < layoffChance(j)){
     convertCoworkersToFriends();
     state.job = null;
     pushEntry(a, `${state.name} is laid off from their job as ${rank.title}.`, {happy:-6});
@@ -14635,6 +14696,12 @@ function practiceHobby(key){
   pushEntry(state.age, milestone
     ? `${state.name} keeps at ${h.name.toLowerCase()} and levels up to ${hobbyTier(hb.level)}.`
     : `${state.name} spends time on ${h.name.toLowerCase()}.`, {});
+  // a skilled hobbyist runs into people who love the same thing
+  if(hb.level >= 35 && state.age >= 8 && !state.done.hobFriend && !state.crime.prison && state.relationships.length < 60 && Math.random() < 0.04){
+    state.done.hobFriend = true;
+    const r = newRel('Friend', {closeness: rint(40, 55), origin: 'through ' + h.name.toLowerCase()});
+    pushEntry(state.age, `${state.name} gets to know ${r.name}, another ${h.name.toLowerCase()} fan, and they become friends.`, {happy:3});
+  }
   render();
 }
 const compFee = () => inflR(100, 5);
@@ -14701,19 +14768,25 @@ const trackOpen = t => { const g = (TRACK_INFO[t] || {}).gated; return !g || (st
 const recordBlocks = trackName => (RECORD_BARRED.includes(trackName) && felonyCount() > 0) || (!!(TRACK_INFO[trackName] || {}).clean && priorCount() > 0);
 const oddsTxt = c => (c >= 70 ? 'good odds' : c >= 45 ? 'fair odds' : 'long shot') + ' (' + Math.round(c) + '%)';
 // What the job costs each year and how secure it is, from workYear's rules
+// yearly chance of a layoff; ten years with the same employer cuts it by 40%
+function layoffChance(j){
+  const base = (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + (wfx().layoffs || 0) + (trackFx(j.track).layoff || 0);
+  return Math.max(0, base) * (j.years >= 10 ? 0.6 : 1);
+}
 function jobRisksHtml(){
   const j = state.job, tr = j && CAREERS[j.track], rank = tr && tr[j.rank]; if(!rank || state.crime.prison) return '';
   const info = TRACK_INFO[j.track] || {}, a = state.age, fx = trackFx(j.track) || {};
   const sH = Math.min(0, (rank.stress >= 70 ? -3 : rank.stress >= 50 ? -2 : rank.stress >= 30 ? -1 : 0) + (j.remote ? 1 : 0)), sP = Math.min(0, (rank.stress >= 70 ? -2 : rank.stress >= 50 ? -1 : 0) + (j.remote ? 1 : 0));
   const secure = info.elect || j.track === 'Military';
-  const lay = secure ? 0 : (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + (wfx().layoffs || 0) + (fx.layoff || 0);
+  const lay = secure ? 0 : layoffChance(j);
   const inj = info.risk ? info.risk * (fx.danger ? 2.5 : 1) : 0, f = [];
   f.push([!(sH || sP), sH || sP ? 'Stress costs ' + [sH ? -sH + ' health' : '', sP ? -sP + ' happiness' : ''].filter(Boolean).join(' and ') + ' a year' : 'Stress takes no toll']);
   if(!secure) f.push([lay <= 0.04, `Layoff risk about ${Math.round(Math.max(0, lay) * 100)}% a year`]);
   if(inj) f.push([0, `Injury risk about ${Math.max(1, Math.round(inj * 100))}% a year`]);
   if(info.maxAge) f.push([info.maxAge - a > 10, `The body gives out at ${info.maxAge}`]);
+  if(!info.elect) f.push([1, j.years >= 10 ? `Seniority: ${j.years} years here` : `Loyalty raise in ${5 - j.years % 5} yr`]);
   return '<div class="plabel">Job risks</div><div class="chips">' + f.map(x => `<span class="chip ${x[0] ? 'good' : 'bad'}">${x[1]}</span>`).join('') + '</div>' +
-    `<div class="fnote">${(sH || sP) && !j.remote ? 'Working from home takes a point off the stress toll. ' : ''}${secure ? 'This job can\'t lay you off.' : state.econ.recession ? 'The recession triples the usual layoff risk.' : 'Layoffs are three times as likely in a recession.'}</div>`;
+    `<div class="fnote">${(sH || sP) && !j.remote ? 'Working from home takes a point off the stress toll. ' : ''}${secure ? 'This job can\'t lay you off.' : state.econ.recession ? 'The recession triples the usual layoff risk.' : 'Layoffs are three times as likely in a recession.'}${info.elect ? '' : ' Every five years here brings a 3% loyalty raise, and after ten the layoff risk drops by 40%.'}</div>`;
 }
 // How the job is going: promotion odds, pay against the field, and how hard it is on you.
 function perfHtml(j, track, rank){
@@ -18228,6 +18301,8 @@ function paycheckHtml(){
     `<div class="owned">Tax took ${Math.round(rate * 100)}% of taxable pay${f.retire ? '; retirement contributions are taken before tax, so they lower it' : '. Contributing to a retirement account lowers the tax bill'}.</div></div>`;
 }
 // Next year's money if nothing changes: pay, other income and bills as they stand today
+// how many months of living costs cash and savings would cover
+function fundMonths(){ const m = livingEstimate() / 12; return m > 0 ? Math.max(0, state.money + state.savings) / m : 0; }
 function budgetHtml(){
   const a = state.age, f = state.flow || {}; if(a < 18 || state.crime.prison) return '';
   const j = state.job, sp = state.relationships.find(r => r.type === 'Spouse');
@@ -18243,7 +18318,7 @@ function budgetHtml(){
     `<div><span>Going out</span><b>${fmt(to)}</b><span>${loans > 0 ? 'bills and loans' : 'living costs'}</span></div>` +
     `<div><span>${left >= 0 ? 'Left over' : 'Shortfall'}</span><b class="${left >= 0 ? 'up' : 'down'}">${fmt(Math.abs(left))}</b><span>about ${fmt(Math.round(Math.abs(left) / 12))} a month</span></div>` +
     `<div><span>Savings rate</span><b>${ti > 0 && left > 0 ? Math.round(left / ti * 100) + '%' : '0%'}</b><span>of what comes in</span></div></div>` +
-    `<div class="fnote">If nothing changes. ${left < 0 ? 'Savings and investments would have to cover the gap, so cutting the lifestyle or finding more income would help.' : left > ti * 0.2 ? 'A healthy margin: auto-save or auto-invest can put it to work.' : 'A thin margin: one surprise bill could tip it.'}</div>`;
+    `<div class="fnote">${independent ? `Cash and savings would cover ${fundMonths() >= 24 ? 'over two years' : Math.floor(fundMonths()) + ' month' + (Math.floor(fundMonths()) === 1 ? '' : 's')} of bills${fundMonths() >= 3 ? ', a full emergency fund that takes the sting out of surprises' : '; three months makes emergencies far less stressful'}. ` : ''}If nothing changes. ${left < 0 ? 'Savings and investments would have to cover the gap, so cutting the lifestyle or finding more income would help.' : left > ti * 0.2 ? 'A healthy margin: auto-save or auto-invest can put it to work.' : 'A thin margin: one surprise bill could tip it.'}</div>`;
 }
 function cashFlowHtml(){
   const f = state.flow; if(!f || state.age < 16) return '';
