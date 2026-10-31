@@ -3302,6 +3302,7 @@ function ageUpYear(){
   state.done = {};
   // slow, uneven physical aging; staying active holds it off in most years
   if(a > 55 && Math.random() < (a > 75 ? 0.9 : 0.55) * (exercisedThisYear() ? 0.4 : 1)) applyDelta({health: -1});
+  if(a > 65 && Math.random() < (a > 80 ? 0.7 : 0.4) * (mindActive(state.lastDone) ? 0.35 : 1)) applyDelta({smarts: -1});
   if(hasMyTrait('Moody')) applyDelta({happy: rint(-5, 5)});
   if(hasMyTrait('Flaky') && state.edu.school) state.edu.gpa = clamp(state.edu.gpa - 2);
   updateEconomy(a);
@@ -3321,6 +3322,7 @@ function ageUpYear(){
   socialMediaYear(a);
   updateMarket(a);
   payDividends(a);
+  moneyMarksYear(a);
   housingYear(a);
   assetsYear(a);
   const relPrompted = relationshipsYear(a, prompted);
@@ -3776,6 +3778,15 @@ function crashChoice(a){
     {label:'Sell everything before it falls further', run:() => { sellEverything(true); pushEntry(state.age, `Selling near the bottom locks in the loss, but ${n} sleeps better.`, {happy:2}); }},
     dip >= 500 ? {label:`Buy the dip with ${fmt(dip)}`, run:() => { if(execBuy('IDXF', dip)){ state.crashHeld = (state.crashHeld || 0) + 1; pushEntry(state.age, `${n} buys the dip, putting ${fmt(dip)} into the index fund while prices are low.`, {happy:-2}); } }} : null,
   ].filter(Boolean));
+}
+// the first time cash, savings and investments pass $10k, $100k and $1M in today's money
+const MONEY_MARKS = [[1e6, 'a million dollars', 8], [1e5, '$100,000', 5], [1e4, '$10,000', 3]];
+const liquidToday = () => (Math.max(0, state.money) + state.savings + cdTotal() + portfolioValue()) / state.econ.cumInflation;
+function moneyMarksYear(a){
+  if(a < 16) return;
+  const v = liquidToday(), m = MONEY_MARKS.find(x => v >= x[0] && (state.moneyMark || 0) < x[0]); if(!m) return;
+  state.moneyMark = m[0];
+  pushEntry(a, `${state.name}'s cash, savings and investments pass ${m[1]} in today's money for the first time.`, {happy:m[2]});
 }
 function payDividends(a){
   let total = 0;
@@ -4406,7 +4417,13 @@ function assetsYear(a){
     const t = findCatalog(x.key) || legacyTemplate(x);
     const noise = (Math.random()+Math.random()+Math.random()-1.5) / 1.5;
     const property = t.category === 'Homes' || t.category === 'Real Estate';
-    x.value = Math.max(1, x.value * (1 + t.appreciation + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
+    if(t.category === 'Cars' && ['car', 'bike'].includes(t.kind) && t.appreciation < 0 && !x.classic && x.boughtAge != null && a - x.boughtAge + (t.hidden ? 5 : 0) >= 25 && (x.cond == null || x.cond >= 50)){
+      x.classic = true; x.value = Math.max(x.value, Math.round((x.boughtPrice || x.value) * 0.35));
+      pushEntry(a, `${state.name}'s ${x.name} turns 25 and becomes a classic. Collectors start to take an interest.`, {happy:3});
+    }
+    if(x.classic && x.cond != null && x.cond < 40) x.classic = false;                // a wreck is no longer a collector's car
+    const rate = x.classic ? 0.04 : t.appreciation;
+    x.value = Math.max(1, x.value * (1 + rate + noise * t.vol + (property ? state.housing.trend + (x.rental ? locOf(x.rental.loc).growth : 0) : 0)));
     if(property && !x.rental) upkeep += x.value * t.upkeepPct * (x.solar ? 0.7 : 1) * (x.mods && x.mods.roof ? 0.9 : 1) + (x.category === 'Homes' ? modsUpkeep(x) : 0);
     if(t.category === 'Cars') upkeep += t.upkeepFlat * state.econ.cumInflation * (state.world.fx.gas || 1);
   });
@@ -8892,6 +8909,7 @@ function makeRel(type, o){
   const r = {id:relId(), name:o.name || freeName(gender), type, age: o.age !== undefined ? o.age : Math.max(0, state.age + rint(-3,3)),
              closeness: o.closeness !== undefined ? o.closeness : 35, traits: o.traits || rollTraits(), origin: o.origin || ""};
   if(o.livingTogether) r.livingTogether = true;
+  if(PEER.includes(type)) r.met = typeof state !== 'undefined' && state ? state.age : 0;
   r.gender = gender;
   if(PEER.includes(type) && r.age >= 22 && (type === 'Contact' || Math.random() < 0.3)) r.pro = rollPro(o.proBoost);
   return r;
@@ -8949,7 +8967,13 @@ function relationshipsYear(a, prompted){
     if(hasTrait(rel, "Loyal") && decay < 0) decay = Math.ceil(decay / 2);
     if(hasMyTrait("Loyal") && decay < 0) decay = Math.ceil(decay * 0.6);
     if(hasTrait(rel, "Moody")) decay += rint(-2,2);
+    if(rel.lifelong && decay < 0) decay = Math.ceil(decay / 2);
     bump(rel, decay);
+    if(rel.lifelong && rel.closeness < 25) rel.closeness = 25;                   // a lifelong friend never quite drifts away
+    if(rel.type === 'Friend' && rel.met != null && !rel.lifelong && a - rel.met >= 25 && rel.closeness >= 50){
+      rel.lifelong = true; bump(rel, 5);
+      pushEntry(a, `${state.name} and ${rel.name} have been friends for 25 years now${rel.origin ? ', ever since they met ' + rel.origin : ''}.`, {happy:4});
+    }
     if(!isFamily && rel.closeness <= 0){
       pushEntry(a, `${state.name} and ${rel.name} drift apart${rel.type === 'Partner' ? ' and go their separate ways' : ''}.`, {happy:-4});
       state.relationships = state.relationships.filter(r => r.id !== rel.id);
@@ -9810,6 +9834,11 @@ function fameYear(a, canPrompt){
   const target = fameTarget();
   f.level = fameStep(f.level, target, f.offGrid);
   f.level = Math.max(0, Math.min(100, Math.round(f.level * 10) / 10)); f.peak = Math.max(f.peak, f.level);
+  if(f.peak >= 60 && f.level <= f.peak - 35 && a >= 40 && !f.comeback && !f.offGrid && !state.crime.prison && Math.random() < 0.04){
+    f.comeback = a; f.level = Math.min(f.peak, f.level + 15);
+    const pay = inflR(Math.round(f.peak * 1500), 1000);
+    pushEntry(a, `A wave of nostalgia brings ${n} back into the spotlight. Fans who grew up with them come back, and old work finds a new audience, earning ${fmt(pay)}.`, {money:pay, image:5, happy:8});
+  }
   f.image = clampRep(f.image + (60 - f.image) * 0.05 + (f.publicist ? 1 : 0));
   // the business of being famous
   let earn = 0, spend = 0;
@@ -10973,7 +11002,7 @@ function relRow(r){
   }
   if(r.type === "Child" && r.age < 18) more += '<button onclick="renameChild(\'' + r.id + '\')">Change name</button>';
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
-  const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
+  const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.lifelong ? "a lifelong friend since age " + r.met : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
   return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b>' + (r.pro ? ' — ' + proTitle(r) : '') + ' <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
     '<div class="bondrow"><div class="stat-track" style="margin:5px 0 2px;flex:1"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' + ((r.bh || []).length >= 3 ? '<span title="Bond over the last ' + r.bh.length + ' years">' + sparkline(r.bh, 54, 16, 'pink') + '</span>' : '') + '</div>' +
@@ -11140,6 +11169,7 @@ function onsetChance(key, d, a){
   if(hb.drink === 2 && ['heart','cancer','hypertension','depression'].includes(key)) p *= 1.4;
   if(['diabetes','heart','hypertension'].includes(key)) p *= hb.diet === 'healthy' ? 0.6 : hb.diet === 'junk' ? 1.6 : 1;
   if(['heart','diabetes','depression','hypertension'].includes(key) && exercisedThisYear()) p *= 0.75;
+  if(['heart','hypertension'].includes(key) && jobStress() >= 60) p *= unwound(state.lastDone) ? 1.1 : 1.5;
   if(d.mood){ p *= s.happy < 30 ? 3 : s.happy < 45 ? 1.6 : 1;
     if(myPets().some(x => x.bond >= 50)) p *= 0.75;                       // a loved pet keeps loneliness away
     if(CALM_HOBBIES.some(k => hobbyLevel(k) >= 35)) p *= 0.8; if(state.job){ const r = CAREERS[state.job.track][state.job.rank]; p *= 1 + r.stress / 150; } if(state.crime.prison) p *= 2; }
@@ -11584,12 +11614,21 @@ function lifeOutlook(hp = state.stats.health, skip = null){
   return Math.round(a + years);
 }
 // the habits and circumstances that raise or lower the odds of illness, as onsetChance weighs them
+// stress from the current job, and the things that take the edge off
+const jobStress = () => state.job && CAREERS[state.job.track] && CAREERS[state.job.track][state.job.rank] ? CAREERS[state.job.track][state.job.rank].stress : 0;
+const UNWIND = ['vacation', 'meditate', 'beach', 'camping', 'hc_spa', 'hc_therapy', 'hc_retreat'];
+const unwound = d => UNWIND.some(k => (d || {})[k]);
+// reading, learning and hobbies keep the mind sharp in old age
+const MIND_ACTS = ['read', 'museum', 'sch_bookclub', 'sch_audit', 'sch_course', 'sch_teach', 'sch_mentor', 'sch_cert'];
+const mindActive = d => Object.keys(d || {}).some(k => d[k] && (MIND_ACTS.includes(k) || k.startsWith('hob_')));
 function healthFactors(){
   const hh = H(), hb = hh.habits, a = state.age, out = [], add = (good, t) => out.push([good, t]);
   if(a >= 12){
     if(exercisedThisYear() || state.done.gym || state.done.sport || state.done.hc_trainer) add(1, a >= 50 ? 'Exercises, which slows aging' : 'Exercises'); else add(0, a >= 50 ? 'No exercise, so aging hits harder' : 'No regular exercise');
     if(hb.diet === 'healthy') add(1, 'Healthy diet'); else if(hb.diet === 'junk') add(0, 'Junk food');
   }
+  if(jobStress() >= 60) add(unwound(state.done) || unwound(state.lastDone), unwound(state.done) || unwound(state.lastDone) ? 'A stressful job, but you make time to unwind' : 'A stressful job and no time to unwind');
+  if(a >= 60) add(mindActive(state.done) || mindActive(state.lastDone), mindActive(state.done) || mindActive(state.lastDone) ? 'Keeps the mind busy, which keeps it sharp' : 'Little to stretch the mind, so memory fades faster');
   if(hb.smoke) add(0, 'Smoking');
   if(hb.drink === 2) add(0, 'Heavy drinking');
   if(a >= 30) add(recently(hh.lastCheckup, 3), recently(hh.lastCheckup, 3) ? 'Regular checkups' : 'Overdue for a checkup');
@@ -12688,6 +12727,7 @@ function businessYear(a){
   b.growth *= 0.97;
   b.morale = clampRep(b.morale + WAGE_MORALE[b.wages] + (U.manager ? 1 : 0) + (b.morale < 50 ? 1 : -1) + rint(-3, 3));
   b.reputation = clampRep(b.reputation + (b.price === 'low' ? 1 : b.price === 'high' ? -1 : 0) + (U.loyalty ? 1 : 0) + (Math.random()*4 - 2));
+  rivalYear(b, t, a);
   const revenue = Math.round(b.employees * t.revPerEmp * cum * bizRevenueMult(b));
   const royalties = Math.round(b.franchises * inflR(12000, 100) * (b.reputation / 70));
   const costs = Math.round(b.employees * empCost(b) + b.locations * BIZ_OVERHEAD_PER_LOC * cum + (U.manager ? managerCost() : 0));
@@ -12804,11 +12844,26 @@ function bizNormalize(b){
   for(const k in d) if(b[k] === undefined) b[k] = d[k];
   return b;
 }
+// now and then a competitor opens nearby and takes a share of sales until it folds
+function rivalYear(b, t, a){
+  if(b.rival){
+    b.rival.left--;
+    const beaten = b.reputation >= 75 && Math.random() < 0.5;
+    if(beaten || b.rival.left <= 0){
+      pushEntry(a, beaten ? `${b.rival.name} can't compete with ${bizName(b)}'s loyal customers and closes its doors.` : `${b.rival.name} closes after a few hard years, and its customers drift back to ${bizName(b)}.`, {happy: beaten ? 5 : 3});
+      if(beaten) b.reputation = clampRep(b.reputation + 2);
+      b.rival = null;
+    }
+  } else if(b.employees > 0 && (b.lastProfit || 0) > 0 && Math.random() < 0.05){
+    b.rival = {name:pick(['Metro', 'Corner', 'Uptown', 'Main Street', 'Union', 'Prime']) + ' ' + t.name, left:rint(3, 5), age:a};
+    pushEntry(a, `A rival, ${b.rival.name}, opens just down the street from ${bizName(b)}, and some customers start going there instead.`, {happy:-2});
+  }
+}
 function bizRevenueMult(b){
   const t = bizType(b.type), U = b.upgrades;
   return (1 + 0.15 * (b.locations - 1)) * (b.price === 'low' ? 0.85 : b.price === 'high' ? 1.25 : 1) * (1 + b.marketing) * (0.5 + b.reputation / 100) *
     (0.8 + b.morale / 250) * (1 + b.growth) * (1 + b.trend) * (U.website ? (ONLINE_FIRST.includes(t.key) ? 1.2 : 1.1) : 1) * (U.equipment ? 1.12 : 1) *
-    (state.econ.recession ? 0.85 : 1) * (!U.manager && state.job ? 0.85 : 1) * Math.max(0.3, 1 + wfx().biz + (wfx().bizTypes[b.type] || 0));
+    (state.econ.recession ? 0.85 : 1) * (!U.manager && state.job ? 0.85 : 1) * (b.rival ? 0.88 : 1) * Math.max(0.3, 1 + wfx().biz + (wfx().bizTypes[b.type] || 0));
 }
 function setWages(w){ const b = state.business; if(!b) return; b.wages = w; renderPanel(); }
 function setReinvest(p){ const b = state.business; if(!b) return; b.reinvest = p; renderPanel(); }
@@ -12975,7 +13030,8 @@ function bizPanelHtml(){
     (b.trend >= 0.08 ? '<br><span class="up">Business is booming across the industry.</span>' : b.trend <= -0.08 ? '<br><span class="down">The industry is in a slump.</span>' : '') +
     (b.employees === 0 ? '<br>Hire staff to start bringing in revenue.' : '') +
     (wfx().bizTypes[b.type] ? `<br><span class="${wfx().bizTypes[b.type] > 0 ? 'up' : 'down'}">World events: revenue ${wfx().bizTypes[b.type] > 0 ? '+' : ''}${Math.round(wfx().bizTypes[b.type] * 100)}% for businesses like yours.</span>` : '') +
-    (!U.manager && state.job ? '<br><span class="down">Running it on top of a job: revenue −15% and it wears on you. A manager fixes this.</span>' : '') + `</div>`;
+    (!U.manager && state.job ? '<br><span class="down">Running it on top of a job: revenue −15% and it wears on you. A manager fixes this.</span>' : '') +
+    (b.rival ? `<br><span class="down">A rival, ${b.rival.name}, is taking about 12% of sales. A reputation of 75 or more can drive it out.</span>` : '') + `</div>`;
   if(b.history.length >= 2) h += '<div class="invrow"><div class="owned">Profit, last ' + b.history.length + ' years</div>' + profitChart(b.history) + '</div>';
   h += '<div class="invrow"><div class="itop"><span>Reputation</span><span class="price">' + b.reputation + '/100</span></div>' + meter(b.reputation, 'gold') +
        '<div class="itop"><span>Staff morale</span><span class="price ' + (b.morale < 35 ? 'down' : '') + '">' + b.morale + '/100</span></div>' + meter(b.morale, b.morale < 35 ? 'red' : 'green') + '</div>';
@@ -14340,6 +14396,20 @@ function workYear(a){
   const boost = state.boost; state.boost = false;
   if(!j) return;
   j.years++; state.workYears++;
+  state.otRun = (state.lastDone || {}).wk_overtime ? (state.otRun || 0) + 1 : 0;
+  if(state.otRun >= 3 && Math.random() < 0.5){
+    state.otRun = 0; state.boost = false;
+    pushEntry(a, `After three years of overtime, ${state.name} burns out and has to take weeks off to recover.`, {health:-5, happy:-8});
+  }
+  // public service: ten years of it clears what is left of the student loans
+  if(PUBLIC_SERVICE.includes(j.track) && state.loans.some(l => l.type === 'Student' && !l.deferred)){
+    state.pslf = (state.pslf || 0) + 1;
+    if(state.pslf >= 10){
+      const owed = state.loans.filter(l => l.type === 'Student').reduce((t, l) => t + l.balance, 0);
+      state.loans = state.loans.filter(l => l.type !== 'Student'); state.pslf = 0;
+      pushEntry(a, `After ten years in public service, ${state.name}'s remaining student debt of ${fmt(owed)} is forgiven.`, {happy:8});
+    }
+  }
   j.salary = Math.round(j.salary * (1 + Math.max(0, yrInfl()) * 0.9 + wfx().raise + trackFx(j.track).pay * 0.3) / 100) * 100;   // wages track prices and the times
   if((state.world.laws || []).includes('fourDay')) applyDelta({happy:1});
   state.peakSalary = Math.max(state.peakSalary, j.salary);
@@ -14384,9 +14454,10 @@ function workYear(a){
     const eligible = !rankGap(next, j.track);
     const chance = promoChance(j, rank, boost);
     if(eligible && Math.random() < chance){
+      const mentor = mentorOf();
       j.rank++; j.title = j.track === 'Military' && state.mil ? milTitle(j.rank) : next.title;
       j.salary = Math.max(Math.round(j.salary * 1.12 / 100) * 100, startingSalary(j.track, j.rank));
-      pushEntry(a, (TRACK_INFO[j.track] || {}).elect ? `${state.name} wins the election and becomes ${next.title} — salary now ${fmt(j.salary)}.` : `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.`, {happy: (TRACK_INFO[j.track] || {}).star ? 12 : 6});
+      pushEntry(a, (TRACK_INFO[j.track] || {}).elect ? `${state.name} wins the election and becomes ${next.title} — salary now ${fmt(j.salary)}.` : `${state.name} earns a promotion to ${next.title} — salary now ${fmt(j.salary)}.${mentor ? ' ' + mentor.name + "'s mentoring helped." : ''}`, {happy: (TRACK_INFO[j.track] || {}).star ? 12 : 6});
       return;
     }
   }
@@ -14834,6 +14905,12 @@ function hobbiesYear(a){
     if(hb.last === undefined) hb.last = a;
     if(hb.level > 20 && a - hb.last >= 2) hb.level = Math.max(20, hb.level - 2);
   }
+  // a master who kept at it this past year can make a little money from it
+  const masters = HOBBY_LIST.filter(h => !h.gamble && hobbyLevel(h.key) >= 90 && (state.lastDone || {})['hob_' + h.key]);
+  if(masters.length && a >= 14 && !state.crime.prison && Math.random() < 0.2){
+    const h = pick(masters), pay = inflR(rint(5, 25) * 100, 10);
+    pushEntry(a, `${state.name}'s mastery of ${h.name.toLowerCase()} pays off: people pay for lessons and commissions, bringing in ${fmt(pay)}.`, {money:pay, happy:2});
+  }
 }
 function hobbyLevel(key){ return (state.hobbies[key] && state.hobbies[key].level) || 0; }
 function hobbyTier(lvl){ return lvl >= 90 ? 'Master' : lvl >= 70 ? 'Expert' : lvl >= 35 ? 'Skilled' : lvl > 0 ? 'Beginner' : 'Untried'; }
@@ -14946,6 +15023,8 @@ function jobRisksHtml(){
   if(inj) f.push([0, `Injury risk about ${Math.max(1, Math.round(inj * 100))}% a year`]);
   if(info.maxAge) f.push([info.maxAge - a > 10, `The body gives out at ${info.maxAge}`]);
   if(!info.elect) f.push([1, j.years >= 10 ? `Seniority: ${j.years} years here` : `Loyalty raise in ${5 - j.years % 5} yr`]);
+  const mt = !info.elect && mentorOf(); if(mt) f.push([1, `Mentored by ${mt.name}: better promotion odds`]);
+  if((state.otRun || 0) >= 2) f.push([0, `${state.otRun} years of overtime: burnout risk`]);
   return '<div class="plabel">Job risks</div><div class="chips">' + f.map(x => `<span class="chip ${x[0] ? 'good' : 'bad'}">${x[1]}</span>`).join('') + '</div>' +
     `<div class="fnote">${(sH || sP) && !j.remote ? 'Working from home takes a point off the stress toll. ' : ''}${secure ? 'This job can\'t lay you off.' : state.econ.recession ? 'The recession triples the usual layoff risk.' : 'Layoffs are three times as likely in a recession.'}${info.elect ? '' : ' Every five years here brings a 3% loyalty raise, and after ten the layoff risk drops by 40%.'}</div>`;
 }
@@ -14962,8 +15041,10 @@ function perfHtml(j, track, rank){
     `<div><span>Time in role</span><b>${j.years} yr${j.years === 1 ? '' : 's'}</b><span>${j.remote ? 'working from home' : 'at the workplace'}</span></div></div>`;
 }
 // Yearly chance of a promotion from this rank (requirements for the next rank permitting).
+// a close, older coworker who looks out for you: better odds of promotion
+const mentorOf = () => state.job ? state.relationships.filter(r => r.type === 'Coworker' && r.closeness >= 70 && r.age >= state.age + 8).sort((p, q) => q.closeness - p.closeness)[0] || null : null;
 function promoChance(j, rank, boost){
-  return (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0) + (CAREER_FAME[j.track] && (TRACK_INFO[j.track] || {}).star ? state.fame.level / 600 : 0)) * (state.econ.recession ? 0.5 : 1);
+  return (mentorOf() ? 1.25 : 1) * (rank.promo + state.stats.smarts/800 + (boost ? 0.2 : 0) + eduPromoBonus(j.track) + (hasMyTrait('Ambitious') ? 0.04 : 0) + (CAREER_FAME[j.track] && (TRACK_INFO[j.track] || {}).star ? state.fame.level / 600 : 0)) * (state.econ.recession ? 0.5 : 1);
 }
 // The chance (0-92%) that an application to this track's entry job succeeds; shown on the Career tab too.
 function hireChance(trackName){
@@ -15061,6 +15142,7 @@ function iopts(list, state_, fn){
 
 // ---- Career: at work, between jobs, side income and retirement ----
 const REMOTE_OK = ['Business', 'Technology', 'Finance', 'Law'];
+const PUBLIC_SERVICE = ['Education', 'Firefighting', 'Military', 'Politics'];
 const WORK_ACTS = [
   {key:'project', icon:'📊', label:'Lead a big project', meta:'a shot at a bonus and a promotion', who:'job'},
   {key:'drinks', icon:'🍻', label:'Go for after-work drinks', meta:'closer with coworkers', who:'job', min:21, cost:60},
@@ -15068,7 +15150,7 @@ const WORK_ACTS = [
   {key:'suckup', icon:'🍎', label:'Butter up the boss', meta:'might help, coworkers notice', who:'job'},
   {key:'sick', icon:'🤒', label:'Call in sick for a day off', meta:'+happy, small risk', who:'job'},
   {key:'remote', icon:'🏠', label:'Ask to work from home', meta:'less stress if they agree', who:'job'},
-  {key:'overtime', icon:'⏰', label:'Work overtime', meta:'extra pay, costs health and mood', who:'job', min:16},
+  {key:'overtime', icon:'⏰', label:'Work overtime', meta:'extra pay, costs health and mood', who:'job', min:16, warn:() => (state.otRun || 0) >= 2 ? 'three years running risks burnout' : ''},
   {key:'interview', icon:'👔', label:'Practice interviewing', meta:'better odds on applications this year', who:'jobless'},
   {key:'temp', icon:'🗂️', label:'Sign up with a temp agency', meta:'short gigs, maybe a real offer', who:'jobless', min:18},
   {key:'benefits', icon:'📮', label:'File for unemployment benefits', meta:'a cushion between jobs', who:'jobless', min:18},
@@ -15090,7 +15172,7 @@ function workState(x){
   if(x.key === 'consult' && (state.workYears || 0) < 15) return {ok:false, why:'needs 15 years of work behind you'};
   const c = x.cost ? inflR(x.cost, 5) : 0;
   if(c && !canPay(c)) return {ok:false, why:'costs ' + fmt(c)};
-  return {ok:true, why:(c ? fmt(c) + ' · ' : '') + x.meta};
+  return {ok:true, why:(c ? fmt(c) + ' · ' : '') + x.meta + (x.warn && x.warn() ? ' · ' + x.warn() : '')};
 }
 function workAct(key){
   const x = WORK_ACTS.find(w => w.key === key); if(!x) return;
@@ -15770,7 +15852,7 @@ function renderPanel(){
       h += bankRow('Credit builder loan', `${fmt(500)} at 8% over 2 years, about ${fmt(Math.round(loanPay(500, 0.08, 2)))} a year (${fmt(Math.round(loanPay(500, 0.08, 2) * 2 - 500))} interest in all). Always approved, even with bad credit. Paying it on time raises your credit score quickly.`, `<button onclick="applyBuilderLoan()">Take the builder loan</button>`);
     state.loans.forEach(l => {
       const paid = l.principal > 0 ? Math.max(0, Math.min(100, Math.round((1 - l.balance / l.principal) * 100))) : 0, due = loanDue(l), left = l.deferred ? 0 : Math.max(0, Math.round(due * Math.max(1, l.yearsLeft) - l.balance));
-      h += bankRow(`${l.type} loan`, `Owe ${fmt(l.balance)} · borrowed ${fmt(l.principal)}${l.balance > l.principal + 1 ? ' (unpaid interest has added ' + fmt(l.balance - l.principal) + ')' : ''} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'payments wait until you leave school' : fmt(due)+' a year · '+l.yearsLeft+' year' + (l.yearsLeft === 1 ? '' : 's') + ' left · about ' + fmt(left) + ' interest to go'}` +
+      h += bankRow(`${l.type} loan${l.type === 'Student' && state.pslf ? ' <span class="tick">' + (10 - state.pslf) + ' YR TO FORGIVENESS</span>' : ''}`, `Owe ${fmt(l.balance)} · borrowed ${fmt(l.principal)}${l.balance > l.principal + 1 ? ' (unpaid interest has added ' + fmt(l.balance - l.principal) + ')' : ''} · ${(l.apr*100).toFixed(1)}% APR · ${l.deferred ? 'payments wait until you leave school' : fmt(due)+' a year · '+l.yearsLeft+' year' + (l.yearsLeft === 1 ? '' : 's') + ' left · about ' + fmt(left) + ' interest to go'}` +
         `<div class="stat-track" style="margin:6px 0 2px;"><div class="stat-fill" style="width:${paid}%;background:var(--green)"></div></div><span class="sub-meta">${paid}% paid off</span>`,
         !l.deferred ? `<button onclick="payoffLoan('${l.id}')" ${state.money < l.balance ? 'disabled' : ''}>Pay Off ${fmt(l.balance)}</button>` +
           `<button onclick="extraPayment('${l.id}')" ${canPay(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1)))) ? '' : 'disabled'}>Pay extra ${fmt(Math.min(l.balance, Math.max(inflR(500, 50), Math.round(l.balance * 0.1))))}</button>` +
@@ -18629,12 +18711,15 @@ const ACHIEVEMENTS = [
   {k:'debtfree', cat:'Money', icon:'🧾', tier:'silver', name:'Clean Slate', desc:"Owe $50,000 or more, then pay off every cent", test:() => state.ach.peakDebt >= 5e4 && totalDebt() <= 0},
   {k:'rainyday', cat:'Money', icon:'☂️', tier:'bronze', name:'Rainy Day Fund', desc:'Save a year of living costs as an adult', test:() => state.age >= 18 && fundMonths() >= 12},
   {k:'diamond', cat:'Money', icon:'💎', tier:'silver', name:'Diamond Hands', desc:'Hold steady or buy more when the market crashes', on:/holds steady through the crash|buys the dip, putting/},
+  {k:'sixfig', cat:'Money', icon:'🏦', tier:'silver', name:'Six Figures Saved', desc:'Build up $100,000 in cash, savings and investments, in today\'s money', on:/investments pass (\$100,000|a million dollars) in today's money/},
   {k:'lucky', cat:'Money', icon:'🎰', tier:'gold', name:'Jackpot', desc:'Win the lottery', on:/hits the jackpot|wins the lottery!/},
   {k:'broke', cat:'Money', icon:'📉', tier:'bronze', name:'Rock Bottom', desc:'File for bankruptcy', secret:true, on:/files for bankruptcy/},
 
   {k:'job', cat:'Career', icon:'💼', tier:'bronze', name:'First Paycheck', desc:'Land a real job', test:() => !!state.job && state.job.track !== 'Odd Jobs'},
   {k:'lifer', cat:'Career', icon:'🏅', tier:'silver', name:'Company Lifer', desc:'Work 20 years for the same employer', test:() => !!state.job && state.job.years >= 20},
   {k:'poached', cat:'Career', icon:'🎣', tier:'bronze', name:'In Demand', desc:'Get poached by a rival company', on:/chose: take the offer and start fresh/},
+  {k:'mentored', cat:'Career', icon:'🧭', tier:'bronze', name:'Under Their Wing', desc:'Earn a promotion with help from a mentor', on:/'s mentoring helped/},
+  {k:'forgiven', cat:'Career', icon:'🎓', tier:'silver', name:'Public Servant', desc:'Have student debt forgiven after ten years of public service', on:/years in public service, .* student debt/},
   {k:'promo', cat:'Career', icon:'📊', tier:'bronze', name:'Moving Up', desc:'Earn a promotion', on:/earns a promotion|wins the election and becomes/},
   {k:'top', cat:'Career', icon:'🪜', tier:'silver', name:'Top of the Ladder', desc:'Reach the highest rank of any career', test:() => topRank(state.job) && state.job.track !== 'Odd Jobs'},
   {k:'ceo', cat:'Career', icon:'🏢', tier:'gold', name:'Corner Office', desc:'Become a CEO', test:() => !!state.job && /\bCEO\b/.test(state.job.title)},
@@ -18665,7 +18750,9 @@ const ACHIEVEMENTS = [
   {k:'followers', cat:'Fame', icon:'📣', tier:'silver', name:'Influencer', desc:'Reach 100,000 followers', test:() => state.social.account && state.social.followers >= 1e5},
   {k:'famous', cat:'Fame', icon:'📸', tier:'silver', name:'Famous', desc:'Reach 50 fame', test:() => state.fame.level >= 50},
   {k:'icon', cat:'Fame', icon:'🌍', tier:'gold', name:'Global Icon', desc:'Reach 90 fame', test:() => state.fame.level >= 90},
+  {k:'comeback', cat:'Fame', icon:'📼', tier:'gold', name:'The Comeback', desc:'Return to the spotlight on a wave of nostalgia', on:/wave of nostalgia brings/},
   {k:'remembered', cat:'Fame', icon:'🌟', tier:'gold', name:'Never Forgotten', desc:'Win enough awards that your fame can never fade below 30', test:() => fameFloor() >= 30},
+  {k:'lifelong', cat:'Family', icon:'🫂', tier:'silver', name:'Lifelong Friend', desc:'Stay friends with someone for 25 years', on:/have been friends for 25 years/},
   {k:'oldfriends', cat:'Family', icon:'📞', tier:'bronze', name:'Old Friends', desc:'Hear again from a friend you lost touch with', on:/gets back in touch\. They pick up/},
   {k:'award', cat:'Fame', icon:'🏆', tier:'gold', name:'Award Winner', desc:'Win a major award', test:() => state.fame.awards.length >= 1},
 
@@ -18696,6 +18783,7 @@ const ACHIEVEMENTS = [
 
   {k:'founder', cat:'Business', icon:'🏪', tier:'bronze', name:'Founder', desc:'Start a business', test:() => !!state.business},
   {k:'ipo', cat:'Business', icon:'🔔', tier:'gold', name:'Ring the Bell', desc:'Take your business public', on:/ public! .{1,12} starts trading/},
+  {k:'rivals', cat:'Business', icon:'⚔️', tier:'bronze', name:'Outlasted', desc:'See a rival business close its doors', on:/(can't compete with .* and closes its doors|closes after a few hard years)/},
   {k:'bestintown', cat:'Business', icon:'🥇', tier:'silver', name:'Best in Town', desc:'Have your business voted best in town', on:/is voted the best .* in town/},
   {k:'franchise', cat:'Business', icon:'🍔', tier:'gold', name:'Franchise Empire', desc:'Sell five franchises', test:() => !!state.business && (state.business.franchises || 0) >= 5},
   {k:'home', cat:'Business', icon:'🏡', tier:'bronze', name:'Homeowner', desc:'Buy a home', test:() => state.assets.some(x => x.category === 'Homes')},
