@@ -1734,6 +1734,35 @@ function drawAvatar(st){
 
 // choice events: [minAge, maxAge, prompt(name), optionA{label,delta}, optionB{label,delta}]
 const CHOICE_EVENTS = [
+  // ---- newer decisions ----
+  [26,62,n=>`A rival company tries to poach ${n} with a 20% raise.`,
+    {label:'Stay out of loyalty', delta:{happy:2}, after:() => { const j = state.job; if(!j) return; const b = Math.round(j.salary * 0.05 / 100) * 100; j.salary += b; pushEntry(state.age, `${state.name}'s boss hears about the offer and adds ${fmt(b)} to their pay to keep them.`, {}); }},
+    {label:'Take the offer and start fresh', delta:{happy:4}, after:() => { const j = state.job; if(!j) return; convertCoworkersToFriends(); j.salary = Math.round(j.salary * 1.2 / 100) * 100; j.years = 0; j.remote = false; pushEntry(state.age, `${state.name} starts at the rival company as ${j.title}, earning ${fmt(j.salary)}, but the seniority starts over.`, {}); }},'tenured',1.2],
+  [18,40,n=>`A friend asks ${n} to co-sign the lease on their new apartment.`,
+    {label:'Co-sign it', risk:0.7, win:{happy:3,friends:4}, lose:{money:-3000,happy:-6,friends:-6}, winText:'They pay every month on time.', loseText:'They stop paying rent, and the landlord comes after the co-signer.'},
+    {label:'Politely say no', delta:{friends:-3}},'friends'],
+  [7,12,n=>`${n} needs a Halloween costume.`,
+    {label:'Make one at home', delta:{happy:3,smarts:1}},
+    {label:'Beg for the store-bought superhero', delta:{happy:4}},null,1,
+    {label:'Go as something truly terrifying', risk:0.5, win:{happy:6,friends:2}, lose:{happy:-2}, winText:'It wins the school costume contest.', loseText:'It makes a toddler cry, and the night ends early.'}],
+  [25,75,n=>`A neighbor asks ${n} to look after their pet for a month while they travel.`,
+    {label:'Happily pet-sit', delta:{happy:3,money:300}},
+    {label:'Say they are too busy', delta:{}},'pet'],
+  [45,80,n=>`${n}'s grown child asks to move back home for a while.`,
+    {label:'Welcome them back', delta:{happy:2,family:5,money:-2000}},
+    {label:'Encourage them to stand on their own', delta:{family:-3}},'adultKid'],
+  [70,100,n=>`${n}'s family asks them to write down the family's history before it is forgotten.`,
+    {label:'Write it all down', delta:{happy:5,family:5,smarts:1}},
+    {label:'Some stories are better left untold', delta:{happy:1}},'kids'],
+  [22,60,n=>`${n}'s savings are tempting: a friend says a luxury vacation would do them good.`,
+    {label:'Book the trip of a lifetime', delta:{happy:8,money:-6000}},
+    {label:'Keep the emergency fund intact', delta:{happy:-1,smarts:1}},'saver'],
+  [30,65,n=>`${n}'s business is doing well, and the staff ask for a profit-sharing plan.`,
+    {label:'Share the profits', delta:{happy:2}, effect:() => { const b = state.business; if(b){ b.morale = clampRep(b.morale + 15); b.reputation = clampRep(b.reputation + 3); } }},
+    {label:'Keep the profits', delta:{money:3000}, effect:() => { const b = state.business; if(b) b.morale = clampRep(b.morale - 10); }},'biz'],
+  [19,35,n=>`${n}'s friends want to drive across the country on a whim.`,
+    {label:'Pile into the car', delta:{happy:7,friends:4,money:-800}},
+    {label:'Stay home and be sensible', delta:{happy:-1,money:200}},'friends'],
   // ---- ages 0-5: early development & parents' decisions ----
   [0,2,n=>`${n}'s parents are deciding how to handle nighttime fussiness.`,
     {label:'Rock them to sleep every night', delta:{happy:5}},
@@ -2411,7 +2440,8 @@ const COND = {
   afford:()=>state.money + state.savings >= infl(15000), indebted:()=>totalDebt() > infl(5000),
   partner:()=>hasRel('Partner','Spouse'), spouse:()=>hasRel('Spouse'), single:()=>!hasRel('Partner','Spouse'),
   kids:()=>hasRel('Child'), minorKid:()=>state.relationships.some(r => r.type === 'Child' && r.age < 18), golden:()=>state.relationships.some(r => r.type === 'Spouse' && r.marriedAge != null && state.age - r.marriedAge >= 50), youngKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 5 && r.age <= 17), teenKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 15 && r.age <= 19), adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20), grandkids:()=>hasRel('Grandchild'), parents:()=>hasRel('Mother','Father'), sibling:()=>hasRel('Sibling'),
-  friends:()=>hasRel('Friend'),
+  friends:()=>hasRel('Friend'), tenured:()=>!!state.job && !['Military', 'Politics'].includes(state.job.track) && state.job.years >= 5 && !state.crime.prison,
+  adultKid:()=>state.relationships.some(r => r.type === 'Child' && r.age >= 20),
   home:()=>state.assets.some(x => x.category === 'Homes'), car:()=>drives(), nocar:()=>!drives(), learner:()=>['none', 'permit'].includes(lic().status), athome:()=>!state.seniorHome, inhome:()=>!!state.seniorHome, traveler:()=>!!state.travel && state.travel.trips >= 3,
   landlord:()=>state.assets.some(x => x.category === 'Real Estate'),
   renter:()=>state.age >= 20 && !state.assets.some(x => x.category === 'Homes'),
@@ -2446,6 +2476,9 @@ const COND = {
 const ok = c => !c || c.split('&').every(k => COND[k] && COND[k]());
 const E = (a,b,t,r,c,w,rt) => ({a,b,t,r,c,w: w || 1, rt});
 const BANK = [
+  E(4,11,'{n} goes trick-or-treating',[['and comes home with a pillowcase full of candy',{happy:5,health:-1}],['and gets spooked by a haunted house',{happy:-1}]]),
+  E(18,40,'{n} goes to a Halloween costume party',[['and wins best costume',{happy:5,friends:3}],['and nobody can tell what they dressed as',{happy:1}]]),
+  E(25,80,'{n} hands out full-size candy bars on Halloween',[['and becomes the most popular house on the street',{happy:4}]],'home'),
   // infancy & toddler
   E(0,2,'{n} takes their first wobbly steps',[['and the whole family cheers',{happy:4}],['before landing hard on their bottom',{happy:-1}]]),
   E(0,2,'{n} tries solid food for the first time',[['and smears it everywhere with delight',{happy:3}],['and refuses it with total conviction',{happy:-1}]]),
@@ -3362,6 +3395,7 @@ function presentChoice(ev){
       if(o.risk !== undefined){ const win = Math.random() < o.risk; d = win ? o.win : o.lose; extra = ' ' + fill(win ? o.winText : o.loseText); if(!win && o.onLose) o.onLose(); if(win && o.onWin) o.onWin(); }
       if(o.effect) o.effect();
       pushEntry(state.age, `${promptText} — ${state.name} chose: ${label.charAt(0).toLowerCase() + label.slice(1)}.${extra}`, scaleMoneyDelta(d));
+      if(o.after) o.after();                       // follow-ups that should read after the choice in the log
     }
   }; }), raw);
 }
@@ -14378,6 +14412,22 @@ function bestYearsHtml(){
   if(fam.fame >= 10) h += cell('Most famous', fam, 'fame ' + fam.fame);
   return '<div class="plabel">Best years</div><div class="kv kv2">' + h + '</div><div class="fnote">The first year each peak was reached. Money is in today\'s dollars.</div>';
 }
+// Totals across the whole life, from the yearly history
+function lifeNumbersHtml(){
+  const hs = (state.lifeHist || []).filter(x => x.age >= 1); if(hs.length < 5) return '';
+  const cum = state.econ.cumInflation, earned = hs.reduce((t, x) => t + (x.sal || 0), 0), avgHp = Math.round(hs.reduce((t, x) => t + x.hp, 0) / hs.length);
+  const peak = (state.nwHist || []).reduce((m, x) => Math.max(m, x.v), 0), jobs = (state.jobHist || []).length, tv = TV(), places = (tv.places || []).length;
+  const met = state.relSeq || 0, gone = (state.departed || []).length, got = lifeAch().got.length, goals = goalsList().filter(g => g.done != null).length;
+  const cell = (l, v, sub) => `<div><span>${l}</span><b>${v}</b><span>${sub}</span></div>`;
+  return '<div class="plabel">A life in numbers</div><div class="kv kv2">' +
+    cell('Earned from work', fmt(Math.round(earned / 1000) * 1000), jobs ? jobs + ' job' + (jobs > 1 ? 's' : '') + ' held' : 'never employed') +
+    cell('Peak net worth', fmt(peak), "in today's money") +
+    cell('Average mood', avgHp, avgHp >= 70 ? 'a happy life' : avgHp >= 50 ? 'ups and downs' : 'a hard road') +
+    cell('People known', met, gone ? gone + ' remembered' : 'family, friends and more') +
+    cell('Places visited', places, tv.trips ? tv.trips + ' trip' + (tv.trips > 1 ? 's' : '') : 'no trips yet') +
+    cell('Achievements', got, goals ? goals + ' life goal' + (goals > 1 ? 's' : '') + ' met' : 'this life') + '</div>' +
+    `<div class="fnote">Pay is added up in today's dollars, so every decade counts the same.</div>`;
+}
 function mePanelHtml(){
   const cum = state.econ.cumInflation, e = state.edu, k = state.crime;
   const traits = (state.traits || []).map(t => t.toLowerCase()).join(", ");
@@ -14403,6 +14453,7 @@ function mePanelHtml(){
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
+  h += lifeNumbersHtml();
   h += crossroadsHtml();
   h += consequencesHtml();
   h += bestYearsHtml();
@@ -15445,7 +15496,7 @@ function updateTabDots(){
 // ---------- Sub-menus: the busier tabs are split into sections ----------
 // Each section heading is matched to a sub-menu; a heading that matches none stays with the one before it.
 const SUBMENUS = {
-  me:     [['you', 'You', null], ['story', 'Life story', /life so far|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world/i]],
+  me:     [['you', 'You', null], ['story', 'Life story', /life so far|life in numbers|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world/i]],
   act:    [['do', 'Activities', /relax|health & fitness|friends & community|going out|treat yourself|^more$/i], ['travel', 'Travel', /^travel/i], ['hobbies', 'Hobbies', /hobbies|try something new/i]],
   edu:    [['school', 'School', /keep learning|school life|campus life|how you're doing|college outlook/i], ['record', 'Record', /education record/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
   job:    [['work', 'My work', /performance|career ladder|work history/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
@@ -18422,10 +18473,14 @@ const ACHIEVEMENTS = [
   {k:'invest', cat:'Money', icon:'📈', tier:'silver', name:'Market Maker', desc:"Hold $100,000 of stocks and funds (today's money)", test:() => portfolioValue() / state.econ.cumInflation >= 1e5},
   {k:'nest', cat:'Money', icon:'🪺', tier:'silver', name:'Nest Egg', desc:"Save $250,000 in a retirement account (today's money)", test:() => state.retirement.balance / state.econ.cumInflation >= 2.5e5},
   {k:'debtfree', cat:'Money', icon:'🧾', tier:'silver', name:'Clean Slate', desc:"Owe $50,000 or more, then pay off every cent", test:() => state.ach.peakDebt >= 5e4 && totalDebt() <= 0},
+  {k:'rainyday', cat:'Money', icon:'☂️', tier:'bronze', name:'Rainy Day Fund', desc:'Save a year of living costs as an adult', test:() => state.age >= 18 && fundMonths() >= 12},
+  {k:'diamond', cat:'Money', icon:'💎', tier:'silver', name:'Diamond Hands', desc:'Hold steady or buy more when the market crashes', on:/holds steady through the crash|buys the dip, putting/},
   {k:'lucky', cat:'Money', icon:'🎰', tier:'gold', name:'Jackpot', desc:'Win the lottery', on:/hits the jackpot|wins the lottery!/},
   {k:'broke', cat:'Money', icon:'📉', tier:'bronze', name:'Rock Bottom', desc:'File for bankruptcy', secret:true, on:/files for bankruptcy/},
 
   {k:'job', cat:'Career', icon:'💼', tier:'bronze', name:'First Paycheck', desc:'Land a real job', test:() => !!state.job && state.job.track !== 'Odd Jobs'},
+  {k:'lifer', cat:'Career', icon:'🏅', tier:'silver', name:'Company Lifer', desc:'Work 20 years for the same employer', test:() => !!state.job && state.job.years >= 20},
+  {k:'poached', cat:'Career', icon:'🎣', tier:'bronze', name:'In Demand', desc:'Get poached by a rival company', on:/chose: take the offer and start fresh/},
   {k:'promo', cat:'Career', icon:'📊', tier:'bronze', name:'Moving Up', desc:'Earn a promotion', on:/earns a promotion|wins the election and becomes/},
   {k:'top', cat:'Career', icon:'🪜', tier:'silver', name:'Top of the Ladder', desc:'Reach the highest rank of any career', test:() => topRank(state.job) && state.job.track !== 'Odd Jobs'},
   {k:'ceo', cat:'Career', icon:'🏢', tier:'gold', name:'Corner Office', desc:'Become a CEO', test:() => !!state.job && /\bCEO\b/.test(state.job.title)},
@@ -18437,6 +18492,7 @@ const ACHIEVEMENTS = [
 
   {k:'hs', cat:'School', icon:'📜', tier:'bronze', name:'Diploma', desc:'Graduate from high school', test:() => EDU_RANK[state.edu.level] >= 1},
   {k:'degree', cat:'School', icon:'🎓', tier:'bronze', name:'Cap and Gown', desc:"Earn a bachelor's degree", test:() => EDU_RANK[state.edu.level] >= 3},
+  {k:'valedictorian', cat:'School', icon:'🎤', tier:'silver', name:'Valedictorian', desc:'Graduate high school at the top of the class', on:/gives the valedictorian speech/},
   {k:'summa', cat:'School', icon:'🏅', tier:'silver', name:'Summa Cum Laude', desc:'Graduate college with top honors', test:() => degrees().some(d => d.honors === 'summa cum laude')},
   {k:'elite', cat:'School', icon:'🏛', tier:'silver', name:'Ivy Halls', desc:'Graduate from an elite university', test:() => degrees().some(d => d.tier === 'elite')},
   {k:'doctorate', cat:'School', icon:'🧪', tier:'gold', name:'Highest Degree', desc:'Earn an MD, JD or PhD', test:() => ['MD', 'JD', 'PhD'].some(hasDegree)},
@@ -18455,6 +18511,8 @@ const ACHIEVEMENTS = [
   {k:'followers', cat:'Fame', icon:'📣', tier:'silver', name:'Influencer', desc:'Reach 100,000 followers', test:() => state.social.account && state.social.followers >= 1e5},
   {k:'famous', cat:'Fame', icon:'📸', tier:'silver', name:'Famous', desc:'Reach 50 fame', test:() => state.fame.level >= 50},
   {k:'icon', cat:'Fame', icon:'🌍', tier:'gold', name:'Global Icon', desc:'Reach 90 fame', test:() => state.fame.level >= 90},
+  {k:'remembered', cat:'Fame', icon:'🌟', tier:'gold', name:'Never Forgotten', desc:'Win enough awards that your fame can never fade below 30', test:() => fameFloor() >= 30},
+  {k:'oldfriends', cat:'Family', icon:'📞', tier:'bronze', name:'Old Friends', desc:'Hear again from a friend you lost touch with', on:/gets back in touch\. They pick up/},
   {k:'award', cat:'Fame', icon:'🏆', tier:'gold', name:'Award Winner', desc:'Win a major award', test:() => state.fame.awards.length >= 1},
 
   {k:'crook', cat:'Crime', icon:'🦹', tier:'bronze', name:'Life of Crime', desc:'Get away with a crime', secret:true, on:/gets away with/},
@@ -18463,6 +18521,7 @@ const ACHIEVEMENTS = [
   {k:'acquit', cat:'Crime', icon:'⚖️', tier:'silver', name:'Not Guilty', desc:'Be acquitted by a jury', secret:true, on:/finds .{1,30} not guilty/},
   {k:'escape', cat:'Crime', icon:'🕳️', tier:'gold', name:'The Great Escape', desc:'Break out of prison', secret:true, on:/escapes from prison/},
   {k:'heist', cat:'Crime', icon:'💎', tier:'gold', name:'The Big Score', desc:'Pull off a bank heist', secret:true, on:/gets away with robbing a bank/},
+  {k:'reformed', cat:'Crime', icon:'🕊️', tier:'silver', name:'Turned It Around', desc:'Stay out of crime for five years after a brush with the law', on:/has truly turned their life around/},
   {k:'expunge', cat:'Crime', icon:'🧽', tier:'silver', name:'Fresh Start', desc:'Clear a conviction from your record', secret:true, test:() => state.crime.record.some(x => x.expunged)},
 
   {k:'survivor', cat:'Health', icon:'🎗️', tier:'gold', name:'Survivor', desc:'Beat cancer', on:/cancer goes into remission/},
@@ -18472,6 +18531,8 @@ const ACHIEVEMENTS = [
   {k:'trip', cat:'Leisure', icon:'🧳', tier:'bronze', name:'Wanderlust', desc:'Take your first trip', test:() => state.travel.trips >= 1},
   {k:'globe', cat:'Leisure', icon:'🗺️', tier:'silver', name:'Globetrotter', desc:'Visit 12 different places', test:() => state.travel.places.length >= 12},
   {k:'space', cat:'Leisure', icon:'🌌', tier:'gold', name:'Edge of Space', desc:'Fly to the edge of space', test:() => state.travel.places.includes('the edge of space')},
+  {k:'shadow', cat:'Leisure', icon:'🐾', tier:'bronze', name:'Faithful Companion', desc:'Earn a pet\'s total devotion', on:/has become .*'s shadow/},
+  {k:'hobfriend', cat:'Leisure', icon:'🤝', tier:'bronze', name:'Kindred Spirits', desc:'Make a friend through a hobby', on:/fan, and they become friends/},
   {k:'pets3', cat:'Leisure', icon:'🐾', tier:'bronze', name:'Menagerie', desc:'Keep three pets at once', test:() => myPets().length >= 3},
   {k:'bestshow', cat:'Leisure', icon:'🎀', tier:'silver', name:'Best in Show', desc:'Win best in show with a pet', on:/wins best in show/},
   {k:'master', cat:'Leisure', icon:'🎯', tier:'silver', name:'Master of a Craft', desc:'Reach level 90 in a hobby', test:() => Object.values(state.hobbies).some(h => h && h.level >= 90)},
@@ -18481,6 +18542,7 @@ const ACHIEVEMENTS = [
 
   {k:'founder', cat:'Business', icon:'🏪', tier:'bronze', name:'Founder', desc:'Start a business', test:() => !!state.business},
   {k:'ipo', cat:'Business', icon:'🔔', tier:'gold', name:'Ring the Bell', desc:'Take your business public', on:/ public! .{1,12} starts trading/},
+  {k:'bestintown', cat:'Business', icon:'🥇', tier:'silver', name:'Best in Town', desc:'Have your business voted best in town', on:/is voted the best .* in town/},
   {k:'franchise', cat:'Business', icon:'🍔', tier:'gold', name:'Franchise Empire', desc:'Sell five franchises', test:() => !!state.business && (state.business.franchises || 0) >= 5},
   {k:'home', cat:'Business', icon:'🏡', tier:'bronze', name:'Homeowner', desc:'Buy a home', test:() => state.assets.some(x => x.category === 'Homes')},
   {k:'landlord', cat:'Business', icon:'🔑', tier:'silver', name:'Landlord', desc:'Own three rental properties', test:() => rentals().length >= 3},
@@ -18637,6 +18699,7 @@ function achGameOverHtml(){
   let h = '';
   const ms = milestonesHtml(0);
   if(ms) h += '<div class="plabel">Highlights of a life</div>' + ms;
+  h += lifeNumbersHtml();
   if(state.cheated) h += '<div class="status">🛠️ Cheats were used in this life, so it earned no achievements.</div>';
   const goals = goalsList().filter(g => goalDef(g.k));
   if(goals.length) h += '<div class="plabel">Life goals</div><div class="invrow">' + goals.map(g => { const d = goalDef(g.k); return `<div class="goal${g.done != null ? ' done' : ''}"><span class="oi" aria-hidden="true">${g.done != null ? '✓' : d.icon}</span><div class="goal-tx">${d.label}<small>${g.done != null ? 'Reached at age ' + g.done : 'Set at age ' + g.set + ', never reached'}</small></div></div>`; }).join('') + '</div>';
