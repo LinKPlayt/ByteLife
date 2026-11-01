@@ -6217,9 +6217,60 @@ Object.assign(VEH_SPECS, {
     drl:[[187.2, 43.1], [193, 43.35], [199, 43.3]],
     wheel:{t:'vee', n:5, fin:'silver', facet:1, cal:'#e0a400', drill:0, ccb:1}, col:'#b8bdc3'},
   // ---- minivans ----
-  'Kia|Carnival':{L:203.7, H:69.9, WB:121.7, FO:39, TD:28.6, rim:19, cr:14, cf:11, sill:11, tail:[2, 66], tb:41, rr:[6, 69.5], rrR:4, rf:[136, 69.9], rfR:7, cowl:[166, 46], hood:[199, 41.5], nose:36,
-    belt:[46, 45.5], dlo:[8, 160], cIn:1.5, aIn:3.5, roof:[[2, 58, 0], [6, 70, 0], [22, 70.5, 0], [26, 58, 0]], roofC:'#b8bec4', pil:[[116, 3.2, 0.6], [70, 3.2, 0.2]], doors:[158, 117, 70], lines:[[[3, 43.5], [110, 44, 60], [199, 41]]],
-    hl:[[203.4, 40.5, 1], [188, 42, 2], [190, 38.5, 1], [203.6, 37, 1]], tl:[[0.4, 50, 1], [8, 50.5, 1], [7, 46, 1], [0.3, 45.5, 1]], wheel:{t:'split', n:5, fin:'machined'}, col:'#2b2e33'},
+  // the facelifted fourth-generation (KA4) Carnival: a boxy roof over a sloped hatch, a silver C-pillar blade between the quarter glass and
+  // the sliding door, a sharp shoulder crease from the L-shaped tail lamp forward, body-colour flares round the arches, a chrome sill strip,
+  // a long raked windshield and an upright nose with the vertical L-shaped headlamp
+  'Kia|Carnival':{L:203.7, H:68.5, WB:121.7, FO:39, TD:28.6, rim:19, sill:11, nose:38, tail:[25.5, 64.5], noTrim:1, sh:36,
+    pts:[[25, 10.6, 0], [12, 11.5, 2], [4.5, 14.5, 2], [2.2, 18, 1.5], [1.3, 24, 1], [1.6, 30, 1], [0.6, 34, 1], [0, 38, 1], [0, 46.5, 0.6],
+      [2, 47.6, 1], [10.3, 48.8, 1.5], [17, 55.5, 2], [22.5, 61.8, 2], [25.5, 64.5, 2], [32, 66.2, 4], [50, 67.4, 8], [80, 67.7, 10],
+      [110, 67.7, 10], [122, 67.2, 5], [127, 66.3, 3], [140, 57.4, 6], [153, 47.8, 3], [170, 46.2, 8], [190, 44.8, 6], [199, 43.6, 3],
+      [202.8, 40.6, 2], [203.6, 34, 1.5], [203.7, 22, 1], [203, 15.5, 1.5], [200.5, 11, 1.5], [194, 10, 1.5], [185, 10.5, 0]],
+    arches:[[[18.5, 10, 0], [18, 15, 1], [16, 22, 2], [10.5, 28.5, 4], [1, 31.2, 5], [-6, 30.5, 5], [-12, 27.5, 4], [-16.5, 21, 3],
+        [-17.8, 13, 1], [-17.8, 10, 0]],
+      [[18, 10, 0], [17.8, 15, 1], [15.5, 23.5, 2], [10, 28.8, 4], [1, 30.9, 5], [-6, 30.2, 5], [-11.5, 27.5, 4], [-15, 22, 3],
+        [-16.3, 14, 1], [-16.3, 10, 0]]],
+    belt:[47.2, 46.7],
+    w:[[11.2, 49.2, 0.4], [17.6, 55.6, 2], [23, 61.6, 2], [27.6, 64, 2], [45, 64.6, 6], [80, 64.8, 10], [110, 64.6, 8], [124.2, 64.2, 1.5],
+      [151.2, 46.5, 0.4], [146, 46.2, 0.4], [125, 46.5, 6], [100, 46.7, 0.4], [60, 47.2, 6], [46, 49, 1], [12, 49.2, 0.4]],
+    // the quarter glass, the sliding door's glass, the front door glass and the small quarter-light ahead of it
+    glass:[[[13.8, 49.6, 0.3], [22, 58.6, 2], [27.6, 62.3, 1], [56.4, 62.4, 0.3], [45.4, 49.5, 0.3]],
+      [[60.6, 47.4, 0.3], [65.8, 63.8, 0.3], [99.2, 64.1, 0.3], [99.2, 47, 0.3]],
+      [[107.6, 63.3, 0.3], [123.6, 63.2, 2], [145.2, 49.9, 0.3], [145.2, 46.8, 0.3], [107.6, 46.9, 0.3]],
+      [[146.2, 49.4, 0.3], [150.4, 46.6, 0.3], [146.2, 46.5, 0.3]]],
+    seats:[121, 86], handles:[[93, 41], [109, 41]], hw:11.5,
+    // the front door's leading edge, the shut between the sliding and front doors, and the sliding door's trailing edge over the rear arch
+    doors:[[[144.7, 44.5, 0], [144, 30, 3], [143.8, 11.2, 0]],
+      [[102.7, 45.3, 0], [101, 37.3, 3], [100.7, 29.3, 3], [101.7, 20, 3], [102.7, 11.2, 0]],
+      [[52.3, 44.4, 0], [52.7, 35, 3], [55, 28.7, 4], [61, 20, 3], [64, 15, 0]]],
+    // the door bottoms, the lower door crease and the fender crease running up into the headlamp
+    seams:[[[64, 16.8], [102, 16.6, 30], [143.8, 16.8]], [[66, 24.2], [100, 23.6, 30], [143, 23.2]], [[174.7, 30.7], [182, 35.5]]],
+    // the sharp shoulder crease from the tail lamp to the hood shut, and the outer edge of the raised flares round both arches
+    lines:[[[17, 44.3], [60, 44.4, 30], [125, 44.5, 30], [146, 43.5, 8], [168, 40.6, 6], [180, 39]],
+      [[25, 10.8], [26.5, 22, 4], [31, 30.5, 6], [40.3, 34.6, 6], [52.3, 32, 6], [60.5, 24, 4], [63.7, 14]],
+      [[145.3, 13.3], [146.6, 23, 4], [152, 31.5, 6], [162, 35.7, 6], [174, 33.3, 6], [181.5, 26, 4], [184.7, 13.3]]],
+    shapes:[
+      // the silver blade on the C-pillar and the black strip ahead of it
+      {p:[[45.4, 49.3, 0.3], [56.6, 62.6, 0.6], [63.6, 64.2, 0.6], [55.4, 47.4, 0.3]], f:'#cfd3d7', s:'#9aa0a6'},
+      // the black wrapped hatch glass beyond the quarter window
+      {p:[[2, 47.6, 0.4], [10.3, 48.8, 1.5], [17, 55.5, 2], [22.5, 61.8, 2], [25.4, 64.2, 0.4], [27, 62.2, 1], [21.4, 58.4, 2], [13.2, 49.4, 0.4]], f:'#121416'},
+      // the black lower door cladding with the chrome sill strip in it
+      {p:[[63.8, 10.8, 0], [102, 10.6, 20], [144.6, 10.8, 0], [145.3, 16.6, 0], [102, 16.6, 20], [64, 16.8, 0]], f:'#1c1e21', o:0.9},
+      {p:[[71.3, 14.7, 0.4], [105, 14.6, 20], [140, 14.4, 0.4], [140, 13, 0.4], [105, 13.1, 20], [71.3, 13.2, 0.4]], f:'#e1e5e9', s:'#9aa0a6'},
+      // the rear bumper's black lower half and the front bumper's dark lip with its silver corner skid
+      {p:[[1.3, 24, 0.4], [2.2, 18, 1.5], [4.5, 14.5, 2], [12, 11.5, 2], [25, 10.6, 0], [25.4, 15.6, 0], [14, 17.2, 3], [4, 21.6, 2]], f:'#1a1c1f', o:0.85},
+      {p:[[185, 13, 0], [196, 12.2, 1], [202.6, 13.2, 1], [200.5, 11, 1.5], [194, 10, 1.5], [185, 10.5, 0]], f:'#1a1c1f', o:0.85},
+      {p:[[196.2, 16.7, 0.6], [203.3, 16.7, 0.6], [203, 12.8, 0.6], [197.6, 12.8, 0.6]], f:'#c9ced3', s:'#8a9096'},
+      // the L-shaped tail lamp: a bar under the hatch glass dropping down the corner
+      {p:[[0, 47, 0.4], [17, 47.2, 0.6], [17, 44.4, 0.4], [4.4, 44.4, 0.6], [4.4, 35, 0.4], [0.3, 35, 0.4]], f:'#4a0a12', s:'#1a0508'},
+      {p:[[0.8, 35.8], [0.8, 46.2, 0.6], [16.4, 46.3]], open:1, w:0.5, f:'#ff4a4a', glow:'#ff2a2a'},
+      // the grille's edge at the nose
+      {p:[[202.2, 38], [203.4, 31, 1], [203.6, 22]], open:1, w:0.6, f:'#1a1c1f'}],
+    // the body-colour door mirror on the front door
+    ext:[{p:[[125, 48.6, 0.8], [126, 51.3, 1], [134, 51.6, 1.5], [138, 50, 1], [138.4, 46.2, 0.8], [135, 45, 1], [129.6, 45.6, 0.6]], f:'paint', s:'#3a3d42'}],
+    // the headlamp: a top bar running round the corner and a vertical bar dropping from it
+    hl:[[180.6, 38.8, 0.3], [196, 38.3, 0.6], [197, 36.2, 0.4], [197, 26.2, 0.4], [192.4, 25.4, 0.4], [189.4, 29, 1], [184, 35.4, 1]],
+    hlc:'#14181d', drl:[[182, 38], [189.5, 37.8], [190.8, 27.4]],
+    wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#c9ccd0'},
   // the fourth-generation (XL40) Sienna: a long flat roof with silver rails over a spoilered tailgate, a pointed chrome-framed quarter window,
   // a sliding door whose track hides in the sweeping haunch, a long swept headlamp and a deep nose over a lower chrome-trimmed bumper
   'Toyota|Sienna':{L:203.5, H:68.5, WB:120.5, FO:38, TD:28, rim:20, sill:11, nose:33.1, tail:[14.7, 63.1], noTrim:1, sh:36,
@@ -6278,9 +6329,61 @@ Object.assign(VEH_SPECS, {
     hl:[[170.1, 41.6, 0.3], [180, 40.6, 3], [190, 39, 3], [197.9, 36.4, 1], [199, 33, 0.4], [194, 34.6, 2], [186, 37, 3], [176, 39.6, 2]],
     hlc:'#1f262e', drl:[[171, 41.4], [180, 40.4], [190, 38.6], [197, 36.2]],
     wheel:{t:'twin', n:5, fin:'chrome'}, haunch:[0.6, 0.6], col:'#5f6266'},
-  'Honda|Odyssey':{L:205.2, H:69.6, WB:118.1, FO:40.5, TD:28, rim:19, cr:14, cf:11, sill:11, tail:[2, 65.5], tb:40.5, rr:[6, 69.2], rrR:4, rf:[141, 69.5], rfR:7, cowl:[166, 45], hood:[200, 40], nose:34.5,
-    belt:[45, 44.5], w:[[9, 42, 1], [8, 66, 3], [16, 67.8, 8], [100, 68, 30], [137, 67.6, 4], [161, 44.5, 1], [70, 46, 1], [64, 42.3, 1]], pil:[[116, 3.2, 0.6], [68, 3.2, 0.2]], doors:[158, 117, 68],
-    lines:[[[3, 40], [64, 40.5, 4], [70, 44, 4], [200, 40]]], hl:[[204.9, 38.5, 1], [188, 40.5, 2], [190, 36.5, 1], [205.1, 35.5, 1]], tl:[[0.4, 47, 1], [10, 47.5, 1], [9, 43.5, 1], [0.3, 43, 1]], wheel:{t:'split', n:5, fin:'gunmetal'}, col:'#3e4b5c'},
+  // the facelifted fifth-generation (RL6) Odyssey: a long roof over an upright hatch, a body-colour D-pillar arching over the quarter glass,
+  // a sliding door whose track hides under the chrome belt strip, a shoulder crease from the tail lamp to the headlamp, a chrome rocker
+  // strip, a long raked windshield and a short rounded nose
+  'Honda|Odyssey':{L:205.2, H:69.6, WB:118.1, FO:40.5, TD:28, rim:19, sill:11, nose:35.5, tail:[6.5, 65.5], noTrim:1, sh:36,
+    pts:[[28.3, 10.6, 0], [16, 11, 2], [4, 11.8, 2], [1, 13.5, 1.5], [0.2, 18, 1], [0, 26, 1], [0.2, 34, 1], [0.6, 40, 1], [1.2, 45, 1],
+      [2, 47.5, 1], [3.2, 52, 1.5], [5, 60, 2], [6.5, 65.5, 1.5], [9, 67.6, 2], [18, 69, 4], [40, 69.4, 10], [80, 69.5, 12], [98, 69, 8],
+      [108, 67.6, 6], [118, 65.2, 6], [128, 61.8, 6], [140, 54.7, 6], [150, 49.2, 4], [155.5, 45.6, 3], [170, 43.8, 8], [185, 41.8, 6],
+      [196, 40.6, 3], [201, 38.8, 2], [204, 35.5, 2], [205.1, 30, 1.5], [205.2, 24, 1], [204.2, 18, 1.5], [202, 12.5, 1.5], [197, 10.6, 1.5],
+      [186, 10.4, 0]],
+    arches:[[[17.1, 10, 0], [17, 15, 1], [15.7, 18.7, 2], [10.4, 26.7, 4], [2, 30.2, 5], [-5, 29.8, 5], [-10.9, 28, 4], [-16.3, 20, 3],
+        [-18.3, 12, 1], [-18.3, 10, 0]],
+      [[18, 10, 0], [17.6, 16, 1], [16, 23.3, 2], [12, 28.7, 4], [2, 30.8, 5], [-4, 30.5, 5], [-8.7, 28, 4], [-15, 20, 3],
+        [-17, 12, 1], [-17, 10, 0]]],
+    belt:[46.2, 45.6],
+    w:[[8, 46.2, 0.4], [10.3, 50.7, 2], [18, 56.5, 4], [25, 59.3, 4], [38.3, 62.7, 6], [55.7, 64.6, 2], [80, 64.5, 10], [103, 63.9, 4],
+      [124, 60.3, 6], [136, 54, 6], [154.7, 45.3, 0.4], [146, 45.2, 0.4], [125, 45.4, 6], [104, 45.6, 0.4], [80, 46.2, 10], [56, 46, 1],
+      [30, 45.7, 6], [9, 45.8, 0.4]],
+    // the quarter glass under the arched D-pillar, the sliding door's glass and the front door glass
+    glass:[[[9.5, 46.4, 0.3], [11.5, 50.6, 2], [18.5, 55.8, 4], [25.5, 58.6, 4], [38.6, 61.9, 6], [54.8, 63.8, 0.3], [54.8, 46.4, 0.3]],
+      [[56.8, 64, 0.3], [95, 64.1, 0.3], [95, 46.6, 0.3], [56.8, 46.6, 0.3]],
+      [[105.6, 63.5, 0.3], [124, 60, 6], [135.6, 53.6, 4], [145.8, 47.6, 0.3], [145.8, 45.8, 0.3], [105.6, 45.9, 0.3]]],
+    seats:[118, 80], handles:[[98.3, 38.2], [113.2, 37.5]], hw:12,
+    // the front door's leading edge, the shut between the sliding and front doors, and the sliding door's trailing edge over the rear arch
+    doors:[[[150, 44.6, 0], [149.3, 38.7, 3], [148.3, 25.3, 3], [145.7, 11.4, 0]],
+      [[104.3, 44.3, 0], [106, 37.3, 3], [105.3, 29.3, 3], [104.3, 20, 3], [103, 11, 0]],
+      [[55.3, 45.3, 0], [57.7, 38.7, 3], [60, 29.3, 4], [63.7, 21.3, 3], [64.7, 10.7, 0]]],
+    // the door bottoms and the round-cornered fuel door
+    seams:[[[64.7, 11], [104, 11, 30], [145.7, 11.4]],
+      [[47.7, 41.4], [55.4, 41.4, 1.5], [55.6, 35.2, 1.5], [47.9, 35.2, 1.5], [47.7, 41.4, 1.5]]],
+    // the shoulder crease from the tail lamp to the headlamp, the crease over the rear bumper, and the lower door crease
+    lines:[[[24.3, 40.8], [55, 42.2, 20], [105, 42, 30], [150, 40.8, 20], [180, 39.4]],
+      [[13, 35.3], [16, 30.5, 3], [22, 27.6, 4], [30, 27.2]],
+      [[66, 20.6], [105, 20.4, 30], [146, 20.6]]],
+    shapes:[
+      // the hatch glass seen edge-on behind the D-pillar
+      {p:[[2, 47.5, 0.4], [3.2, 52, 1.5], [5, 60, 2], [6.5, 65.5, 1.5], [9, 66.4, 0.4], [10.6, 64.6, 2], [8.4, 54, 2], [6.4, 47.2, 0.4]], f:'#121416'},
+      // the chrome strip under the side glass and the chrome rocker strip
+      {p:[[8, 46.1, 0.3], [80, 46.4, 20], [146, 45.5, 0.3], [146, 44.7, 0.3], [80, 45.5, 20], [8, 45.2, 0.3]], f:'#e3e6e9', s:'#9aa0a6'},
+      {p:[[64.7, 10.4, 0.3], [105, 10.3, 20], [146, 10.2, 0.3], [146, 8.8, 0.3], [105, 8.9, 20], [64.7, 9, 0.3]], f:'#e3e6e9', s:'#9aa0a6'},
+      // the tail lamp reaching forward along the quarter, and the red reflector low on the rear bumper
+      {p:[[0.5, 43.5, 0.4], [22, 43.6, 0.8], [24.3, 41, 0.6], [22, 39.3, 1], [10, 36, 2], [0.3, 35.4, 0.4]], f:'#5a0a12', s:'#1a0508'},
+      {p:[[1, 42.6], [21, 42.8, 1], [23.2, 41]], open:1, w:0.5, f:'#ff4a4a', glow:'#ff2a2a'},
+      {p:[[0.2, 16.6, 0.3], [7, 16.4, 0.3], [7, 15, 0.3], [0.2, 14.8, 0.3]], f:'#7a0f14'},
+      // the amber side marker, the grille's edge at the nose and the dark lower intake
+      {p:[[179, 26.8, 0.4], [185, 26.6, 0.4], [184.6, 25, 0.4], [179.4, 25, 0.4]], f:'#d9861c', s:'#5a3408', o:0.85},
+      {p:[[204.4, 34], [205.1, 29, 1], [205.2, 25]], open:1, w:0.6, f:'#1a1c1f'},
+      {p:[[199, 19, 0.6], [204.4, 19, 0.6], [203.8, 13.4, 0.6], [199, 13.6, 0.6]], f:'#15171a'},
+      // the front bumper's silver lower lip
+      {p:[[186, 10.6, 0], [197, 10.8, 1], [202, 12.5, 1], [203, 10.4, 1], [197, 9.2, 1], [186, 9.4, 0]], f:'#c9ced3', s:'#8a9096'}],
+    // the door mirror on the black sail ahead of the front door glass
+    ext:[{p:[[141, 41, 0.6], [141.4, 47.6, 0.8], [143, 49.4, 1], [146.6, 49, 0.8], [147.4, 42, 0.8], [146, 40, 0.6]], f:'paint', s:'#3a3d42'}],
+    // the headlamp swept back from the corner
+    hl:[[182, 39, 0.3], [192, 39.8, 1], [200.5, 38, 1], [203.4, 35, 0.6], [200, 34, 1], [190, 35.2, 2], [184, 36.8, 0.4]],
+    hlc:'#161b21', drl:[[184, 38.4], [192, 39], [200, 37.4]],
+    wheel:{t:'blade', n:10, fin:'machined', drill:0}, col:'#eceeef'},
   // the second-generation (RU) Pacifica: a long flat roof falling to a short spoilered hatch, a wrapped black rear glass, a tall quarter window,
   // a sliding door whose track hides under the belt, a chrome lower door strip, and a short sloping nose with a slim swept headlamp
   'Chrysler|Pacifica':{L:204.3, H:69.9, WB:121.6, FO:36.1, TD:28.6, rim:18, sill:10, nose:32.7, tail:[13.7, 63.3], noTrim:1, sh:36,
