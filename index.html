@@ -3344,6 +3344,7 @@ function ageUpYear(){
   resolutionYear(a);
   routineYear(a);
   recordsYear(a);
+  r6Year(a);
   const consPrompted = consequencesYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked));
   const netPrompted = networkYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted));
   const milPrompted = militaryYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted));
@@ -9462,7 +9463,7 @@ function worldStart(a){
                     : [`${nm} ANNOUNCES PRESIDENTIAL RUN`, `${nm} RESIGNS IN DISGRACE`, `${nm} WINS RE-ELECTION`]), `The ${c.role} is the talk of the town.`, 'celeb');
   }
   // a crime wave or storm can hit home right away
-  if(fx.crimeWave && state.assets.some(x => x.category === 'Homes') && r() < 0.25){
+  if(fx.crimeWave && state.assets.some(x => x.category === 'Homes') && r() < (state.r6 && state.r6.security ? 0.08 : 0.25)){
     const loss = inflR(rint(10, 40) * 100, 50), cover = state.insurance.home ? 0.8 : 0;
     pushEntry(a, `Burglars break into ${n}'s home during the crime wave${cover ? '; insurance covers most of the loss' : ''}.`, {money:-Math.round(loss * (1 - cover)), happy:-5});
   }
@@ -10059,8 +10060,10 @@ const FAME_ACTS = [
   {key:'stylist', label:'Hire a celebrity stylist', min:20, cost:5000, meta:'+looks, +image'},
   {key:'mentor', label:'Mentor a rising star', min:40, meta:'+image, they may thank you one day'},
   {key:'documentary', label:'Film a documentary about your life', min:50, meta:'big fame, and they control the edit · every 10 years'},
+  {key:'fanmail', label:'Answer fan mail', min:10, meta:'+image, fans remember'},
+  {key:'livestream', label:'Host a charity livestream', min:0, minAge:16, meta:'raises money for a cause, +image'},
 ];
-const FAME_ICONS = {interview:'🗞️', talkshow:'📺', carpet:'👗', gala:'🥂', stunt:'🎪', feud:'🔥', reality:'🎥', memoir:'📖', product:'🛍️', commercial:'📣', openmic:'🎸', fundraiser:'🏃', podcast:'🎧', gameshow:'🎰', meetgreet:'🤳', stylist:'💇', mentor:'🌠', documentary:'🎞️'};
+const FAME_ICONS = {fanmail:'💌', livestream:'📡', interview:'🗞️', talkshow:'📺', carpet:'👗', gala:'🥂', stunt:'🎪', feud:'🔥', reality:'🎥', memoir:'📖', product:'🛍️', commercial:'📣', openmic:'🎸', fundraiser:'🏃', podcast:'🎧', gameshow:'🎰', meetgreet:'🤳', stylist:'💇', mentor:'🌠', documentary:'🎞️'};
 function fameActState(x){
   const f = FM();
   if(state.crime.prison) return {ok:false, why:'not from prison'};
@@ -10081,7 +10084,13 @@ function fameAct(key){
   state.done['fa_' + key] = true;
   const cost = x.cost ? Math.round(inflR(x.cost, 100) * (key === 'gala' ? Math.max(1, f.level / 40) : 1)) : 0;
   if(cost) pay(cost);
-  if(key === 'interview') pushEntry(state.age, `${n} does a round of interviews.`, {fame:3, image:1, money:inflR(500 + f.level * 40, 50)});
+  if(key === 'fanmail'){
+    if(f.level >= 40 && Math.random() < 0.15) pushEntry(state.age, `${n} spends a weekend answering fan mail. One letter, from a kid who says ${n} got them through a hard year, ends up on the fridge.`, {image:3, fame:1, happy:6});
+    else pushEntry(state.age, `${n} spends a weekend answering fan mail by hand.`, {image:3, fame:1, happy:2});
+  } else if(key === 'livestream'){
+    if(Math.random() < 0.1) pushEntry(state.age, `${n}'s charity livestream is plagued by a bad connection and raises almost nothing.`, {happy:-2});
+    else { const raised = inflR(Math.round(300 + Math.pow(f.level, 1.6) * 60), 50); pushEntry(state.age, `${n} hosts a charity livestream and raises ${fmt(raised)} for ${pick(["a children's hospital", 'a food bank', 'an animal shelter', 'disaster relief'])}.`, {image:4, fame: f.level < 20 ? 2 : 1, happy:4}); }
+  } else if(key === 'interview') pushEntry(state.age, `${n} does a round of interviews.`, {fame:3, image:1, money:inflR(500 + f.level * 40, 50)});
   else if(key === 'talkshow'){
     if(Math.random() < 0.8) pushEntry(state.age, `${n} charms the audience on a late-night talk show.`, {fame:5, image:3, money:inflR(f.level * 150, 100), happy:3});
     else pushEntry(state.age, `${n}'s talk show appearance is painfully awkward, and the clip goes everywhere.`, {fame:3, image:-6, happy:-3});
@@ -11337,7 +11346,7 @@ const medTxt = (c, yearly) => c ? fmt(c) + (yearly ? '/yr' : '') : 'parents pay'
 function exercisedThisYear(){
   const d = state.lastDone || {};                // healthYear runs after the new year's slate is cleared
   return !!(d.gym || d.sport || d.play || d.petWalk || d['pr_workout'] || d.hc_trainer || ACTIVE_HOBBIES.some(k => d['hob_' + k])) ||
-         ACTIVE_HOBBIES.some(k => hobbyLevel(k) >= 40) || (!state.crime.prison && ((H().habits.exercise || 0) > 0 || (state.movedOut && hasHomeMod('gym'))));
+         ACTIVE_HOBBIES.some(k => hobbyLevel(k) >= 40) || (!state.crime.prison && ((H().habits.exercise || 0) > 0 || H().habits.steps === 2 || (state.movedOut && hasHomeMod('gym'))));
 }
 const recently = (age, yrs) => age != null && state.age - age <= yrs;
 function onsetChance(key, d, a){
@@ -12004,7 +12013,8 @@ function prisonYear(a){
   if(Math.random() < 0.6){
     const ev = pick(PRISON_EVENTS.filter(e => !(e[2] && pr.gang && Math.random() < 0.6)));
     if(ev[3]) k.skill = Math.min(100, k.skill + ev[3]);
-    pushEntry(a, ev[0].replace("{n}", n) + ".", ev[1].money ? Object.assign({}, ev[1], {money: inflR(ev[1].money, 10)}) : ev[1]);
+    const sd = ev[2] && state.r6 && state.r6.selfDef != null;
+    pushEntry(a, ev[0].replace("{n}", n) + (sd ? ", but that old self-defense course pays off and they walk away mostly fine" : "") + ".", sd ? {health:-2, happy:-1} : ev[1].money ? Object.assign({}, ev[1], {money: inflR(ev[1].money, 10)}) : ev[1]);
   }
   const vis = state.relationships.filter(r => ['Mother', 'Father', 'Sibling', 'Child', 'Spouse', 'Partner', 'Friend'].includes(r.type) && r.age >= 16 && r.closeness >= 60).sort((p, q) => q.closeness - p.closeness)[0];
   if(vis){
@@ -12462,6 +12472,7 @@ const SAVINGS_GOALS = [
 ];
 function savingsRateFor(bal){
   const r = state.econ.rate;
+  if(state.r6 && state.r6.hysa != null) return Math.max(0.004, r - 0.002, bal >= 25000 ? r - 0.005 : 0);
   if(bal >= 25000) return Math.max(0.003, r - 0.005);
   if(bal >= 2500) return Math.max(0.002, r - 0.015);
   return Math.max(0.001, r - 0.025);
@@ -12771,9 +12782,31 @@ function loansYear(a){
       // past due: the whole balance is owed; otherwise the payment is reset so the loan still clears on time
       l.yearlyPayment = l.yearsLeft <= 1 ? Math.round(l.balance * (1 + l.apr)) : Math.round(loanPay(l.balance, l.apr, l.yearsLeft));
       missed = true;
+      // a second missed year in a row on a car or property loan: the lender takes it back
+      l.missedRun = (l.missedRun || 0) + 1;
+      if(l.assetId && l.missedRun >= 2) repossess(a, l);
+      return;
     }
+    l.missedRun = 0;
   });
   if(missed){ state.missedAges = (state.missedAges || []).concat([a]).slice(-10); adjustCredit(-25); pushEntry(a, `${state.name} misses a loan payment this year — credit takes a hit.`, {}); }
+}
+function toCollections(amt){
+  const prev = state.loans.find(y => y.type === 'Collections');
+  if(prev){ prev.balance += amt; prev.principal += amt; prev.yearsLeft = 5; prev.yearlyPayment = Math.round(loanPay(prev.balance, prev.apr, 5)); }
+  else takeLoan('Collections', amt, 5, 0.16, {});
+}
+// The lender sells what the loan was for at auction; what that doesn't cover moves to collections.
+function repossess(a, l){
+  const i = state.assets.findIndex(x => x.id === l.assetId);
+  state.loans = state.loans.filter(x => x.id !== l.id);
+  if(i < 0) return;
+  const x = state.assets[i], home = x.category === 'Homes', sale = Math.round(x.value * 0.75), left = Math.round(l.balance - sale);
+  state.assets.splice(i, 1);
+  if(left > 0) toCollections(left); else state.money -= left;
+  adjustCredit(home ? -120 : -60);
+  state.repoAges = (state.repoAges || []).concat([a]).slice(-10);
+  pushEntry(a, `After two years of missed payments, the lender ${home ? 'forecloses on' : x.category === 'Real Estate' ? 'forecloses on' : 'repossesses'} ${state.name}'s ${x.name} and sells it at auction for ${fmt(sale)}${left > 0 ? `, leaving ${fmt(left)} still owed` : left < 0 ? `. ${state.name} gets back the ${fmt(-left)} left over` : ''}.`, {happy: home ? -14 : -7});
 }
 function applyCard(){
   if(state.creditCard || state.age < 18 || state.bankrupt || state.done.cardApp) return;
@@ -12812,7 +12845,12 @@ function creditCardYear(a){
   }
   c.balance += c.balance * c.apr;
   const minPay = Math.min(c.balance, Math.max(25, c.balance * 0.03));
-  if(ensureCash(minPay)){ state.money -= minPay; c.balance -= minPay; adjustCredit(1); }
+  if(ensureCash(minPay)){ state.money -= minPay; c.balance -= minPay; c.missedRun = 0; adjustCredit(1); }
+  else if((c.missedRun = (c.missedRun || 0) + 1) >= 2){
+    // two years without even the minimum: the bank closes the card and sells the debt
+    const owed = Math.round(c.balance); state.creditCard = null; toCollections(owed); adjustCredit(-40);
+    pushEntry(a, `After two years of missed payments, the bank closes ${state.name}'s credit card and sends the ${fmt(owed)} balance to collections.`, {happy:-4});
+  }
   else { adjustCredit(-30); pushEntry(a, `${state.name} misses a credit card payment — balance and damage pile up.`, {}); }
 }
 // ---- retirement account ----
@@ -13356,6 +13394,7 @@ function bizPanelHtml(){
   h += bankRow('Franchise', canFr ? `Sell the right to open under your name: ${fmt(franchiseFee())} now, plus yearly royalties.` : 'Needs at least 3 locations and a reputation of 65.', `<button onclick="sellFranchise()" ${!canFr || state.done.franchise ? 'disabled' : ''}>${state.done.franchise ? 'Sold one this year' : 'Sell a franchise'}</button>`);
   h += bankRow('Business loan', 'Borrow to fund growth. The debt stays with you even if the business fails.', `<button onclick="applyBusinessLoan()" ${state.bankrupt || state.done.bizLoan ? 'disabled' : ''}>Apply</button>`);
 
+  h += r6BizHtml(b);
   h += '<div class="plabel">Exit</div>';
   if(b.value >= ipoMin() && b.employees >= 5) h += `<div class="invrow"><div class="itop"><span><b>Take it public (IPO)</b></span></div><div class="owned">Sell 40% to the public for cash and keep 60% as stock in your portfolio. ${bizName(b)} will trade under the ticker you choose (2-5 letters).</div>
       <input id="ipoTicker" class="amt-input" maxlength="5" value="${tickerFor(bizName(b))}" aria-label="Ticker symbol" style="text-transform:uppercase"><div class="assetbuy"><button onclick="ipoBusiness()">Go public</button></div></div>`;
@@ -13486,6 +13525,20 @@ function coverWithInvestments(a){
   }
   if(sold > 0) pushEntry(a, `${state.name} sells ${fmt(sold)} of investments to cover bills.`, {happy:-2});
 }
+// Deep in the red, luxuries go first: planes, boats and other extras, then spare property. The home you live in and one everyday car stay.
+function coverWithAssets(a){
+  const keepCar = state.assets.filter(x => x.category === 'Cars' && ['car', 'bike', 'bicycle'].includes((findCatalog(x.key) || {}).kind)).sort((p, q) => p.value - q.value)[0];
+  const homes = state.assets.filter(x => x.category === 'Homes').sort((p, q) => q.value - p.value), keepHome = homes[0];
+  const owed = x => state.loans.filter(l => l.assetId === x.id).reduce((t, l) => t + l.balance, 0);
+  const spare = state.assets.filter(x => x !== keepCar && x !== keepHome && x.value * 0.8 > owed(x))
+    .sort((p, q) => { const up = x => { const t = findCatalog(x.key) || {}; return (t.upkeepFlat || 0) * 10 + (t.upkeepPct || 0) * x.value; }; return up(q) - up(p) || q.value - p.value; });
+  const sold = [];
+  for(const x of spare){
+    if(state.money >= 0) break;
+    sellAssetFor(x.id, x.value * 0.85); sold.push(x.name);
+  }
+  if(sold.length) pushEntry(a, `With bills piling up, ${state.name} has to sell ${sold.length > 2 ? sold.slice(0, 2).join(', ') + ' and ' + (sold.length - 2) + ' more' : sold.join(' and ')} at a discount.`, {happy:-6});
+}
 function yearlyFinances(a){
   const e = state.edu, econ = state.econ;
   let income = 0;
@@ -13588,10 +13641,11 @@ function yearlyFinances(a){
 
   if(state.autoInvest > 0 && net > 0 && state.money > 0 && a >= 18){
     const amt = Math.min(state.money, Math.round(net * state.autoInvest));
-    if(amt >= 10 && execBuy('IDXF', amt)) state.lastAutoInvested = amt;
+    if(amt >= 10 && execBuy(autoFund(), amt)) state.lastAutoInvested = amt;
   }
   if(state.bankrupt && a >= state.bankruptUntilAge) state.bankrupt = false;
   if(state.money < 0) coverWithInvestments(a);
+  if(a >= 18 && state.money <= -20000 * econ.cumInflation) coverWithAssets(a);
   if(net < 0 && !e.program && state.lifestyle !== 'frugal' && !state.tipFrugal && state.money < 0){
     state.tipFrugal = true;
     pushEntry(a, `Money is tight. Switching to a frugal lifestyle in the Bank tab would cut ${state.name}'s living costs by about a third.`, {});
@@ -13605,9 +13659,7 @@ function yearlyFinances(a){
     const yearlyIncome = Math.max(income, 30000 * econ.cumInflation);
     if(unsecured < yearlyIncome * 1.5){
       state.money = 0;
-      const prev = state.loans.find(l => l.type === 'Collections');
-      if(prev){ prev.balance += owed; prev.principal += owed; prev.yearsLeft = 5; prev.yearlyPayment = Math.round(prev.balance * prev.apr / (1 - Math.pow(1 + prev.apr, -5))); }
-      else takeLoan('Collections', owed, 5, 0.16, {});
+      toCollections(owed);
       adjustCredit(-25);
       pushEntry(a, `${state.name} falls behind on bills, and ${fmt(owed)} goes to collections on a five-year repayment plan.`, {happy:-4});
     }
@@ -14720,7 +14772,7 @@ function retire(silent){
 // the annual review: how the past year at work went shapes raises, promotions and layoffs
 function reviewScore(){
   const d = state.lastDone || {}, s = state.stats;
-  return 50 + (state.routine === 'early' ? 4 : state.routine === 'night' ? -2 : 0) + (d.wk_project ? 15 : 0) + (d.wk_overtime ? 10 : 0) + (d.wk_newhire ? 5 : 0) + (d.wk_suckup ? 4 : 0) + (d.wk_learn ? 6 : 0) - (d.wk_pto ? 3 : 0) - (d.wk_sick ? 10 : 0) +
+  return 50 + (state.routine === 'early' ? 4 : state.routine === 'night' ? -2 : 0) + (sleepHrs() === 6 ? 4 : 0) + (d.wk_project ? 15 : 0) + (d.wk_overtime ? 10 : 0) + (d.wk_newhire ? 5 : 0) + (d.wk_suckup ? 4 : 0) + (d.wk_learn ? 6 : 0) - (d.wk_pto ? 3 : 0) - (d.wk_sick ? 10 : 0) +
     (s.smarts - 50) / 5 + (s.health < 30 ? -10 : 0) + (hasMyTrait('Ambitious') ? 8 : 0) - (hasMyTrait('Flaky') ? 8 : 0) + rint(-10, 10);
 }
 function reviewYear(j, a){
@@ -14922,7 +14974,7 @@ function mePanelHtml(){
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 12 ? "Not working" : "Work is available from age 12") + "</div>";
   if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
-  h += lifeGlanceHtml() + comingUpHtml() + yearReviewHtml() + momentsGalleryHtml() + statsChartHtml() + goalsHtml() + selfHtml() + styleHtml() + capsuleHtml() + resolutionHtml() + routineHtml();
+  h += lifeGlanceHtml() + comingUpHtml() + yearReviewHtml() + momentsGalleryHtml() + statsChartHtml() + goalsHtml() + selfHtml() + styleHtml() + capsuleHtml() + resolutionHtml() + routineHtml() + r6MeHtml();
   const rows = [["Cash", state.money], ["Savings & CDs", state.savings + cdTotal()], ["Investments", portfolioValue()], ["Retirement account", state.retirement.balance],
     ["Property & valuables", assetsValue()], ["Business", state.business ? state.business.value * bizShare(state.business) : 0], ["Trust fund", state.trustFund || 0], ["College fund", state.collegeFund || 0], ["Debts", -totalDebt()]].filter(r => Math.round(r[1]) !== 0);
   h += '<div class="plabel">Net worth</div><div class="invrow">' + rows.map(r => '<div class="itop"><span>' + r[0] + '</span><span class="price ' + (r[1] < 0 ? "down" : "") + '">' + fmt(r[1]) + "</span></div>").join("") +
@@ -15493,7 +15545,7 @@ const oddsTxt = c => (c >= 70 ? 'good odds' : c >= 45 ? 'fair odds' : 'long shot
 // yearly chance of a layoff; ten years with the same employer cuts it by 40%
 function layoffChance(j){
   const base = (state.econ.recession ? 0.09 : 0.03) + (hasMyTrait('Flaky') ? 0.02 : 0) + (state.world.fx.layoffs ? 0.04 : 0) + (wfx().layoffs || 0) + (trackFx(j.track).layoff || 0);
-  return Math.max(0, base) * (j.years >= 10 ? 0.6 : 1) * (j.review === 'poor' ? 1.5 : 1);
+  return Math.max(0, base) * (j.years >= 10 ? 0.6 : 1) * (j.review === 'poor' ? 1.5 : 1) * (j.union ? 0.6 : 1);
 }
 function jobRisksHtml(){
   const j = state.job, tr = j && CAREERS[j.track], rank = tr && tr[j.rank]; if(!rank || state.crime.prison) return '';
@@ -16264,19 +16316,416 @@ function updateTabDots(){
 }
 // ---------- Sub-menus: the busier tabs are split into sections ----------
 // Each section heading is matched to a sub-menu; a heading that matches none stays with the one before it.
+// ---------- Two more things to do in every tab ----------
+const R6 = () => state.r6 || (state.r6 = {});
+const r6Btn = (label, fn, dis) => `<button onclick="${fn}" ${dis ? 'disabled' : ''}>${label}</button>`;
+
+// Me: a journal, where a streak of years pays off, and a legal name change
+function writeJournal(){
+  if(state.done.journal || state.age < 8 || !state.alive) return;
+  const j = R6().journal || (R6().journal = {streak:0, last:null, total:0}), n = state.name;
+  state.done.journal = true;
+  j.streak = j.last === state.age - 1 ? j.streak + 1 : 1; j.last = state.age; j.total++;
+  const where = state.crime.prison ? ' in a notebook from the commissary' : '';
+  if(j.streak >= 5) pushEntry(state.age, `${n} fills another year of journal pages${where}, ${j.streak} years in a row now. Rereading the old ones puts a lot in perspective.`, {happy:4, smarts:1});
+  else pushEntry(state.age, `${n} writes in their journal${where}${j.streak > 1 ? ' (' + j.streak + ' years in a row)' : ''}.`, {happy:2});
+  render();
+}
+const nameFee = () => inflR(450, 10);
+function changeName(){
+  const el = document.getElementById('newName'), v = cleanPersonName(el && el.value);
+  if(state.age < 18 || state.crime.prison || state.done.rename || (R6().renames || 0) >= 3) return;
+  if(!v || v === state.name){ queueToast(v ? 'That is already your name.' : 'Type the new name first.', '', true); return; }
+  if(!canPay(nameFee())) return;
+  const old = state.name; pay(nameFee());
+  state.name = v; state.done.rename = true; R6().renames = (R6().renames || 0) + 1;
+  pushEntry(state.age, `${old} pays the court ${fmt(nameFee())} and legally becomes ${v}.`, {happy:3});
+  render();
+}
+function r6MeHtml(){
+  const a = state.age, j = R6().journal, streak = j && j.last >= a - 1 ? j.streak : 0;
+  let h = '';
+  if(a >= 8) h += '<div class="plabel">Journal</div>' + bankRow('Write in your journal', `${j ? 'Years written: ' + j.total + (streak > 1 ? ' · current streak ' + streak + ' years' : '') + '. ' : ''}A few lines a year lifts your mood; keep it up five years running and it does a lot more.`,
+    r6Btn(state.done.journal ? 'Written ✓' : 'Write', 'writeJournal()', state.done.journal));
+  if(a >= 18 && !state.crime.prison){
+    const left = 3 - (R6().renames || 0);
+    h += '<div class="plabel">Your name</div><div class="invrow"><div class="owned">A legal name change costs ' + fmt(nameFee()) + ' in court fees.' + (left < 3 ? ' You can change it ' + left + ' more time' + (left === 1 ? '' : 's') + '.' : '') + '</div>' +
+      (left > 0 ? `<input id="newName" class="amt-input" maxlength="20" placeholder="New name" aria-label="New name"><div class="assetbuy">${r6Btn(state.done.rename ? 'Changed ✓' : 'Change my name', 'changeName()', state.done.rename || !canPay(nameFee()))}</div>` : '') + '</div>';
+  }
+  return h;
+}
+
+// Activities: a community garden plot and a self-defense course
+const gardenFee = () => state.age < 18 ? 0 : inflR(60, 5);
+const sdCost = () => state.age < 18 ? 0 : inflR(250, 10);
+function toggleGarden(){
+  if(state.age < 10 || state.crime.prison || state.done.garden) return;
+  const r = R6(), n = state.name; state.done.garden = true;
+  if(r.garden){ r.garden = false; pushEntry(state.age, `${n} hands back the keys to their community garden plot.`, {}); render(); return; }
+  if(!canPay(gardenFee())) return;
+  if(gardenFee()) pay(gardenFee());
+  r.garden = true; r.gardenSince = state.age;
+  pushEntry(state.age, `${n} takes on a plot at the community garden and plants tomatoes, beans and far too much zucchini.`, {happy:3, health:1});
+  render();
+}
+function selfDefense(){
+  if(state.age < 10 || state.crime.prison || R6().selfDef != null || !canPay(sdCost())) return;
+  if(sdCost()) pay(sdCost());
+  R6().selfDef = state.age; state.done.selfDef = true;
+  pushEntry(state.age, `${state.name} takes a self-defense course and walks out standing a little taller.`, {health:3, happy:3});
+  freezeSpend(); render();
+}
+function r6ActHtml(){
+  if(state.age < 10 || state.crime.prison) return '';
+  const r = R6();
+  let h = '<div class="plabel">Community garden</div>' + bankRow('A plot at the community garden', (r.garden ? `Yours since age ${r.gardenSince}. ` : '') + `Fresh air, fresh vegetables and neighbors to talk to: a little healthier and happier each year, and the harvest trims the grocery bill once you live on your own. ${gardenFee() ? fmt(gardenFee()) + ' a year.' : 'Free for kids.'}`,
+    r6Btn(r.garden ? 'Give up the plot' : 'Get a plot', 'toggleGarden()', state.done.garden || (!r.garden && !canPay(gardenFee()))));
+  h += '<div class="plabel">Self-defense</div>' + bankRow('Self-defense course', r.selfDef != null ? `Took it at ${r.selfDef}. You know how to keep yourself safe, inside and outside.` : `A course in staying safe. +health, +happy, and it helps if you are ever attacked in prison. ${sdCost() ? fmt(sdCost()) + '.' : 'Free for kids.'}`,
+    r.selfDef != null ? '' : r6Btn('Take the course', 'selfDefense()', !canPay(sdCost())));
+  return h;
+}
+
+// School: a pen pal abroad and a summer reading challenge
+const PENPAL_FROM = {Spanish:['Mexico', 'Spain', 'Argentina', 'Colombia'], French:['France', 'Quebec', 'Senegal', 'Belgium'], Mandarin:['Taiwan', 'Singapore', 'Shanghai'], Japanese:['Osaka', 'Tokyo', 'Sapporo'],
+  German:['Germany', 'Austria', 'Switzerland'], Italian:['Rome', 'Naples', 'Milan'], Korean:['Seoul', 'Busan'], 'Sign language':['a Deaf school across the country']};
+function startPenpal(){
+  if(state.age < 8 || state.age > 17 || state.crime.prison || R6().penpal || state.done.penpal) return;
+  const l = LANGUAGES.includes(ED().lang) ? ED().lang : 'Spanish', p = {name: freeName(rollGender()), from: pick(PENPAL_FROM[l]), lang:l, since: state.age};
+  R6().penpal = p; state.done.penpal = true; R6().hadPenpal = true;
+  pushEntry(state.age, `${state.name} starts writing to a pen pal, ${p.name}, from ${p.from}. The first letter is half in ${l}.`, {happy:3});
+  render();
+}
+function stopPenpal(){
+  const p = R6().penpal; if(!p || state.done.penpal) return;
+  R6().penpal = null; state.done.penpal = true;
+  pushEntry(state.age, `${state.name} and their pen pal ${p.name} stop writing.`, {});
+  render();
+}
+function readingChallenge(){
+  if(state.age < 6 || state.age > 17 || state.crime.prison || state.done.readChal) return;
+  state.done.readChal = true; state.done.read = true;
+  const books = rint(6, 14) + Math.round(state.stats.smarts / 20), r = R6(); r.books = (r.books || 0) + books;
+  const prize = Math.random() < 0.25 ? inflR(50, 5) : 0;
+  pushEntry(state.age, `${state.name} reads ${books} books for the summer reading challenge${prize ? ' and wins the library prize, a ' + fmt(prize) + ' bookstore gift card' : ''}.`, Object.assign({smarts:2, happy:1, gpa:1}, prize ? {money:prize} : {}));
+  render();
+}
+function r6EduHtml(){
+  const a = state.age, p = R6().penpal;
+  if(state.crime.prison || (a < 6 && !p)) return '';
+  let h = '';
+  if(p || (a >= 8 && a <= 17)) h += '<div class="plabel">Pen pal</div>' + (p ? bankRow(`Writing to ${p.name}`, `From ${p.from}, since age ${p.since}. Their letters help your ${p.lang} every year, and teach you about life far away.`, r6Btn('Stop writing', 'stopPenpal()', state.done.penpal))
+    : bankRow('Find a pen pal', `Trade letters with a kid abroad who speaks ${LANGUAGES.includes(ED().lang) ? ED().lang : 'Spanish'} (change the language in Languages). Free.`, r6Btn('Find one', 'startPenpal()', state.done.penpal)));
+  if(a >= 6 && a <= 17) h += '<div class="plabel">Reading challenge</div>' + bankRow('Summer reading challenge', `The library's summer challenge: +smarts and a better GPA, and a chance at a prize.${R6().books ? ' Books read so far: ' + R6().books + '.' : ''}`, r6Btn(state.done.readChal ? 'Done ✓' : 'Sign up', 'readingChallenge()', state.done.readChal));
+  return h;
+}
+
+// Career: a labor union and a sabbatical
+const UNION_TRACKS = ['Retail', 'Education', 'Trades', 'Medicine', 'Law Enforcement', 'Firefighting', 'Culinary', 'Aviation', 'Green Energy', 'Acting', 'Music'];
+const NO_SABB = ['Odd Jobs', 'Military', 'Politics'];
+const unionDues = j => Math.max(inflR(100, 10), Math.round(j.salary * 0.01 / 10) * 10);
+function toggleUnion(){
+  const j = state.job, n = state.name; if(!j || !UNION_TRACKS.includes(j.track) || state.done.union || state.crime.prison) return;
+  state.done.union = true; j.union = !j.union;
+  if(j.union){ R6().unionEver = true; pushEntry(state.age, `${n} joins the union at work: ${fmt(unionDues(j))} a year in dues, and a lot more people in their corner.`, {happy:2}); }
+  else pushEntry(state.age, `${n} drops their union membership.`, {});
+  render();
+}
+const sabbCost = j => Math.round(j.salary * 0.25 / 100) * 100;
+const sabbWhy = j => NO_SABB.includes(j.track) ? 'not in this line of work' : j.years < 7 ? 'after 7 years in the job' : j.sabbAge != null && state.age - j.sabbAge < 7 ? 'once every 7 years' : !canPay(sabbCost(j)) ? 'needs ' + fmt(sabbCost(j)) + ' to live on' : '';
+function takeSabbatical(){
+  const j = state.job; if(!j || state.done.sabb || state.crime.prison || sabbWhy(j)) return;
+  const cost = sabbCost(j); state.done.sabb = true; j.sabbAge = state.age; R6().sabbs = (R6().sabbs || 0) + 1;
+  pushEntry(state.age, `${state.name} takes a three-month unpaid sabbatical from work (${fmt(cost)} in lost pay) and comes back rested, with a head full of new ideas.`, {money:-cost, happy:10, health:4, smarts:2});
+  render();
+}
+function r6JobHtml(j){
+  let h = '';
+  if(UNION_TRACKS.includes(j.track)) h += iopt('✊', j.union ? 'Leave the union' : 'Join the union', state.done.union ? 'done ✓' : j.union ? 'member · ' + fmt(unionDues(j)) + '/yr dues' : 'fewer layoffs, contract raises, the odd strike · ' + fmt(unionDues(j)) + '/yr', 'toggleUnion()', state.done.union, state.done.union);
+  if(!NO_SABB.includes(j.track)){ const why = sabbWhy(j); h += iopt('🏝️', 'Take a sabbatical', state.done.sabb ? 'done ✓' : why || 'three months off unpaid (' + fmt(sabbCost(j)) + ')', 'takeSabbatical()', state.done.sabb || !!why, state.done.sabb); }
+  return h;
+}
+
+// People: a family holiday dinner and a family tree
+const KIN_TYPES = ['Mother', 'Father', 'Sibling', 'Child', 'Grandchild'];
+const famAround = () => state.relationships.filter(r => KIN_TYPES.includes(r.type));
+const dinnerCost = () => inflR(120 + 35 * (famAround().length + (hasRel('Spouse', 'Partner') ? 1 : 0)), 10);
+function holidayDinner(){
+  if(state.age < 18 || !state.movedOut || state.crime.prison || state.done.dinner || !famAround().length || !canPay(dinnerCost())) return;
+  const n = state.name, cost = dinnerCost(); state.done.dinner = true; pay(cost);
+  if(Math.random() < 0.15){
+    const r = pick(famAround()); bump(r, -8);
+    pushEntry(state.age, `${n} hosts the family holiday dinner (${fmt(cost)}). It's lovely, until ${r.name} brings up politics over dessert.`, {happy:1, family:3});
+  } else pushEntry(state.age, `${n} hosts the family holiday dinner (${fmt(cost)}): too much food, old stories and everyone around one table.`, {happy:5, family:6, partner:2});
+  freezeSpend(); render();
+}
+const treeCost = () => inflR(100, 5);
+const HERITAGE = ['Irish', 'Italian', 'West African', 'Scandinavian', 'Polish', 'Mexican', 'Korean', 'Scottish', 'Lebanese', 'Filipino', 'German', 'Portuguese', 'Ukrainian', 'Cuban', 'Welsh', 'Greek'];
+function familyTree(){
+  const r = R6();
+  if(state.age < 14 || state.crime.prison || state.done.tree || (r.treeAge != null && state.age - r.treeAge < 10) || !canPay(treeCost())) return;
+  const n = state.name; pay(treeCost()); state.done.tree = true; r.treeAge = state.age;
+  if(!r.heritage) r.heritage = [pick(HERITAGE), pick(HERITAGE)].filter((x, i, arr) => arr.indexOf(x) === i);
+  const roll = Math.random();
+  if(roll < 0.3 && state.relationships.length < 60){
+    const c = newRel('Friend', {age: Math.max(10, state.age + rint(-15, 15)), closeness: rint(25, 40), origin: 'a distant cousin found through a family tree site'});
+    pushEntry(state.age, `${n}'s family tree turns up ${r.heritage.join(' and ')} roots, and a distant cousin, ${c.name}, who writes back right away.`, {happy:6, family:2});
+  } else if(roll < 0.45) pushEntry(state.age, `${n} traces the family tree back to a great-great-grandparent who ${pick(['ran a bakery that fed half a town', 'sailed across an ocean with two dollars', 'was a famous local fiddler', 'helped build a railroad', 'won a medal in a long-forgotten war'])}.`, {happy:6, smarts:1});
+  else pushEntry(state.age, `${n} builds out the family tree: ${r.heritage.join(' and ')} roots, and a few names nobody remembered.`, {happy:3, smarts:1});
+  render();
+}
+function r6SocHtml(){
+  const a = state.age, r = R6(); if(state.crime.prison || a < 14) return '';
+  let h = '';
+  if(a >= 18 && state.movedOut && famAround().length) h += '<div class="plabel">Family holiday dinner</div>' + bankRow('Host the holiday dinner', `Bring the family together for a big meal: closer family, a happier you, and the odd argument. About ${fmt(dinnerCost())}.`, r6Btn(state.done.dinner ? 'Hosted ✓' : 'Host it', 'holidayDinner()', state.done.dinner || !canPay(dinnerCost())));
+  const wait = r.treeAge != null && a - r.treeAge < 10;
+  h += '<div class="plabel">Family tree</div>' + bankRow('Research your family tree', (r.heritage ? 'Your roots: ' + r.heritage.join(' and ') + '. ' : '') + `A DNA kit and a genealogy site: stories about your ancestors, and maybe a relative you never knew. ${fmt(treeCost())}${wait ? '; you can dig again from age ' + (r.treeAge + 10) : ''}.`, r6Btn(state.done.tree ? 'Done ✓' : 'Start digging', 'familyTree()', state.done.tree || wait || !canPay(treeCost())));
+  return h;
+}
+
+// Bank: a high-yield savings account and a personal finance course
+function openHysa(){
+  if(state.age < 18 || state.crime.prison || R6().hysa || state.savings < inflR(500, 50)) return;
+  R6().hysa = state.age;
+  pushEntry(state.age, `${state.name} moves their savings to an online high-yield account. Same money, better interest.`, {happy:1});
+  render();
+}
+const hysaRate = () => Math.max(0.004, state.econ.rate - 0.002);
+const courseCost = () => inflR(150, 10);
+function financeCourse(){
+  if(state.age < 16 || state.crime.prison || R6().finCourse != null || !canPay(courseCost())) return;
+  pay(courseCost()); R6().finCourse = state.age;
+  pushEntry(state.age, `${state.name} takes a personal finance course: budgets, credit, compound interest. A lot of things suddenly make sense.`, Object.assign({smarts:3, happy:1}, state.age >= 18 ? {credit:8} : {}));
+  render();
+}
+function r6BankHtml(){
+  if(state.age < 16) return '';
+  const r = R6(); let h = '';
+  if(state.age >= 18) h += '<div class="plabel">Savings account upgrade</div>' + bankRow('High-yield savings', r.hysa != null ? `Open since age ${r.hysa}: your savings earn ${(Math.max(savingsRate(), hysaRate()) * 100).toFixed(2)}% at any balance.` : `An online bank pays about ${(hysaRate() * 100).toFixed(2)}% on any balance, versus ${(savingsRate() * 100).toFixed(2)}% now. Needs ${fmt(inflR(500, 50))} in savings to open.`,
+    r.hysa != null ? '' : r6Btn('Open one', 'openHysa()', state.savings < inflR(500, 50) || state.crime.prison));
+  h += '<div class="plabel">Savings know-how</div>' + bankRow('Personal finance course', r.finCourse != null ? `Took it at ${r.finCourse}. Haggling bills goes better when you know the numbers.` : `An evening class on budgets, credit and investing: +smarts, and a credit score bump if you are 18 or older. ${fmt(courseCost())}, once.`,
+    r.finCourse != null ? '' : r6Btn('Take the course', 'financeCourse()', !canPay(courseCost()) || state.crime.prison));
+  return h;
+}
+
+// Invest: an investment club and a choice of fund for auto-invest
+const AUTO_FUNDS = ['IDXF', 'DIVF', 'TECF', 'BNDF'];
+const autoFund = () => AUTO_FUNDS.includes(state.autoFund) ? state.autoFund : 'IDXF';
+function setAutoFund(k){ if(AUTO_FUNDS.includes(k)){ state.autoFund = k; renderPanel(); } }
+const clubDues = () => inflR(120, 10);
+function toggleClub(){
+  if(state.age < 18 || state.crime.prison || state.done.club) return;
+  const r = R6(); state.done.club = true;
+  if(r.club){ r.club = false; pushEntry(state.age, `${state.name} leaves the investment club.`, {}); render(); return; }
+  if(!canPay(clubDues())) return;
+  pay(clubDues()); r.club = true; r.clubPick = clubPickKey();
+  pushEntry(state.age, `${state.name} joins a neighborhood investment club that meets once a month to argue about stocks.`, {happy:2, smarts:1});
+  render();
+}
+// the club's pick: a stock in whatever sector the world outlook favors most
+function clubPickKey(){
+  const sec = (wfx() || {}).sectors || {}, list = STOCKS.filter(x => !FUND_SECTORS.includes(x.sector));
+  if(!list.length) return null;
+  const best = list.slice().sort((p, q) => (sec[q.sector] || 0) - (sec[p.sector] || 0))[0];
+  return (sec[best.sector] || 0) > 0 ? best.key : pick(list).key;
+}
+function r6InvHtml(){
+  if(state.age < 18) return '';
+  const r = R6(), s = r.club && r.clubPick && STOCKS.find(x => x.key === r.clubPick);
+  return '<div class="plabel">Investment club</div>' + bankRow('Neighborhood investment club', (r.club ? 'You are a member. ' + (s ? `This year's club pick: <b>${s.name}</b> <span class="tick">${s.key}</span>, from the sector the world outlook favors. ` : '') : '') + `Monthly meetings, shared research and new friends: +smarts each year. ${fmt(clubDues())} a year in dues.`,
+    r6Btn(r.club ? 'Leave the club' : 'Join', 'toggleClub()', state.done.club || state.crime.prison || (!r.club && !canPay(clubDues()))));
+}
+
+// Assets: renting your car out on a sharing app, and insurance for jewelry and collectibles
+const shareable = x => !x.rental && x.category === 'Cars' && (findCatalog(x.key) || {}).kind === 'car' && !state.crime.prison;
+function toggleShare(id){
+  const x = state.assets.find(y => y.id === id); if(!x || !shareable(x) || state.age < 21 || state.done['share_' + id]) return;
+  state.done['share_' + id] = true; x.share = !x.share;
+  pushEntry(state.age, x.share ? `${state.name} lists their ${x.name} on a car-sharing app.` : `${state.name} takes their ${x.name} off the car-sharing app.`, {});
+  render();
+}
+const valuables = () => state.assets.filter(x => !x.rental && (x.category === 'Jewelry' || x.category === 'Collectibles'));
+const riderCost = () => Math.max(inflR(50, 5), Math.round(valuables().reduce((t, x) => t + x.value, 0) * 0.012 / 10) * 10);
+function toggleRider(){
+  if(state.crime.prison || state.done.rider || (!R6().rider && !valuables().length)) return;
+  state.done.rider = true; R6().rider = !R6().rider;
+  pushEntry(state.age, R6().rider ? `${state.name} insures their jewelry and collectibles against theft and loss.` : `${state.name} drops the insurance on their valuables.`, {});
+  render();
+}
+function r6AstHtml(){
+  if(state.age < 16) return '';
+  const cars = state.assets.filter(shareable), v = valuables(), r = R6();
+  let h = '';
+  if(cars.length && state.age >= 21){
+    h += '<div class="plabel">Car sharing</div><div class="fnote">Rent your car to strangers through an app: steady income, and extra wear. Now and then a renter brings it back dented.</div>';
+    cars.forEach(x => h += bankRow(x.name + (x.share ? ' <span class="tick">LISTED</span>' : ''), x.share ? `Earned ${fmt(x.shareLast || 0)} last year · condition ${Math.round(x.cond != null ? x.cond : 100)}%` : `Could earn about ${fmt(shareIncome(x))} a year.`, r6Btn(x.share ? 'Unlist' : 'List it', `toggleShare('${x.id}')`, state.done['share_' + x.id])));
+  }
+  if(v.length || r.rider) h += '<div class="plabel">Valuables cover</div>' + bankRow('Insurance for jewelry and collectibles', (r.rider ? 'Covered. ' : '') + `If a break-in or bad luck takes one of your valuables, you are paid what it was worth. ${fmt(riderCost())} a year for the ${v.length} piece${v.length === 1 ? '' : 's'} you own.`, r6Btn(r.rider ? 'Cancel cover' : 'Insure them', 'toggleRider()', state.done.rider || (!r.rider && !v.length)));
+  return h;
+}
+const shareIncome = x => Math.round(inflR(2600, 50) * Math.min(2.5, Math.max(0.6, x.value / inflR(25000, 100))) * Math.max(0.3, (x.cond != null ? x.cond : 100) / 100) / 50) * 50;
+
+// Business: trade shows and a staff recognition program
+const tradeCost = b => inflR(Math.round(2500 * Math.sqrt(b.locations || 1)), 100);
+function tradeShow(){
+  const b = state.business; if(!b || state.done.trade || !canPay(tradeCost(b))) return;
+  state.done.trade = true; pay(tradeCost(b));
+  if(Math.random() < 0.6 + b.reputation / 500){
+    b.reputation = clampRep(b.reputation + 3); b.growth = Math.min(0.8, (b.growth || 0) + 0.06);
+    pushEntry(state.age, `${bizName(b)}'s booth is busy all weekend at the trade show, and the new leads keep coming for months.`, {happy:3});
+  } else { b.reputation = clampRep(b.reputation + 1); pushEntry(state.age, `${bizName(b)} takes a booth at the trade show, but the foot traffic is thin.`, {happy:-1}); }
+  render();
+}
+const recogCost = b => inflR(120, 10) * Math.max(1, b.employees);
+function toggleRecog(){
+  const b = state.business; if(!b || state.done.recog) return;
+  state.done.recog = true; b.recog = !b.recog;
+  pushEntry(state.age, b.recog ? `${bizName(b)} starts an employee of the month program, with bonuses and a parking spot.` : `${bizName(b)} quietly ends its employee recognition program.`, {});
+  render();
+}
+function r6BizHtml(b){
+  return '<div class="plabel">Trade shows</div>' + bankRow('Take a booth at a trade show', `Meet buyers and suppliers in person: a good show grows sales and reputation. ${fmt(tradeCost(b))}.`, r6Btn(state.done.trade ? 'Done ✓' : 'Book a booth', 'tradeShow()', state.done.trade || !canPay(tradeCost(b)))) +
+    '<div class="plabel">Staff recognition</div>' + bankRow('Employee of the month' + (b.recog ? ' <span class="tick">ON</span>' : ''), `Small bonuses and some public thanks lift morale every year. About ${fmt(recogCost(b))} a year at your size.`, r6Btn(b.recog ? 'End it' : 'Start it', 'toggleRecog()', state.done.recog));
+}
+
+// Health: a daily step goal and how much you sleep
+const STEPS = [['None', 'no goal'], ['5,000', 'a walk a day'], ['10,000', 'on your feet a lot']];
+const SLEEP = {6:['6 hours', 'more done at work, but it wears you down'], 7:['7 hours', 'about average'], 8:['8 hours', 'healthier and happier']};
+function setSteps(v){ if(!STEPS[v] || state.age < 10) return; H().habits.steps = v; renderPanel(); }
+function setSleep(v){ if(!SLEEP[v] || state.age < 14) return; H().habits.sleep = v; renderPanel(); }
+const sleepHrs = () => state.age >= 14 && SLEEP[H().habits.sleep] ? H().habits.sleep : 7;
+function r6HealthHtml(){
+  if(state.age < 10) return '';
+  const hb = H().habits, st = hb.steps || 0, pill = (label, on, js) => `<button class="sortbtn${on ? ' active' : ''}" onclick="${js}">${label}</button>`;
+  let h = '<div class="plabel">Daily steps and sleep</div><div class="invrow"><div class="owned">Daily steps: <b>' + STEPS[st][0] + '</b> (' + STEPS[st][1] + '). Free, and 10,000 a day counts as exercise.</div><div class="sortrow">' +
+    STEPS.map((s, i) => pill(s[0], st === i, `setSteps(${i})`)).join('') + '</div>';
+  if(state.age >= 14){ const sl = sleepHrs(); h += '<div class="owned">Sleep: <b>' + SLEEP[sl][0] + '</b> a night (' + SLEEP[sl][1] + ').</div><div class="sortrow">' + [6, 7, 8].map(v => pill(SLEEP[v][0], sl === v, `setSleep(${v})`)).join('') + '</div>'; }
+  return h + '</div>';
+}
+
+// Crime: a tip line that pays rewards, and a home security system
+function crimeTip(){
+  if(state.age < 18 || state.crime.prison || state.done.tip) return;
+  const n = state.name, r = R6(); state.done.tip = true; r.tips = (r.tips || 0) + 1;
+  const roll = Math.random();
+  if(roll < 0.3){ const pay = inflR(rint(10, 50) * 100, 50); r.tipPaid = (r.tipPaid || 0) + pay; pushEntry(state.age, `${n}'s anonymous tip leads to an arrest, and the tip line pays a ${fmt(pay)} reward.`, {money:pay, happy:4}); }
+  else if(roll < 0.38) pushEntry(state.age, `Someone works out who called the tip line. ${n} finds their tires slashed and a warning note.`, {happy:-6, health:-2, money:-inflR(600, 50)});
+  else pushEntry(state.age, `${n} calls the tip line about something they saw. Nothing comes of it yet.`, {happy:1});
+  render();
+}
+const secInstall = () => inflR(400, 10), secYearly = () => inflR(300, 10);
+function toggleSecurity(){
+  if(state.age < 18 || !state.movedOut || state.crime.prison || state.done.security) return;
+  const r = R6(); state.done.security = true;
+  if(r.security){ r.security = false; pushEntry(state.age, `${state.name} cancels the home security monitoring.`, {}); render(); return; }
+  if(!canPay(secInstall())) return;
+  pay(secInstall()); r.security = true;
+  pushEntry(state.age, `${state.name} has a home security system put in: cameras, sensors and a loud siren.`, {happy:2});
+  render();
+}
+function r6CrimeHtml(){
+  if(state.age < 18 || state.crime.prison) return '';
+  const r = R6();
+  let h = '<div class="plabel">Tip line</div>' + bankRow('Report a crime tip', `Call in what you know, anonymously. Some tips pay a reward; some get found out.${r.tips ? ' Tips so far: ' + r.tips + (r.tipPaid ? ', ' + fmt(r.tipPaid) + ' in rewards' : '') + '.' : ''}`, r6Btn(state.done.tip ? 'Called ✓' : 'Call it in', 'crimeTip()', state.done.tip));
+  if(state.movedOut) h += '<div class="plabel">Home security</div>' + bankRow('Home security system' + (r.security ? ' <span class="tick">ON</span>' : ''), `Cuts the odds of a break-in by about two thirds. ${fmt(secInstall())} to install, then ${fmt(secYearly())} a year for monitoring.`, r6Btn(r.security ? 'Cancel monitoring' : 'Install one', 'toggleSecurity()', state.done.security || (!r.security && !canPay(secInstall()))));
+  return h;
+}
+
+// a break-in at home: cash and sometimes a valuable taken; home insurance and valuables cover help
+function breakIn(a){
+  const r = R6(), n = state.name, ownHome = state.assets.some(x => x.category === 'Homes' && !x.rental);
+  const loss = inflR(rint(8, 30) * 100, 50), cover = ownHome && state.insurance.home ? 0.8 : 0;
+  let text = `Someone breaks into ${n}'s ${ownHome ? 'home' : 'apartment'} while they are out${cover ? '; home insurance covers most of what was taken' : ''}.`, delta = {money:-Math.round(loss * (1 - cover)), happy:-5};
+  const v = valuables().filter(x => x.category === 'Jewelry').sort((p, q) => q.value - p.value)[0];
+  if(v && Math.random() < 0.5){
+    state.assets = state.assets.filter(x => x.id !== v.id);
+    if(r.rider){ delta.money += Math.round(v.value); text += ` They take the ${v.name.toLowerCase()}, and the valuables insurance pays ${fmt(v.value)} for it.`; }
+    else { delta.happy -= 4; text += ` They take the ${v.name.toLowerCase()}, and it was not insured.`; }
+  }
+  pushEntry(a, text, delta);
+}
+
+// the year's effects of everything above
+function r6Year(a){
+  if(state.crime.prison || !state.alive) return;
+  const r = R6(), n = state.name, j = state.job, b = state.business;
+  if(r.garden){
+    if(gardenFee() && !canPay(gardenFee())){ r.garden = false; pushEntry(a, `${n} can't keep up the community garden fees and gives up the plot.`, {happy:-2}); }
+    else {
+      if(gardenFee()) pay(gardenFee());
+      applyDelta({health: Math.random() < 0.6 ? 1 : 0, happy:1});
+      if(state.movedOut) state.money += inflR(120, 10);
+      if(Math.random() < 0.15 && state.relationships.filter(x => x.type === 'Friend').length < 12){ const f = newRel('Friend', {age: Math.max(10, a + rint(-20, 20)), closeness: rint(25, 40), origin: 'at the community garden'}); pushEntry(a, `${n} gets to know ${f.name} over the fence at the community garden.`, {happy:3}); }
+    }
+  }
+  const p = r.penpal;
+  if(p){
+    if(a >= 18 && Math.random() < 0.2){ r.penpal = null; pushEntry(a, `${n}'s letters with ${p.name} trail off as life gets busy.`, {}); }
+    else { const fluent = langGain(p.lang, 4 + rint(0, 3)); applyDelta({smarts: Math.random() < 0.5 ? 1 : 0, happy:1}); if(fluent) pushEntry(a, `Years of letters with ${p.name} pay off: ${n} is now fluent in ${p.lang}.`, {happy:5, smarts:2}); }
+  }
+  if(j && j.union){
+    if(!UNION_TRACKS.includes(j.track)) j.union = false;
+    else if(!canPay(unionDues(j))){ j.union = false; pushEntry(a, `${n} falls behind on union dues and lets the membership lapse.`, {}); }
+    else {
+      pay(unionDues(j));
+      if(Math.random() < 0.06){
+        const lost = Math.round(j.salary * 0.05 / 100) * 100, won = Math.random() < 0.7;
+        if(won) j.salary = Math.round(j.salary * 1.04 / 100) * 100;
+        pushEntry(a, `${n}'s union goes on strike for three weeks (${fmt(lost)} in lost pay)${won ? ' and wins a 4% raise' : ', and comes back with nothing'}.`, {money:-lost, happy: won ? 2 : -4});
+      } else if(Math.random() < 0.3){ const r = Math.round(j.salary * 0.015 / 100) * 100; if(r > 0){ j.salary += r; pushEntry(a, `${n}'s union contract brings a ${fmt(r)} raise.`, {happy:1}); } }
+    }
+  }
+  if(r.club && a >= 18){
+    if(!canPay(clubDues())){ r.club = false; pushEntry(a, `${n} lets their investment club membership lapse.`, {}); }
+    else { pay(clubDues()); applyDelta({smarts: Math.random() < 0.6 ? 1 : 0}); r.clubPick = clubPickKey(); if(Math.random() < 0.1 && state.relationships.length < 60){ const f = newRel('Friend', {age: Math.max(18, a + rint(-15, 25)), closeness: rint(25, 40), origin: 'at the investment club'}); pushEntry(a, `${n} becomes friends with ${f.name} from the investment club.`, {happy:2}); } }
+  }
+  state.assets.filter(x => x.share).forEach(x => {
+    if(!shareable(x) || a < 21){ x.share = false; return; }
+    const inc = shareIncome(x); x.shareLast = inc; state.money += inc;
+    x.cond = Math.max(0, (x.cond != null ? x.cond : 100) - 6); x.value = Math.round(x.value * 0.97);
+    if(Math.random() < 0.07){ x.cond = Math.max(0, x.cond - 15); pushEntry(a, `A car-sharing renter brings ${n}'s ${x.name} back with a crumpled bumper. The app's insurance is slow to pay.`, {happy:-3}); }
+  });
+  if(r.rider){
+    if(!valuables().length){ r.rider = false; }
+    else if(!canPay(riderCost())){ r.rider = false; pushEntry(a, `${n} can't pay the valuables insurance, and the cover lapses.`, {}); }
+    else pay(riderCost());
+  }
+  if(r.security){
+    if(!state.movedOut){ r.security = false; }
+    else if(!canPay(secYearly())){ r.security = false; pushEntry(a, `${n} stops paying for home security monitoring.`, {}); }
+    else pay(secYearly());
+  }
+  if(b && b.recog){
+    const c = recogCost(b);
+    if(!canPay(c)){ b.recog = false; pushEntry(a, `${bizName(b)} can't afford its recognition program this year and drops it.`, {}); }
+    else { pay(c); b.morale = clampRep(b.morale + 4); }
+  }
+  if(a >= 10){
+    const st = H().habits.steps || 0;
+    if(st === 1 && Math.random() < 0.5) applyDelta({health:1});
+    if(st === 2 && state.stats.health >= 20) applyDelta({health:1, happy: Math.random() < 0.5 ? 1 : 0});
+  }
+  if(a >= 14){
+    const sl = sleepHrs();
+    if(sl === 6) applyDelta({health: Math.random() < 0.6 ? -1 : 0, happy: Math.random() < 0.5 ? -1 : 0});
+    else if(sl === 8) applyDelta({health: Math.random() < 0.5 ? 1 : 0, happy: Math.random() < 0.5 ? 1 : 0});
+  }
+  // break-ins (the crime wave has its own); a security system cuts the odds
+  if(a >= 18 && state.movedOut && !wfx().crimeWave && Math.random() < 0.012 * (r.security ? 0.33 : 1)) breakIn(a);
+}
+
 const SUBMENUS = {
-  me:     [['you', 'You', null], ['story', 'Life story', /life so far|life in numbers|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world|personal records/i]],
-  act:    [['do', 'Activities', /relax|health & fitness|friends & community|going out|treat yourself|^more$/i], ['travel', 'Travel', /^travel/i], ['hobbies', 'Hobbies', /hobbies|try something new/i]],
-  edu:    [['school', 'School', /keep learning|school life|campus life|how you're doing|college outlook/i], ['record', 'Record', /education record/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
+  me:     [['you', 'You', /^journal$|^your name$/i], ['story', 'Life story', /life so far|life in numbers|crossroads|chain|milestone/i], ['records', 'Records', /net worth|achievement|the world|personal records/i]],
+  act:    [['do', 'Activities', /relax|health & fitness|friends & community|going out|treat yourself|^more$|community garden|self-defense/i], ['travel', 'Travel', /^travel/i], ['hobbies', 'Hobbies', /hobbies|try something new/i]],
+  edu:    [['school', 'School', /keep learning|school life|campus life|how you're doing|college outlook|pen pal|reading challenge/i], ['record', 'Record', /education record/i], ['lang', 'Languages', /^languages/i], ['next', 'Next steps', /graduate school|education pays/i]],
   job:    [['work', 'My work', /performance|career ladder|work history/i], ['find', 'Find a job', /career tracks/i], ['mil', 'Military', /military service/i], ['gov', 'Politics', /government/i]],
   soc:    [['social', 'Socialize', /needs attention|big birthdays|get together/i], ['family', 'Family', /^partner|^family|family line|in memory/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['debt', 'Debt', /your debt/i], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
-  inv:    [['mine', 'My portfolio', /^the market|your performance|where this could go|your portfolio|your holdings|portfolio checkup|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$/i], ['angel', 'Startups', /angel/i]],
-  ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
-  biz:    [['run', 'Overview', /last year/i], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place/i], ['more', 'Name & exit', /^exit|^name$/i]],
+  inv:    [['mine', 'My portfolio', /^the market|your performance|where this could go|your portfolio|your holdings|portfolio checkup|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$|investment club/i], ['angel', 'Startups', /angel/i]],
+  ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things|car sharing|valuables cover/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
+  biz:    [['run', 'Overview', /last year/i], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place|trade shows/i], ['more', 'Name & exit', /^exit|^name$/i]],
   media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
-  health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions|medical history/i], ['habits', 'Habits', /^habits/i]],
-  crime:  [['law', 'Your record', /staying out|your record|prison|detention|felony/i], ['crimes', 'Crimes', /^crimes/i]],
+  health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions|medical history/i], ['habits', 'Habits', /^habits|daily steps/i]],
+  crime:  [['law', 'Your record', /staying out|your record|prison|detention|felony|tip line|home security/i], ['crimes', 'Crimes', /^crimes/i]],
 };
 function setSub(key){
   (state.sub = state.sub || {})[state.panel] = key;
@@ -16324,23 +16773,23 @@ function renderPanel(){
   }
   let h = '';
   if(state.panel === 'me'){ h += mePanelHtml(); }
-  else if(state.panel === 'health'){ h += healthPanelHtml(); }
-  else if(state.panel === 'crime'){ h += crimePanelHtml(); }
+  else if(state.panel === 'health'){ h += healthPanelHtml() + r6HealthHtml(); }
+  else if(state.panel === 'crime'){ h += crimePanelHtml() + r6CrimeHtml(); }
   else if(state.panel === 'act'){
     if(a >= 18) h += `<div class="btnrow-social"><button onclick="buyLottery()" ${(state.done.lotto || state.money < lottoCost()) ? 'disabled' : ''}>Buy Lottery Ticket (${fmt(lottoCost())})</button></div>`;
-    h += activitiesHtml();
+    h += activitiesHtml() + r6ActHtml();
     h += travelHtml();
     h += hobbiesHtml();
   } else if(state.panel === 'edu'){
-    h += eduPanelHtml() + transcriptHtml() + gpaChartHtml();
+    h += eduPanelHtml() + r6EduHtml() + transcriptHtml() + gpaChartHtml();
   } else if(state.panel === 'inv'){
     if(a < 18 && portfolioValue() < 1 && !state.orders.length){ h = ageLock('Investing is available', 18); }
     else {
       const pv = portfolioValue(), upl = unrealizedPL();
       h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Portfolio <b>${fmt(pv)}</b> &nbsp;·&nbsp; Net worth <b>${fmt(netWorth())}</b><br>Unrealized <span class="${upl >= 0 ? 'up' : 'down'}">${upl >= 0 ? '+' : '-'}${fmt(Math.abs(upl))}</span> &nbsp;·&nbsp; Realized <span class="${state.realized >= 0 ? 'up' : 'down'}">${state.realized >= 0 ? '+' : '-'}${fmt(Math.abs(state.realized))}</span></div>`;
       if(state.orders.length) h += ordersHtml();
-      h += portfolioChartHtml() + marketOverviewHtml() + investPerfHtml() + growthOutlookHtml() + riskForAgeHtml() + portfolioHtml() + holdingsHtml() + invCheckupHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml();
-      h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the Total Market Index Fund.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' +
+      h += portfolioChartHtml() + marketOverviewHtml() + investPerfHtml() + growthOutlookHtml() + riskForAgeHtml() + portfolioHtml() + holdingsHtml() + invCheckupHtml() + (portfolioValue() >= 1 ? '<div class="btnrow-social"><button onclick="sellEverything()">Sell everything</button></div>' : '') + mixesHtml() + angelHtml() + r6InvHtml();
+      h += '<div class="plabel">AUTO-INVEST</div><div class="invrow"><div class="owned">Each year, put part of what is left over after bills into the ' + (STOCKS.find(x => x.key === autoFund()) || {name:'Total Market Index Fund'}).name + '.' + (state.lastAutoInvested ? ' Last year: ' + fmt(state.lastAutoInvested) + '.' : '') + '</div><div class="sortrow">' + AUTO_FUNDS.map(k => `<button class="sortbtn${autoFund() === k ? ' active' : ''}" onclick="setAutoFund('${k}')">${k}</button>`).join('') + '</div><div class="sortrow">' +
         [0, 0.1, 0.25, 0.5].map(p => `<button class="sortbtn${state.autoInvest === p ? ' active' : ''}" onclick="setAutoInvest(${p})">${p ? Math.round(p * 100) + '%' : 'Off'}</button>`).join('') + '</div></div>';
       h += '<div class="plabel">SORT</div><div class="sortrow">' +
         [['default','Default'],['gainers','Gainers'],['losers','Losers'],['name','A–Z']]
@@ -16374,7 +16823,7 @@ function renderPanel(){
     if(mine.length){
       h += '<div class="plabel">YOUR THINGS</div>';
       mine.forEach(x => h += ownedAssetRow(x));
-      h += assetGainsHtml() + assetOutlookHtml();
+      h += assetGainsHtml() + assetOutlookHtml() + r6AstHtml();
     }
     h += garageSaleHtml(mine.length > 0);
     for(const cat in ASSET_CATALOG){
@@ -16383,7 +16832,7 @@ function renderPanel(){
       ASSET_CATALOG[cat].forEach(t => h += assetCatalogRow(t, cat));
     }
   } else if(state.panel === 'soc'){
-    h += socialPanelHtml();
+    h += socialPanelHtml() + r6SocHtml();
   } else if(state.panel === 'bank'){
     const econ = state.econ, c = state.creditCard;
     h += `<div class="status">Checking <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Savings <b>${fmt(state.savings)}</b>${state.cds.length ? ' &nbsp;·&nbsp; CDs <b>' + fmt(cdTotal()) + '</b>' : ''}<br>
@@ -16393,7 +16842,7 @@ function renderPanel(){
     if(a >= 18) h += '<div class="plabel">LIFESTYLE</div><div class="invrow"><div class="owned">How you live sets your yearly costs: about <b>' + fmt(livingEstimate()) + '</b> a year right now' + (hasRel('Spouse') ? ', shared with your spouse, who earns ' + fmt(spouseIncome(state.relationships.find(r => r.type === 'Spouse'))) + ' after tax' : '') + '.</div><div class="sortrow">' +
       Object.keys(LIFESTYLES).map(k => `<button class="sortbtn${(state.lifestyle || 'comfortable') === k ? ' active' : ''}" onclick="setLifestyle('${k}')">${LIFESTYLES[k].label}</button>`).join('') + '</div><div class="owned">' + LIFESTYLES[state.lifestyle || 'comfortable'].blurb + (LIFESTYLES[state.lifestyle || 'comfortable'].happy ? ' · ' + (LIFESTYLES[state.lifestyle || 'comfortable'].happy > 0 ? '+' : '') + LIFESTYLES[state.lifestyle || 'comfortable'].happy + ' happiness a year' : '') + '</div></div>';
     h += moneyTipsHtml() + freedomHtml() + netWorthHistHtml() + cashFlowHtml() + budgetHtml() + paycheckHtml() + emergencyHtml() + creditHtml();
-    h += trustHtml() + savingsPanelHtml() + collegeFundHtml();
+    h += trustHtml() + savingsPanelHtml() + collegeFundHtml() + r6BankHtml();
     if(a >= 16) h += retirementHtml();
 
     h += '<div class="plabel">CREDIT CARD</div>';
@@ -16463,6 +16912,7 @@ function renderPanel(){
         h += iopt('💪', 'Work extra hard', state.done.work ? 'done ✓' : '−2 health, better promotion odds', 'workHarder()', state.done.work, state.done.work);
         if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('💵', 'Negotiate a raise', state.done.negotiate ? 'done ✓' : 'risk and reward', 'negotiateRaise()', state.done.negotiate, state.done.negotiate);
         if(j.track !== 'Military' && j.track !== 'Politics') h += iopt('🔍', 'Look for a better offer', state.done.hunt ? 'done ✓' : j.years < 1 ? 'after a year in the role' : 'same role, new company', 'jobHunt()', state.done.hunt || j.years < 1, state.done.hunt);
+        h += r6JobHtml(j);
         h += iopt('🚪', j.track === 'Military' ? 'Leave the military' : inOffice() ? 'Resign from office' : 'Quit job', '', 'quitJob()', false);
         if(a >= 60) h += iopt('🌅', 'Retire', 'pension about ' + fmt(Math.round(pensionFor() * (a < 65 ? 1 - 0.06 * (65 - a) : 1) / 100) * 100) + '/yr', 'retire()', false);
       } else if(state.retired){
@@ -19241,7 +19691,7 @@ function haggleBills(){
   if(state.done.haggle || state.crime.prison || state.age < 18) return;
   const bills = livingEstimate(); if(!(bills > 0)) return;
   state.done.haggle = true;
-  const chance = Math.min(0.85, 0.5 + state.stats.smarts / 400 + (hasMyTrait('Funny') ? 0.05 : 0) + (state.creditScore >= 740 ? 0.05 : 0));
+  const chance = Math.min(0.85, 0.5 + state.stats.smarts / 400 + (state.r6 && state.r6.finCourse != null ? 0.05 : 0) + (hasMyTrait('Funny') ? 0.05 : 0) + (state.creditScore >= 740 ? 0.05 : 0));
   if(Math.random() < chance){
     const save = Math.max(50, Math.round(bills * rint(2, 5) / 100 / 10) * 10);
     pushEntry(state.age, `${state.name} spends an afternoon on hold with the phone, internet and insurance companies and talks them into ${fmt(save)} in refunds and discounts.`, {money:save, happy:2});
@@ -19476,6 +19926,11 @@ const ACHIEVEMENTS = [
   {k:'history', cat:'World', icon:'📰', tier:'silver', name:'Witness to History', desc:'Live through eight kinds of world events in one life', test:() => state.ach.events.length >= 8},
   {k:'seenall', cat:'World', icon:'🌐', tier:'gold', name:'Seen It All', desc:'Live through every kind of world event in one life', test:() => WORLD_EVENTS.every(d => state.ach.events.includes(d.key))},
   {k:'war', cat:'World', icon:'🕊️', tier:'bronze', name:'Through the Storm', desc:'Live through a war and a recession in one life', test:() => state.ach.events.includes('war') && state.ach.events.includes('recession')},
+  {k:'journal10', cat:'Life', icon:'📓', tier:'silver', name:'Dear Diary', desc:'Keep a journal ten years in a row', test:() => !!(state.r6 && state.r6.journal && state.r6.journal.streak >= 10)},
+  {k:'penpal', cat:'School', icon:'✉️', tier:'bronze', name:'Letters Abroad', desc:'Write to a pen pal', test:() => !!(state.r6 && state.r6.hadPenpal)},
+  {k:'bookworm', cat:'School', icon:'📚', tier:'silver', name:'Bookworm', desc:'Read 50 books in summer reading challenges', test:() => !!(state.r6 && state.r6.books >= 50)},
+  {k:'sabbatical', cat:'Career', icon:'🏝️', tier:'bronze', name:'Recharged', desc:'Take a sabbatical from work', test:() => !!(state.r6 && state.r6.sabbs)},
+  {k:'tipster', cat:'Crime', icon:'📞', tier:'bronze', name:'Concerned Citizen', desc:'Collect a reward from the tip line', test:() => !!(state.r6 && state.r6.tipPaid)},
 ];
 // the firsts of one life; each is recorded once, at the age it happens
 const GRAD_DEG = ["Master's", 'MBA', 'MD', 'JD', 'PhD'];
