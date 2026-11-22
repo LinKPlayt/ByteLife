@@ -4335,7 +4335,9 @@ function placeCardHtml(){
     `<div><span>Pay</span><b>${placePct(p.pay)}</b><span>for new jobs here</span></div>` +
     `<div><span>Crime</span><b>${f.crime}</b><span>weather risk: ${f.risk}</span></div>` +
     `<div><span>Income tax</span><b>${placePct(p.tax)}</b><span>${taxTxt(p)}</span></div>` +
-    `<div><span>Home insurance</span><b>${placePct(placeInsure(p))}</b><span>${p.risk && p.risk.dmg ? p.risk.kind + ' damage risk' : 'few disasters'}</span></div></div>`;
+    `<div><span>Home insurance</span><b>${placePct(placeInsure(p))}</b><span>${p.risk && p.risk.dmg ? p.risk.kind + ' damage risk' : 'few disasters'}</span></div>` +
+    `<div><span>Getting around</span><b>${p.transit ? 'transit' : 'by car'}</b><span>${getTxt(p)}</span></div>` +
+    `<div><span>Commute</span><b>${p.commute} min</b><span>each way, typical</span></div></div>`;
   const heat = heatTxt(cityHeat(p.key));
   if(heat) h += `<div class="owned">The local economy is ${heat}: ${cityHeat(p.key) > 0 ? 'new jobs pay more and are easier to land, but rents and home prices are up' : 'jobs are harder to find, but rents and home prices are down'}.</div>`;
   if(f.strong.length) h += `<div class="owned">Strong here: ${f.strong.join(', ')}.${f.weak.length ? ' Hard to find work in ' + f.weak.join(', ') + '.' : ''}</div>`;
@@ -4347,6 +4349,8 @@ function placeCardHtml(){
   const ldp = ldPartner();
   if(ldp) btns.push(`<button onclick="visitPartner()" ${state.done.visitLD || state.crime.prison || !canPay(ldVisitCost()) ? 'disabled' : ''}>${state.done.visitLD ? 'Saw ' + ldp.name + ' this year' : 'Visit ' + ldp.name + ' in ' + placeName(ldp.longDistance) + ' (' + fmt(ldVisitCost()) + ')'}</button>`);
   if(btns.length) h += '<div class="btnrow-social">' + btns.join('') + '</div>';
+  h += spotsHtml();
+  if(placeDating() !== 1 && state.age >= 18 && !hasRel('Spouse')) h += `<div class="owned">${placeDating() > 1 ? 'Big-city dating: more singles, better odds on a date.' : 'Small-town dating: fewer singles around.'}</div>`;
   const lived = placesLived();
   if(lived.length > 1) h += `<div class="owned">Places lived: ${lived.map(placeTitle).join(' → ')}.</div>`;
   if(state.age >= 18){
@@ -4365,7 +4369,7 @@ function moveListHtml(){
     let payTxt = '';
     if(j && !notCareer(j)) payTxt = ` · your field pays ${placePct(placePay(j.track, p) / placePay(j.track, cur))} vs. here`;
     const hire = j ? placeHire(j.track, p) : 0;
-    const heat = heatTxt(cityHeat(p.key)), note = [rent ? `rent about ${fmt(rent)}/yr${dRent ? ' (' + (dRent > 0 ? '+' : '−') + fmt(Math.abs(dRent)) + ')' : ''}` : '', `living costs ${placePct(p.col)}`, taxTxt(p), heat ? 'economy ' + heat : '', p.retire ? 'popular with retirees' : ''].filter(Boolean).join(' · ').replace(/^./, c => c.toUpperCase());
+    const heat = heatTxt(cityHeat(p.key)), note = [rent ? `rent about ${fmt(rent)}/yr${dRent ? ' (' + (dRent > 0 ? '+' : '−') + fmt(Math.abs(dRent)) + ')' : ''}` : '', `living costs ${placePct(p.col)}`, taxTxt(p), getTxt(p), heat ? 'economy ' + heat : '', p.retire ? 'popular with retirees' : ''].filter(Boolean).join(' · ').replace(/^./, c => c.toUpperCase());
     h += `<button class="opt" onclick="moveTo('${p.key}')" ${canPay(cost) ? '' : 'disabled'}><span>${p.icon} ${placeTitle(p.key)}${p.key === state.homeTown ? ' <span class="tick">HOME</span>' : ''}<span class="sub-meta">${p.vibe}. ${note}${payTxt}${f.strong.length ? ' · strong in ' + f.strong.join(', ') : ''}${j && hire <= -8 ? ' · few ' + j.track.toLowerCase() + ' jobs' : ''} · crime ${f.crime}</span></span><span class="meta">${canPay(cost) ? 'Move' : 'need ' + fmt(cost)}</span></button>`;
   });
   return h;
@@ -4442,7 +4446,7 @@ function relocate(key, o){
 // each year: weather, crime and the feel of the place
 function placeYear(a){
   if(!state.place) settlePlace(PLACE_DEFAULT, 0);
-  cityFxYear(a); settleYear(a); ldYear(a); honorYear(a);
+  cityFxYear(a); settleYear(a); ldYear(a); honorYear(a); commuteYear(a);
   const p = curPlace(), n = state.name;
   if(p.mood && Math.random() < 0.35) applyDelta({happy: p.mood});
   if(p.retire && state.retired && Math.random() < 0.4) applyDelta({happy:1, health: Math.random() < 0.3 ? 1 : 0});
@@ -4676,6 +4680,116 @@ function honorYear(a){
   pushEntry(a, `${placeTitle(state.homeTown)} ${what} ${state.name}, its most famous ${state.homeTown === 'country' || state.homeTown === 'smalltown' ? 'kid' : 'native'}. ${away ? state.name + ' flies back for the ceremony, and half of ' + town + ' turns out.' : 'The whole town turns out.'}`, {happy:8});
   addMilestone('🗝️', 'Honored by ' + town);
   bondDelta(['Mother', 'Father', 'Sibling'], 5);
+}
+// ---- Places, part four: local spots, getting around, moving back home, and the dating scene ----
+// transit: does the city work without a car; commute: minutes each way for a typical worker
+const PLACE_GETTING = {
+  columbus:{transit:false, commute:24}, newyork:{transit:true, commute:41}, sanfrancisco:{transit:true, commute:34}, seattle:{transit:false, commute:30},
+  boston:{transit:true, commute:33}, washington:{transit:true, commute:35}, losangeles:{transit:false, commute:38}, miami:{transit:false, commute:33},
+  chicago:{transit:true, commute:35}, austin:{transit:false, commute:27}, nashville:{transit:false, commute:28}, houston:{transit:false, commute:31},
+  denver:{transit:false, commute:27}, smalltown:{transit:false, commute:15}, country:{transit:false, commute:28},
+};
+PLACES.forEach(p => Object.assign(p, PLACE_GETTING[p.key] || {transit:false, commute:25}));
+// two things each place is known for; once a year each
+// d = stat changes; hobby = practice that hobby; contact = meet someone in that field; fame = a shot at being noticed if your hobby is strong
+const LOCAL_SPOTS = {
+  columbus:[{key:'game', icon:'🏈', label:'Tailgate a college football game', cost:120, d:{happy:5}, friend:0.25},
+            {key:'zoo', icon:'🦁', label:'Spend a day at the zoo', cost:40, d:{happy:3, smarts:1}}],
+  newyork:[{key:'broadway', icon:'🎭', label:'See a Broadway show', cost:250, d:{happy:6, smarts:1}, hobby:'acting'},
+           {key:'park', icon:'🌳', label:'Run the loop in Central Park', cost:0, d:{health:3, happy:2}, hobby:'running'}],
+  sanfrancisco:[{key:'meetup', icon:'💻', label:'Go to a startup meetup', cost:30, d:{smarts:2}, contact:'Technology', hobby:'coding'},
+                {key:'bridge', icon:'🌉', label:'Bike across the bridge', cost:20, d:{health:3, happy:3}}],
+  seattle:[{key:'trail', icon:'🥾', label:'Hike a trail in the Cascades', cost:20, d:{health:4, happy:3}, hobby:'hiking'},
+           {key:'market', icon:'🐟', label:'Wander the waterfront market', cost:40, d:{happy:3}, hobby:'cooking'}],
+  boston:[{key:'lecture', icon:'🎓', label:'Sit in on a university lecture', cost:0, d:{smarts:4}, contact:'Science'},
+          {key:'ballpark', icon:'⚾', label:'Catch a game at the old ballpark', cost:110, d:{happy:5}, friend:0.2}],
+  washington:[{key:'museum', icon:'🏛️', label:'Spend a day in the free museums', cost:0, d:{smarts:3, happy:2}},
+              {key:'hill', icon:'🤝', label:'Go to a policy happy hour', cost:40, d:{happy:1}, contact:'Politics'}],
+  losangeles:[{key:'audition', icon:'🎬', label:'Go to an open casting call', cost:0, d:{happy:1}, hobby:'acting', fame:'acting', minHobby:20},
+              {key:'beach', icon:'🏄', label:'Spend a day at the beach', cost:20, d:{happy:4, health:1}, hobby:'surfing'}],
+  miami:[{key:'beach', icon:'🏖️', label:'Spend a day at the beach', cost:20, d:{happy:4, health:2}, hobby:'swimming'},
+         {key:'salsa', icon:'💃', label:'Go salsa dancing', cost:40, d:{happy:4, health:1}, hobby:'dance', friend:0.25}],
+  chicago:[{key:'blues', icon:'🎷', label:'Catch a blues set in a small club', cost:45, d:{happy:4}, hobby:'music'},
+           {key:'lake', icon:'🚲', label:'Bike the lakefront trail', cost:0, d:{health:3, happy:2}}],
+  austin:[{key:'livemusic', icon:'🎸', label:'Play an open mic on Sixth Street', cost:0, d:{happy:3}, hobby:'music', fame:'music', minHobby:20},
+          {key:'springs', icon:'🏊', label:'Swim in the springs', cost:10, d:{health:3, happy:3}, hobby:'swimming'}],
+  nashville:[{key:'openmic', icon:'🎤', label:'Play a writers\' night downtown', cost:0, d:{happy:3}, hobby:'music', fame:'music', minHobby:20},
+             {key:'honkytonk', icon:'🤠', label:'Go out to the honky-tonks', cost:70, d:{happy:5}, friend:0.3}],
+  houston:[{key:'space', icon:'🚀', label:'Tour the space center', cost:35, d:{smarts:3, happy:3}, hobby:'astronomy', contact:'Space Industry'},
+           {key:'food', icon:'🌮', label:'Eat your way across town', cost:60, d:{happy:4}, hobby:'cooking'}],
+  denver:[{key:'ski', icon:'⛷️', label:'Go skiing in the mountains', cost:220, d:{health:3, happy:5}},
+          {key:'peak', icon:'🏔️', label:'Climb a fourteen-thousand-foot peak', cost:0, d:{health:5, happy:3}, hobby:'hiking'}],
+  smalltown:[{key:'fair', icon:'🎡', label:'Go to the county fair', cost:25, d:{happy:4}, friend:0.3},
+             {key:'diner', icon:'☕', label:'Become a regular at the diner', cost:0, d:{happy:2}, friend:0.35}],
+  country:[{key:'fish', icon:'🎣', label:'Fish the creek at dawn', cost:0, d:{happy:4, health:1}, hobby:'fishing'},
+           {key:'stars', icon:'🌌', label:'Watch the stars from the back porch', cost:0, d:{happy:3, smarts:1}, hobby:'astronomy'}],
+};
+const localSpots = (k) => LOCAL_SPOTS[k || state.place] || [];
+const spotCost = s => s.cost ? inflR(s.cost * (state.movedOut ? curPlace().col : 1), 5) : 0;
+const spotMin = s => s.contact || s.key === 'hill' ? 18 : s.cost >= 100 ? 14 : 8;
+function spotState(s){
+  const done = state.done['spot_' + s.key];
+  if(state.age < spotMin(s)) return {ok:false, why:'from age ' + spotMin(s)};
+  if(state.crime.prison) return {ok:false};
+  if(done) return {ok:false, why:'done this year'};
+  if(spotCost(s) && state.movedOut && !canPay(spotCost(s))) return {ok:false, why:'not enough money'};
+  return {ok:true};
+}
+function goSpot(key){
+  const s = localSpots().find(x => x.key === key); if(!s || !spotState(s).ok) return;
+  const c = spotCost(s), n = state.name, P = placeName(state.place);
+  if(c && state.movedOut) pay(c);
+  state.done['spot_' + s.key] = true;
+  const d = Object.assign({}, s.d), extra = [], clause = [];
+  if(s.hobby) bumpHobby(s.hobby, rint(3, 6));
+  if(s.fame){
+    const lv = (state.hobbies[s.fame] || {}).level || 0;
+    if(lv >= (s.minHobby || 0) && Math.random() < 0.05 + lv / 400){ d.fame = rint(2, 5); d.happy = (d.happy || 0) + 4; clause.push(s.fame === 'music' ? 'someone in the crowd records it and passes the clip around' : 'a casting director remembers their name'); }
+  }
+  if(s.contact && state.relationships.filter(r => r.type === 'Contact').length < 25 && Math.random() < 0.45){
+    const f = newRel('Contact', {age: Math.max(22, state.age + rint(-10, 15)), closeness: rint(30, 45), origin: 'at ' + s.label.toLowerCase().replace(/^(go to|sit in on|tour) /, '').replace(/^an? /, 'a ') + ' in ' + P});
+    f.field = s.contact; extra.push(`swaps numbers with ${f.name}, who works in ${s.contact.toLowerCase()}`);
+  }
+  if(s.friend && state.relationships.filter(r => r.type === 'Friend').length < 15 && Math.random() < s.friend){
+    const f = newRel('Friend', {age: Math.max(14, state.age + rint(-6, 6)), closeness: rint(30, 45), origin: 'around ' + P});
+    extra.push(`meets ${f.name} there, and they become friends`);
+  }
+  const verb = s.label.split(' ')[0].toLowerCase(), v3 = verb === 'go' ? 'goes' : /(ch|sh|s|x)$/.test(verb) ? verb + 'es' : verb + 's';
+  pushEntry(state.age, `${n} ${v3 + s.label.slice(verb.length).replace(/\byour\b/g, 'their')}${c && state.movedOut ? ' (' + fmt(c) + ')' : ''}${extra.length ? ' and ' + extra.join('; ') : ''}${clause.length ? ', and ' + clause[0] : ''}.`, d);
+  render();
+}
+function spotsHtml(){
+  const S = localSpots(); if(!S.length || state.age < 8) return '';
+  return `<div class="owned" style="margin-top:10px"><b>Around ${placeName(state.place)}</b> · each once a year</div><div class="btnrow-social">` + S.map(s => {
+    const st = spotState(s), c = spotCost(s);
+    return `<button onclick="goSpot('${s.key}')" ${st.ok ? '' : 'disabled'}>${s.icon} ${s.label}${st.ok ? (c && state.movedOut ? ' (' + fmt(c) + ')' : '') : st.why && st.why !== 'done this year' ? ' · ' + st.why : st.why ? ' ✓' : ''}</button>`;
+  }).join('') + '</div>';
+}
+// getting around: a car-less worker in a car city has a hard time; a driver in a transit city pays to park
+const getTxt = p => p.transit ? 'no car needed' : 'hard without a car';
+function commuteYear(a){
+  if(a < 18 || !state.movedOut || state.crime.prison) return;
+  const p = curPlace(), n = state.name, works = state.job && !state.job.remote && !notCareer(state.job);
+  if(!works && !state.edu.school) return;
+  const car = drives();
+  if(!p.transit && !car && Math.random() < 0.3) pushEntry(a, `Without a car in ${placeName(p.key)}, ${n} loses hours to buses, rides and favors.`, {happy:-2});
+  else if(p.transit && car && works && Math.random() < 0.25){ const c = inflR(1800 * p.col, 50); pushEntry(a, `${n} spends ${fmt(c)} on parking and tickets this year. In ${placeName(p.key)} the car mostly sits.`, {money:-c, happy:-1}); }
+  else if(works && p.commute >= 38 && Math.random() < 0.15) pushEntry(a, `${n}'s ${p.commute}-minute commute wears them down.`, {happy:-2});
+  else if(works && p.commute <= 15 && Math.random() < 0.12) pushEntry(a, `${n}'s commute is ${p.commute} minutes, and they are home in time for dinner every night.`, {happy:2});
+}
+// dating: more singles in big cities, fewer in small towns
+const placeDating = () => { const k = curPlace().kind; return k === 'big' ? 1.1 : k === 'town' || k === 'rural' ? 0.85 : 1; };
+// broke and far from home: go back and live with the parents
+const canGoHome = () => state.age >= 18 && state.homeTown && state.place !== state.homeTown && !hasRel('Spouse') && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father') && !state.crime.prison;
+function goHomeToParents(ok){
+  if(!canGoHome() || moveBlock()) return;
+  const c = Math.round(moveCost() * 0.4 / 50) * 50;
+  if(!canPay(c)) return;
+  if(ok !== true) return askConfirm(`Move back to ${placeName(state.homeTown)} and live with your parents? It costs about ${fmt(c)} to move your things, and there is no rent once you are there.`, 'Move back home', () => goHomeToParents(true));
+  const j = state.job, job = !j || notCareer(j) ? undefined : REMOTE_TRACKS.includes(j.track) ? 'remote' : 'quit';
+  relocate(state.homeTown, {cost:c, job, home: homeHere() ? 'rent' : undefined});
+  moveBackHome(true);
+  render();
 }
 const RENT_MULT = {low:0.9, market:1, high:1.15};
 const rentals = () => state.assets.filter(x => x.rental);
@@ -11179,7 +11293,7 @@ function dateOut(key){
   const d = DATE_KINDS.find(x => x.key === key); if(!d || !dateState(d).ok) return;
   state.done["date_" + key] = true; state.done.dates = (state.done.dates || 0) + 1;
   if(dCost(d)){ ensureCash(dCost(d)); state.money -= dCost(d); }
-  const chance = Math.min(0.9, d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0)) * (felon() ? 0.75 : 1);
+  const chance = Math.min(0.9, (d.base + state.stats.looks / 300 + state.stats.happy / 500 + (state.fame ? state.fame.level / 250 : 0)) * placeDating()) * (felon() ? 0.75 : 1);
   if(Math.random() < chance){
     const p = newRel("Partner", {age: partnerAge(state.age + rint(-4,4)), closeness: rint(42,58), origin: d.origin || "on a date"});
     pushEntry(state.age, `${state.name} goes on a date ${d.text} with ${p.name}, and it turns into something real. ${p.name} seems ${p.traits.map(t => t.toLowerCase()).join(" and ")}.`, {happy:8});
@@ -13762,7 +13876,7 @@ function homeHtml(){
   let h = '<div class="plabel">Where you live</div><div class="invrow">';
   if(!state.movedOut) h += `<div class="owned">Living with your parents: no rent, you just chip in for groceries and bills.</div><div class="assetbuy"><button onclick="moveOutNow()" ${state.crime.prison ? 'disabled' : ''}>Move out and rent (about ${fmt(startRent())}/yr)</button></div>`;
   else if(own) h += `<div class="owned">Living in your own home: <b>${own.name}</b>.</div>`;
-  else h += `<div class="owned">Renting${spouse ? ' with your spouse' : ''}. Rent is part of your yearly living costs.</div>` + rentBuyHtml() + (parentsHome() && !spouse ? `<div class="assetbuy"><button onclick="moveBackHome()" ${state.crime.prison ? 'disabled' : ''}>Move back in with your parents</button></div>` : '');
+  else h += `<div class="owned">Renting${spouse ? ' with your spouse' : ''}. Rent is part of your yearly living costs.</div>` + rentBuyHtml() + (parentsHome() && !spouse ? `<div class="assetbuy"><button onclick="moveBackHome()" ${state.crime.prison ? 'disabled' : ''}>Move back in with your parents</button></div>` : canGoHome() ? `<div class="assetbuy"><button onclick="goHomeToParents()" ${moveBlock() || !canPay(Math.round(moveCost() * 0.4 / 50) * 50) ? 'disabled' : ''}>Move back to ${placeName(state.homeTown)} and live with your parents</button></div>` : '');
   return h + '</div>';
 }
 // ---- running the business: staff, upgrades, growth and yearly decisions ----
