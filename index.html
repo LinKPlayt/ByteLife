@@ -766,13 +766,14 @@ function freshState(name){
     goals:[], goalPick:false, sub:{}, nameQueue:[], license:{status:'none'}, meDot:false, lifeStory:false, bucket:[], benefitAges:[], donated:0, disputeAge:null, pitch:null, tattoos:0, interviewPrep:null,
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
-    fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0}
+    fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0},
+    place:null, homeTown:null, placeLog:[], lastMoveAge:null, moveOpen:false
   };
 }
 // ---- the setup screen: gender and personality ----
 const PLAYER_TRAIT_BLURB = {Loyal:"bonds with people fade slowly", Funny:"people warm to you faster", Ambitious:"promotions come faster", Moody:"your mood swings year to year",
   Generous:"gifts mean more, giving feels good", Flaky:"grades and jobs slip a little", Adventurous:"travel and adventure lift you more", Wise:"you learn more from studying"};
-const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', build:'random', height:'random', style:'random', clothColor:null, talent:'none', wealth:'random', pet:'none', family:null, famOpen:false};
+const setup = {seed:Math.floor(Math.random() * 2147483647), gender:'random', traits:[], skin:null, hair:null, hairStyle:null, eyes:null, freckles:'random', facial:'random', earrings:'random', glasses:'random', build:'random', height:'random', style:'random', clothColor:null, talent:'none', wealth:'random', pet:'none', place:'random', family:null, famOpen:false};
 function toggleSetupTrait(x){ setup.traits = setup.traits.includes(x) ? setup.traits.filter(y => y !== x) : setup.traits.concat(setup.traits.length < 2 ? [x] : []); renderSetup(); }
 const rollGender = () => { const r = Math.random(); return r < 0.48 ? 'female' : r < 0.96 ? 'male' : 'nonbinary'; };
 const hasMyTrait = t => !!(state && state.traits && state.traits.includes(t));
@@ -1031,7 +1032,8 @@ function renderSetup(){
   const fb = document.getElementById('familyBox');
   if(fb){
     const f = setupFam(), parentMin = Math.min(...[f.mother, f.father].filter(x => x.on).map(x => x.age), 60);
-    let h = '<span class="mini-label">Family fortune</span><div class="sortrow" style="margin:0">' + pill(setup.wealth === 'random', "setupSet('wealth','random')", 'Random') + Object.keys(WEALTH).map(k => pill(setup.wealth === k, `setupSet('wealth','${k}')`, WEALTH[k][0])).join('') + '</div>';
+    let h = '<span class="mini-label">Hometown <span style="text-transform:none;letter-spacing:0">· sets rent, pay and the local job market</span></span><div class="sortrow" style="margin:0">' + pill(setup.place === 'random', "setupSet('place','random')", 'Random') + PLACES.map(p => pill(setup.place === p.key, `setupSet('place','${p.key}')`, p.icon + ' ' + placeTitle(p.key))).join('') + '</div>' + (setup.place !== 'random' ? `<div class="set-note">${placeOf(setup.place).vibe}.</div>` : '');
+    h += '<span class="mini-label">Family fortune</span><div class="sortrow" style="margin:0">' + pill(setup.wealth === 'random', "setupSet('wealth','random')", 'Random') + Object.keys(WEALTH).map(k => pill(setup.wealth === k, `setupSet('wealth','${k}')`, WEALTH[k][0])).join('') + '</div>';
     const who = [f.mother.on ? 'mother ' + f.mother.name : '', f.father.on ? 'father ' + f.father.name : ''].filter(Boolean);
     const older = f.siblings.filter(s => s.age > 0).length, twins = f.siblings.length - older;
     const sibTxt = [older ? older + ' older sibling' + (older > 1 ? 's' : '') : '', twins === 1 ? 'a twin' : twins === 2 ? 'two siblings as triplets' : twins ? twins + ' siblings born the same day' : ''].filter(Boolean).join(' and ');
@@ -1054,14 +1056,14 @@ function renderSetup(){
 function setupChoice(){
   const gender = setup.gender === 'random' ? rollGender() : setup.gender;
   return {gender, details:setupDetails(gender), traits:setup.traits.length ? setup.traits.slice() : rollTraits(), skin:setup.skin, hair:setup.hair, hairStyle:setup.hairPicked || (setup.hairStyle != null && setup.gender !== 'random') ? setup.hairStyle : hairFor(gender),
-    talent:setup.talent, stats:null, wealth:setup.wealth, family:JSON.parse(JSON.stringify(setupFam())), pet:setup.pet === 'random' ? (Math.random() < 0.35 ? pick(['dog', 'cat']) : 'none') : setup.pet};
+    talent:setup.talent, stats:null, wealth:setup.wealth, family:JSON.parse(JSON.stringify(setupFam())), pet:setup.pet === 'random' ? (Math.random() < 0.35 ? pick(['dog', 'cat']) : 'none') : setup.pet, place:setup.place === 'random' ? rollPlace() : setup.place};
 }
 // a random life: every part of the person is rolled, including the extremes
 function randomSetup(){
   const gender = rollGender(), stats = {};
   ['health', 'happy', 'smarts', 'looks'].forEach(k => stats[k] = rint(15, 95));
   return {gender, traits:rollTraits(), skin:pick(SKIN_TONES), hair:pick(HAIR_COLORS), hairStyle:hairFor(gender), talent:pick(Object.keys(TALENTS)), stats,
-    wealth:pick(Object.keys(WEALTH)), family:genSetupFamily(true), pet:Math.random() < 0.3 ? pick(['dog', 'cat', 'rabbit', 'parrot', 'fish']) : 'none'};
+    wealth:pick(Object.keys(WEALTH)), family:genSetupFamily(true), pet:Math.random() < 0.3 ? pick(['dog', 'cat', 'rabbit', 'parrot', 'fish']) : 'none', place:rollPlace()};
 }
 function startLife(heir, randomNow){
   const rnd = !heir && (SETTINGS.randomLife || randomNow === true);
@@ -1083,6 +1085,7 @@ function startLife(heir, randomNow){
     state.traits.forEach(t => { const d = TRAIT_START[t]; if(d) for(const k in d) state.stats[k] = clamp(state.stats[k] + d[k]); });
     const tal = (TALENTS[c.talent] || TALENTS.none)[1]; if(tal) for(const k in tal) state.stats[k] = clamp(state.stats[k] + tal[k]);
     state.talent = c.talent; state.randomLife = rnd;
+    settlePlace(c.place || rollPlace(), 0); state.homeTown = state.place;
   } else state.cheated = !!heir.old.cheated;          // a fortune made with cheats stays marked
   if(heir) state.ipos = (heir.old.ipos || []).slice();
   syncIpos();
@@ -1144,6 +1147,9 @@ function upgradeSave(saved){
   if(!saved.license) base.license = saved.noLicense ? {status:'surrendered'} : saved.age >= 17 ? {status:'licensed', issuedAge:16, number:'D' + String(Math.floor(Math.random() * 9e7) + 1e7)} : saved.age >= 16 ? {status:'permit', permitAge:15} : {status:'none'};
   if(saved.licenseBack) base.license.suspendedUntil = saved.licenseBack;
   delete base.noLicense; delete base.licenseBack;
+  // Saves from before Places: the life carries on in an average city, so nothing about it changes.
+  if(!saved.place || !PLACES.some(p => p.key === saved.place)){ base.place = PLACE_DEFAULT; base.homeTown = PLACE_DEFAULT; base.placeLog = [{key:PLACE_DEFAULT, age:0}]; }
+  if(!base.homeTown) base.homeTown = base.place;
   return base;
 }
 function showScreen(id){
@@ -3326,6 +3332,7 @@ function ageUpYear(){
   moneyMarksYear(a);
   investRunYear(a);
   housingYear(a);
+  placeYear(a);
   assetsYear(a);
   const relPrompted = relationshipsYear(a, prompted);
   const legalPrompted = !prompted && !relPrompted && legalYear(a);
@@ -4154,7 +4161,7 @@ function assetsValue(){
 function buyAsset(key, financed){
   const t = findCatalog(key);
   if(!t || state.age < (t.minAge || CAT_MIN[t.category])) return;
-  const price = t.category === 'Cars' ? vehPrice(t) : inflR(t.price, 100);
+  const price = t.category === 'Cars' ? vehPrice(t) : t.category === 'Homes' ? inflR(t.price * placeRent(), 100) : inflR(t.price, 100);
   const label = () => { const x = state.assets[state.assets.length - 1]; return x.model ? 'a new ' + x.name : t.name; };
   if(financed && FINANCEABLE.includes(t.category)){
     if(state.bankrupt || state.creditScore < 580) return;
@@ -4179,7 +4186,7 @@ function buyAsset(key, financed){
     if(!['Homes', 'Real Estate'].includes(t.category)) freezeSpend();
   }
   if(t.category === 'Cars') state.assets[state.assets.length - 1].cond = 100;
-  if(t.category === 'Homes'){ state.assets[state.assets.length - 1].seed = 'h' + t.key + state.age; state.assets[state.assets.length - 1].builtYear = curYear(); }
+  if(t.category === 'Homes'){ state.assets[state.assets.length - 1].seed = 'h' + t.key + state.age; state.assets[state.assets.length - 1].builtYear = curYear(); state.assets[state.assets.length - 1].city = state.place; }
   if(t.category === 'Homes' && !state.movedOut) moveOut(state.age, `${state.name} moves out of their parents' place and into their new home.`, {happy:4});
   render();
 }
@@ -4204,6 +4211,249 @@ const LOCATIONS = [
   {key:'rural', name:'Rural', price:0.6, growth:-0.01, yield:0.015, vacancy:0.05, wear:0},
 ];
 const locOf = k => LOCATIONS.find(l => l.key === k) || LOCATIONS[1];
+// ---------- Places: the city you live in sets your rent, pay, job market, crime and weather ----------
+// col = everyday costs, rent = rent and house prices, pay = salaries; tracks give a field better hiring (hire, in points) and pay
+const PLACES = [
+  {key:'columbus', name:'Columbus', icon:'🏙️', kind:'city', vibe:'A mid-sized city where most things cost about average', col:1, rent:1, pay:1, crime:1, tracks:{},
+    risk:null, mood:0, health:0, events:['{n} spends a fall Saturday at a packed college football game', '{n} finds a favorite diner downtown', '{n} goes to a neighborhood street festival']},
+  {key:'newyork', name:'New York', icon:'🗽', kind:'big', vibe:'Fast, crowded and expensive, with the most opportunity anywhere', col:1.3, rent:1.9, pay:1.28, crime:1.2,
+    tracks:{Finance:{hire:10, pay:0.12}, Business:{hire:6, pay:0.06}, Acting:{hire:8, pay:0.08}, Law:{hire:5, pay:0.08}, Culinary:{hire:5}},
+    risk:{kind:'blizzard', p:0.02, text:'A huge blizzard shuts New York down for days', dmg:0.01}, mood:0, health:0,
+    events:['{n} gets lost in the subway and ends up somewhere wonderful', '{n} sees a Broadway show from the cheap seats', '{n} spends an hour stuck in a packed subway car', '{n} grabs a late-night slice with friends']},
+  {key:'sanfrancisco', name:'San Francisco', icon:'🌉', kind:'big', vibe:'The tech capital: huge salaries and the highest rents in the country', col:1.28, rent:2.1, pay:1.32, crime:1.1,
+    tracks:{Technology:{hire:15, pay:0.18}, Science:{hire:6, pay:0.08}, 'Green Energy':{hire:5, pay:0.05}},
+    risk:{kind:'earthquake', p:0.015, text:'An earthquake shakes San Francisco', dmg:0.06}, mood:0, health:0,
+    events:['{n} walks across the bridge in the fog', '{n} hears three startup pitches at one party', '{n} hikes the hills above the bay']},
+  {key:'seattle', name:'Seattle', icon:'🌲', kind:'big', vibe:'Coffee, rain and big tech and aerospace employers', col:1.15, rent:1.5, pay:1.18, crime:1,
+    tracks:{Technology:{hire:10, pay:0.1}, Aviation:{hire:10, pay:0.08}, Science:{hire:4}},
+    risk:{kind:'earthquake', p:0.008, text:'An earthquake rattles Seattle', dmg:0.05}, mood:-1, health:0,
+    events:['{n} goes a whole month without seeing the sun', '{n} kayaks past houseboats on the lake', '{n} gets very particular about coffee']},
+  {key:'boston', name:'Boston', icon:'🎓', kind:'big', vibe:'A city of universities and hospitals, with hard winters', col:1.18, rent:1.6, pay:1.15, crime:0.9,
+    tracks:{Medicine:{hire:10, pay:0.1}, Education:{hire:8, pay:0.06}, Science:{hire:10, pay:0.08}},
+    risk:{kind:'blizzard', p:0.03, text:'A nor\'easter buries Boston in snow', dmg:0.01}, mood:0, health:0,
+    events:['{n} shovels out the car for the third time this week', '{n} sits in on a free lecture at a famous university', '{n} cheers at a ballgame in an old ballpark']},
+  {key:'washington', name:'Washington, D.C.', icon:'🏛️', kind:'big', vibe:'The capital: politics, law, and government work', col:1.18, rent:1.55, pay:1.15, crime:1.1,
+    tracks:{Politics:{hire:12, pay:0.05}, Law:{hire:8, pay:0.08}, 'Law Enforcement':{hire:6, pay:0.05}, Military:{hire:4}},
+    risk:{kind:'flood', p:0.01, text:'Heavy rains flood parts of Washington', dmg:0.02}, mood:0, health:0,
+    events:['{n} walks the museums on a free afternoon', '{n} gets stuck behind a motorcade', '{n} overhears a senator arguing in a coffee shop']},
+  {key:'losangeles', name:'Los Angeles', icon:'🌴', kind:'big', vibe:'Sunshine, traffic, and the film and music business', col:1.22, rent:1.8, pay:1.12, crime:1.15,
+    tracks:{Acting:{hire:15, pay:0.15}, Music:{hire:8, pay:0.08}, Sports:{hire:4}, 'Space Industry':{hire:5}},
+    risk:{kind:'wildfire', p:0.02, text:'Wildfires burn in the hills around Los Angeles', dmg:0.04}, mood:1, health:0,
+    events:['{n} spots a famous actor buying groceries', '{n} spends two hours in traffic to go eleven miles', '{n} watches the sunset from the beach']},
+  {key:'miami', name:'Miami', icon:'🏖️', kind:'big', vibe:'Beaches, nightlife and heat, with hurricane season every year', col:1.08, rent:1.35, pay:0.98, crime:1.15,
+    tracks:{Culinary:{hire:6, pay:0.04}, Sports:{hire:4}, Music:{hire:3}},
+    risk:{kind:'hurricane', p:0.04, text:'A hurricane hits Miami', dmg:0.08}, mood:1, health:0,
+    events:['{n} spends a lazy Sunday on the beach', '{n} learns to dance salsa, badly', '{n} waits out a summer thunderstorm']},
+  {key:'chicago', name:'Chicago', icon:'🌬️', kind:'big', vibe:'A big city with big-city jobs for much less than the coasts', col:1.05, rent:1.1, pay:1.1, crime:1.2,
+    tracks:{Finance:{hire:6, pay:0.06}, Business:{hire:5, pay:0.04}, Culinary:{hire:5}, Trades:{hire:4}},
+    risk:{kind:'blizzard', p:0.025, text:'A brutal cold snap freezes Chicago', dmg:0.01}, mood:0, health:0,
+    events:['{n} braves the wind off the lake in January', '{n} argues about pizza with someone from out of town', '{n} catches a blues set in a tiny club']},
+  {key:'austin', name:'Austin', icon:'🎸', kind:'city', vibe:'A booming, laid-back city of tech jobs and live music', col:1, rent:1.15, pay:1.07, crime:0.95,
+    tracks:{Technology:{hire:8, pay:0.06}, Music:{hire:10, pay:0.05}},
+    risk:{kind:'heat', p:0.03, text:'A record heat wave grips Austin', dmg:0}, mood:1, health:0,
+    events:['{n} sees three bands in one night', '{n} waits an hour in line for barbecue, and it is worth it', '{n} swims in a cold spring on a hot day']},
+  {key:'nashville', name:'Nashville', icon:'🎤', kind:'city', vibe:'Music City: songwriters, studios and stages everywhere', col:0.95, rent:1.05, pay:0.97, crime:1,
+    tracks:{Music:{hire:15, pay:0.12}, Medicine:{hire:4}},
+    risk:{kind:'tornado', p:0.015, text:'A tornado tears through Nashville', dmg:0.06}, mood:1, health:0,
+    events:['{n} hears a future star play to twelve people', '{n} gets talked into line dancing', '{n} writes half a country song']},
+  {key:'houston', name:'Houston', icon:'🚀', kind:'big', vibe:'Sprawling and affordable, home to space and energy work', col:0.93, rent:0.85, pay:1.03, crime:1.1,
+    tracks:{'Space Industry':{hire:15, pay:0.1}, 'Green Energy':{hire:6, pay:0.04}, Medicine:{hire:6, pay:0.04}, Trades:{hire:4}},
+    risk:{kind:'hurricane', p:0.03, text:'A hurricane floods Houston', dmg:0.07}, mood:0, health:0,
+    events:['{n} watches a rocket test from far away', '{n} learns to love humidity, sort of', '{n} eats the best tacos of their life']},
+  {key:'denver', name:'Denver', icon:'🏔️', kind:'city', vibe:'Mountains on the horizon and an outdoorsy, healthy crowd', col:1.05, rent:1.25, pay:1.05, crime:1,
+    tracks:{'Green Energy':{hire:10, pay:0.06}, Aviation:{hire:5}, Sports:{hire:3}},
+    risk:{kind:'wildfire', p:0.012, text:'Wildfire smoke drifts over Denver', dmg:0.02}, mood:0, health:1,
+    events:['{n} spends a weekend skiing in the mountains', '{n} hikes a fourteen-thousand-foot peak', '{n} gets winded walking up the stairs, at first']},
+  {key:'smalltown', name:'Maple Falls', icon:'🏡', kind:'town', vibe:'A small town: cheap, safe and friendly, with fewer jobs', col:0.82, rent:0.6, pay:0.82, crime:0.55, hire:-6,
+    tracks:{Education:{hire:6}, Trades:{hire:6}, Retail:{hire:4}, Firefighting:{hire:4}, Technology:{hire:-8}, Finance:{hire:-8}, Acting:{hire:-15}, 'Space Industry':{hire:-15}},
+    risk:{kind:'tornado', p:0.01, text:'A tornado passes near Maple Falls', dmg:0.05}, mood:1, health:0,
+    events:['{n} runs into three people they know at the grocery store', '{n} goes to the county fair', '{n} hears the latest town gossip at the diner']},
+  {key:'country', name:'the countryside', icon:'🌾', kind:'rural', vibe:'Farms, open land and quiet; very cheap, with very few jobs nearby', col:0.72, rent:0.45, pay:0.75, crime:0.35, hire:-12,
+    tracks:{Trades:{hire:6}, 'Odd Jobs':{hire:6}, Technology:{hire:-12}, Finance:{hire:-12}, Acting:{hire:-20}, Music:{hire:-8}, 'Space Industry':{hire:-20}, Politics:{hire:-6}},
+    risk:{kind:'storm', p:0.02, text:'A violent storm knocks out power across the countryside', dmg:0.03}, mood:0, health:1,
+    events:['{n} watches a sky full of stars', '{n} helps a neighbor bring in the harvest', '{n} drives forty minutes to the nearest movie theater']},
+];
+const PLACE_DEFAULT = 'columbus';
+const REMOTE_TRACKS = ['Technology', 'Business', 'Finance', 'Science', 'Law'];
+const NO_TRANSFER = ['Acting', 'Music', 'Sports', 'Politics', 'Military', 'Odd Jobs', 'Law Enforcement', 'Firefighting'];
+const placeOf = k => PLACES.find(p => p.key === k) || PLACES[0];
+const curPlace = () => placeOf(state && state.place);
+const placeName = k => placeOf(k).name;
+const placeTitle = k => { const n = placeName(k); return n.charAt(0).toUpperCase() + n.slice(1); };
+const placeTrack = (t, p) => ((p || curPlace()).tracks || {})[t] || {};
+const placePay = (t, p) => t === 'Military' ? 1 : (p || curPlace()).pay * (1 + (placeTrack(t, p).pay || 0));
+const placeHire = (t, p) => ((p || curPlace()).hire || 0) + (placeTrack(t, p).hire || 0);
+const placeRent = () => curPlace().rent;
+const placeCol = () => curPlace().col;
+const homeHere = () => state.assets.find(x => x.category === 'Homes' && !x.rental && (!x.city || x.city === state.place));
+const placesLived = () => { const L = (state.placeLog || []).map(x => x.key); return L.length ? L : [state.place || PLACE_DEFAULT]; };
+const placeYears = () => state.age - ((state.placeLog || []).slice(-1)[0] || {age:0}).age;
+const andList = L => L.length < 3 ? L.join(' and ') : L.slice(0, -1).join(', ') + ', and ' + L[L.length - 1];
+const placePct = m => { const p = Math.round((m - 1) * 100); return p === 0 ? 'average' : (p > 0 ? '+' : '') + p + '%'; };
+// a random hometown at birth: most people start in a city, a few in a small town or the countryside
+function rollPlace(){ const r = Math.random(); return r < 0.12 ? 'smalltown' : r < 0.2 ? 'country' : pick(PLACES.filter(p => p.kind !== 'town' && p.kind !== 'rural')).key; }
+function settlePlace(key, age){
+  state.place = key;
+  (state.placeLog = state.placeLog || []).push({key, age});
+}
+// what the move would cost: a truck, deposits and the trip, more for a bigger household
+function moveCost(){
+  const L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable;
+  const people = 1 + (hasRel('Spouse') || hasRel('Partner') ? 1 : 0) + state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
+  return inflR((2500 + people * 1200) * Math.sqrt(L.mult || 1), 100);
+}
+const moveCooldown = () => state.lastMoveAge != null && state.age - state.lastMoveAge < 2 ? 2 - (state.age - state.lastMoveAge) : 0;
+// why a move can't happen right now (empty when it can)
+function moveBlock(){
+  if(state.age < 18) return 'your family decides where you live until 18';
+  if(state.crime.prison) return 'not from prison';
+  if(state.crime.probation > 0) return 'not while on probation';
+  if(state.job && state.job.track === 'Military') return 'the military decides where you are posted';
+  if(state.job && state.job.track === 'Politics') return 'not while holding office';
+  if(moveCooldown()) return 'you just moved; wait ' + moveCooldown() + ' more year' + (moveCooldown() > 1 ? 's' : '');
+  return '';
+}
+// the rent you would pay there, by the same rules as the yearly bills
+function rentThere(p){
+  const L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, a = state.age, sp = hasRel('Spouse');
+  return Math.round(13000 * state.econ.cumInflation * L.rent * (sp ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1) * p.rent * (state.world.costMult || 1) * diff('cost') / 100) * 100;
+}
+function placeFacts(p){
+  const strong = Object.entries(p.tracks || {}).filter(([, v]) => (v.hire || 0) >= 8).map(([t]) => t.toLowerCase());
+  const weak = Object.entries(p.tracks || {}).filter(([, v]) => (v.hire || 0) <= -8).map(([t]) => t.toLowerCase());
+  return {strong, weak, crime: p.crime >= 1.12 ? 'high' : p.crime <= 0.7 ? 'low' : 'average', risk: p.risk ? p.risk.kind : 'none to speak of'};
+}
+function placeCardHtml(){
+  const p = curPlace(), f = placeFacts(p), yrs = placeYears(), born = state.homeTown === state.place;
+  let h = '<div class="plabel">Your city</div><div class="invrow">';
+  h += `<div class="itop"><span><b>${p.icon} ${placeTitle(p.key)}</b></span><span class="price">${state.age < 18 ? 'growing up' : yrs > 0 ? yrs + ' year' + (yrs > 1 ? 's' : '') : 'just arrived'}</span></div>`;
+  h += `<div class="owned">${p.vibe}.${born && state.age >= 18 ? ' Your hometown, where your family is.' : ''}</div>`;
+  h += '<div class="kv kv2" style="margin-top:6px">' +
+    `<div><span>Cost of living</span><b>${placePct(p.col)}</b><span>food, transport, bills</span></div>` +
+    `<div><span>Rent and homes</span><b>${placePct(p.rent)}</b><span>vs. an average city</span></div>` +
+    `<div><span>Pay</span><b>${placePct(p.pay)}</b><span>for new jobs here</span></div>` +
+    `<div><span>Crime</span><b>${f.crime}</b><span>weather risk: ${f.risk}</span></div></div>`;
+  if(f.strong.length) h += `<div class="owned">Strong here: ${f.strong.join(', ')}.${f.weak.length ? ' Hard to find work in ' + f.weak.join(', ') + '.' : ''}</div>`;
+  else if(f.weak.length) h += `<div class="owned">Hard to find work in ${f.weak.join(', ')}.</div>`;
+  const lived = placesLived();
+  if(lived.length > 1) h += `<div class="owned">Places lived: ${lived.map(placeTitle).join(' → ')}.</div>`;
+  if(state.age >= 18){
+    const blk = moveBlock();
+    h += `<div class="assetbuy"><button onclick="toggleMoveList()" ${blk ? 'disabled' : ''}>${state.moveOpen && !blk ? 'Hide other cities' : 'Look at moving'}</button>${blk ? '<span class="sub-meta"> ' + blk + '</span>' : ''}</div>`;
+    if(state.moveOpen && !blk) h += moveListHtml();
+  }
+  return h + '</div>';
+}
+function toggleMoveList(){ state.moveOpen = !state.moveOpen; renderPanel(); }
+function moveListHtml(){
+  const cur = curPlace(), cost = moveCost(), j = state.job, curRent = state.movedOut && !homeHere() ? rentThere(cur) : 0;
+  let h = `<div class="owned" style="margin-top:8px">Moving costs about <b>${fmt(cost)}</b> for movers, deposits and the trip. Friends you aren't close to will fade, and family ${state.place === state.homeTown ? 'will be farther away' : 'stays where they are'}.</div>`;
+  PLACES.filter(p => p.key !== state.place).forEach(p => {
+    const f = placeFacts(p), rent = rentThere(p), dRent = curRent ? rent - curRent : 0;
+    let payTxt = '';
+    if(j && !notCareer(j)) payTxt = ` · your field pays ${placePct(placePay(j.track, p) / placePay(j.track, cur))} vs. here`;
+    const hire = j ? placeHire(j.track, p) : 0;
+    const note = [rent ? `rent about ${fmt(rent)}/yr${dRent ? ' (' + (dRent > 0 ? '+' : '−') + fmt(Math.abs(dRent)) + ')' : ''}` : '', `living costs ${placePct(p.col)}`].filter(Boolean).join(' · ').replace(/^./, c => c.toUpperCase());
+    h += `<button class="opt" onclick="moveTo('${p.key}')" ${canPay(cost) ? '' : 'disabled'}><span>${p.icon} ${placeTitle(p.key)}${p.key === state.homeTown ? ' <span class="tick">HOME</span>' : ''}<span class="sub-meta">${p.vibe}. ${note}${payTxt}${f.strong.length ? ' · strong in ' + f.strong.join(', ') : ''}${j && hire <= -8 ? ' · few ' + j.track.toLowerCase() + ' jobs' : ''} · crime ${f.crime}</span></span><span class="meta">${canPay(cost) ? 'Move' : 'need ' + fmt(cost)}</span></button>`;
+  });
+  return h;
+}
+// the move itself, after any decisions about the job and the home
+function moveTo(key, step){
+  const p = placeOf(key); if(!p || key === state.place || moveBlock()) return;
+  const cost = moveCost(); if(!canPay(cost)) return;
+  step = step || {};
+  const j = state.job, own = homeHere(), cur = curPlace();
+  // first: what happens to the job
+  if(j && !notCareer(j) && !step.job){
+    const ratio = placePay(j.track, p) / placePay(j.track, cur), opts = [];
+    if(REMOTE_TRACKS.includes(j.track)) opts.push({label:`Keep working remotely <span class="sub-meta">${ratio < 0.97 ? 'pay adjusts to ' + fmt(Math.round(j.salary * Math.max(0.85, ratio) / 100) * 100) : 'same pay, ' + fmt(j.salary)}</span>`, run:() => moveTo(key, Object.assign({}, step, {job:'remote'}))});
+    if(!NO_TRANSFER.includes(j.track)) opts.push({label:`Ask for a transfer to ${placeTitle(key)} <span class="sub-meta">pay becomes about ${fmt(Math.round(j.salary * ratio / 100) * 100)}</span>`, run:() => moveTo(key, Object.assign({}, step, {job:'transfer'}))});
+    opts.push({label:`Quit and look for work there <span class="sub-meta">leave your job as ${j.title.toLowerCase()}</span>`, run:() => moveTo(key, Object.assign({}, step, {job:'quit'}))});
+    opts.push({label:'Stay put after all', run:() => {}});
+    return presentCustom(`<b>Moving to ${placeTitle(key)}.</b> What happens to ${state.name}'s job as ${j.title.toLowerCase()}?`, opts, 'moving truck boxes city');
+  }
+  // then: the home, if they own one here
+  if(own && !step.home){
+    const opts = [
+      {label:`Sell it <span class="sub-meta">about ${fmt(Math.round(own.value * 0.95 - ((state.loans.find(l => l.assetId === own.id) || {}).balance || 0)))} after the agent and any mortgage</span>`, run:() => moveTo(key, Object.assign({}, step, {home:'sell'}))},
+      {label:'Keep it and rent it out <span class="sub-meta">become a long-distance landlord</span>', run:() => moveTo(key, Object.assign({}, step, {home:'rent'}))},
+      {label:'Stay put after all', run:() => {}},
+    ];
+    return presentCustom(`<b>Moving to ${placeTitle(key)}.</b> What should ${state.name} do with the ${own.name}?`, opts, 'moving house sale');
+  }
+  relocate(key, Object.assign({cost}, step));
+  render();
+}
+// everything that follows a move; also used by life events that move you
+function relocate(key, o){
+  o = o || {};
+  const p = placeOf(key), from = state.place, a = state.age, n = state.name, bits = [];
+  if(o.cost){ pay(o.cost); }
+  state.assets.forEach(x => { if(x.category === 'Homes' && !x.city) x.city = from; });   // homes stay where they were built
+  const j = state.job;
+  if(j && o.job){
+    const ratio = placePay(j.track, p) / placePay(j.track, placeOf(from));
+    if(o.job === 'remote'){ j.remote = true; j.salary = Math.round(j.salary * Math.min(1, Math.max(0.85, ratio)) / 100) * 100; bits.push(`keeps working remotely as ${j.title.toLowerCase()}`); }
+    else if(o.job === 'transfer'){ j.salary = Math.round(j.salary * ratio / 100) * 100; j.remote = false; bits.push(`transfers with work at ${fmt(j.salary)} a year`); state.peakSalary = Math.max(state.peakSalary, j.salary); }
+    else if(o.job === 'quit'){ bits.push(`leaves the job as ${j.title.toLowerCase()}`); leaveRoleFor('move'); convertCoworkersToFriends(); state.job = null; }
+  }
+  const own = state.assets.find(x => x.category === 'Homes' && !x.rental && x.city === from);
+  if(own && o.home === 'sell'){ const got = sellAssetFor(own.id, own.value); bits.push(`sells the ${own.name} for ${fmt(got)} after the mortgage and fees`); }
+  else if(own && (o.home === 'rent' || o.home === undefined)){ rentOutHome(own.id, true); if(own.rental) own.rental.manager = true; bits.push(`rents out the ${own.name} through a property manager`); }
+  // people: a partner may not follow, friends fade, family is farther or closer
+  const partner = state.relationships.find(r => r.type === 'Partner');
+  if(partner && !o.keepPartner){
+    if(Math.random() < 0.25 + partner.closeness / 140) bits.push(`${partner.name} comes along`);
+    else { state.relationships = state.relationships.filter(r => r.id !== partner.id); bits.push(`${partner.name} won't leave, and they break up`); applyDelta({happy:-8}); }
+  }
+  const sp = state.relationships.find(r => r.type === 'Spouse'); if(sp) bits.push(`${sp.name} comes too`);
+  const kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18);
+  if(kids.length){ kids.forEach(k => { if(k.age >= 12) k.closeness = Math.max(10, k.closeness - 6); }); bits.push(kids.length > 1 ? 'the kids change schools' : kids[0].name + ' changes schools'); }
+  const lost = o.noDrift ? [] : drift(['Friend', 'Coworker', 'Contact'], 55);
+  if(key === state.homeTown) bondDelta(['Mother', 'Father', 'Sibling'], 10);
+  else if(from === state.homeTown) bondDelta(['Mother', 'Father', 'Sibling'], -8);
+  if(!state.movedOut){ state.movedOut = true; state.homeChoice = 'out'; state.relationships.forEach(r => { if(['Mother', 'Father', 'Sibling'].includes(r.type)) r.livingTogether = false; }); }
+  settlePlace(key, a);
+  state.lastMoveAge = a; state.moveOpen = false;
+  makeListings();                                           // the local property market
+  if(!o.silent) pushEntry(a, `${n} moves from ${placeName(from)} to ${placeName(key)}${key === state.homeTown ? ', back home' : ''}${o.cost ? ' (' + fmt(o.cost) + ' for the move)' : ''}${bits.length ? (bits.length > 1 ? ', ' : ' and ') + andList(bits) : ''}.${lost.length ? ' Over time ' + n + ' loses touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy: hasMyTrait('Adventurous') ? 8 : 3});
+  addMilestone(p.icon, 'Moved to ' + placeName(key));
+  return bits;
+}
+// each year: weather, crime and the feel of the place
+function placeYear(a){
+  if(!state.place) settlePlace(PLACE_DEFAULT, 0);
+  const p = curPlace(), n = state.name;
+  if(p.mood && Math.random() < 0.35) applyDelta({happy: p.mood});
+  if(p.health && Math.random() < 0.35) applyDelta({health: p.health});
+  // far from where the family lives, ties cool a little each year
+  if(state.homeTown && state.place !== state.homeTown && Math.random() < 0.5) state.relationships.forEach(r => { if(['Mother', 'Father', 'Sibling'].includes(r.type)) r.closeness = Math.max(10, r.closeness - 1); });
+  // the weather the place is known for
+  if(p.risk && Math.random() < p.risk.p * (state.world.fx.storm && ['hurricane', 'storm', 'tornado', 'flood'].includes(p.risk.kind) ? 2 : 1)){
+    const own = homeHere();
+    let text = p.risk.text + '.', d = {happy:-3};
+    if(own && p.risk.dmg){
+      const dmg = Math.round(own.value * p.risk.dmg * (0.5 + Math.random()) / 100) * 100, cover = state.insurance.home ? 0.85 : 0;
+      own.value = Math.max(0, own.value - Math.round(dmg * 0.3));
+      d.money = -Math.round(dmg * (1 - cover));
+      text += ` ${n}'s home takes ${fmt(dmg)} in damage${cover ? ', and insurance pays most of the repairs' : ', with no home insurance to help'}.`;
+    } else if(p.risk.dmg && state.movedOut){ const loss = inflR(rint(3, 12) * 100, 50); d.money = -loss; text += ` ${n} loses about ${fmt(loss)} in ruined belongings and time off.`; }
+    else text += ` ${n} gets through it safely.`;
+    if(Math.random() < 0.15){ d.health = -rint(3, 8); text += ' They are hurt in the chaos.'; }
+    pushEntry(a, text, d);
+  } else if(a >= 6 && Math.random() < 0.08 * evMult()){
+    pushEntry(a, fill(pick(p.events).replace('{n}', n)) + '.', {happy: rint(1, 3)});
+  }
+  // children: now and then the family relocates
+  if(a < 18 && a >= 3 && parentsHome() && Math.random() < 0.012){
+    const to = pick(PLACES.filter(x => x.key !== state.place)).key;
+    state.homeTown = to;
+    settlePlace(to, a);
+    drift(['Friend'], 70);
+    pushEntry(a, `${n}'s family moves to ${placeName(to)} for a parent's job. ${a >= 10 ? 'Leaving their friends behind is hard.' : 'Everything feels new.'}`, {happy: a >= 10 ? -6 : -1});
+  }
+}
 const RENT_MULT = {low:0.9, market:1, high:1.15};
 const rentals = () => state.assets.filter(x => x.rental);
 function housingLabel(){ const t = state.housing.trend; return t <= -0.08 ? 'crashing' : t < -0.02 ? 'cooling' : t > 0.06 ? 'red hot' : t > 0.02 ? 'heating up' : 'steady'; }
@@ -4224,7 +4474,7 @@ function makeListings(){
   for(let i = 0, n = rint(4, 6); i < n; i++){
     const t = Math.random() < 0.55 ? pick(types.filter(x => x.price <= 450000)) : pick(types), loc = pick(LOCATIONS);
     const cond = Math.random() < 0.25 ? rint(22, 50) : rint(60, 95);
-    const fair = Math.round(t.price * cum * state.housing.idx * loc.price * (0.6 + cond / 250) / 1000) * 1000;
+    const fair = Math.round(t.price * cum * state.housing.idx * loc.price * placeRent() * (0.6 + cond / 250) / 1000) * 1000;
     const price = Math.round(fair * (0.85 + Math.random() * 0.3) / 1000) * 1000;
     state.listingSeq++;
     state.listings.push({id:'L' + state.listingSeq, key:t.key, loc:loc.key, cond, fair, price, units:t.units || 1});
@@ -4293,14 +4543,15 @@ function repairRental(id){
   pushEntry(state.age, `${state.name} spends ${fmt(c)} fixing up the ${x.name}.`, {});
   render();
 }
-function rentOutHome(id){
+function rentOutHome(id, quiet){
   const x = state.assets.find(y => y.id === id); if(!x || x.category !== 'Homes' || x.rental) return;
   x.rental = {units:1, occupied:0, rent:'market', cond:80, manager:false, loc:'suburbs', lastRent:0, lastNet:null, home:true}; x.roommate = false;
+  if(quiet) return;
   pushEntry(state.age, `${state.name} puts the ${x.name} up for rent.`, {});
   render();
 }
 function moveIntoHome(id){
-  const x = state.assets.find(y => y.id === id); if(!x || !x.rental || !x.rental.home) return;
+  const x = state.assets.find(y => y.id === id); if(!x || !x.rental || !x.rental.home || (x.city && x.city !== state.place)) return;
   delete x.rental;
   pushEntry(state.age, `${state.name} moves back into the ${x.name}.`, {});
   render();
@@ -4391,7 +4642,7 @@ function rentalCardHtml(x){
     <div class="btnrow-social"><button onclick="togglePropManager('${x.id}')">${r.manager ? 'Manager: on (' + (t.shortTerm ? '20' : '10') + '% of rent)' : 'Hire a property manager'}</button>
       <button onclick="repairRental('${x.id}')" ${state.done['repair_' + x.id] || !canPay(repairCost(x)) || r.cond >= 95 ? 'disabled' : ''}>Repairs (${fmt(repairCost(x))})</button>
       <button onclick="renovate('${x.id}')" ${(x.renovatedAge !== undefined && state.age - x.renovatedAge < 5) || !canPay(renoCost(x)) ? 'disabled' : ''}>${x.renovatedAge !== undefined && state.age - x.renovatedAge < 5 ? 'Renovated recently' : 'Renovate (' + fmt(renoCost(x)) + ')'}</button>
-      ${r.home ? `<button onclick="moveIntoHome('${x.id}')">Move back in</button>` : `<button onclick="sellAsset('${x.id}')">Sell for ${fmt(x.value * 0.95)}</button>`}</div>
+      ${r.home && (!x.city || x.city === state.place) ? `<button onclick="moveIntoHome('${x.id}')">Move back in</button>` : `<button onclick="sellAsset('${x.id}')">Sell for ${fmt(x.value * 0.95)}</button>`}</div>${x.city && x.city !== state.place ? `<div class="owned">In ${placeName(x.city)}, where you used to live.</div>` : ''}
   </div>`;
 }
 function listingHtml(l){
@@ -9126,7 +9377,7 @@ function assetGainsHtml(){
 function assetCatalogRow(t, cat){
   if(t.hidden) return '';
   const minA = t.minAge || CAT_MIN[cat], locked = state.age < minA;
-  const price = cat === 'Cars' ? vehPrice(t) : inflR(t.price, 100), models = cat === 'Cars' ? VEH_MODELS[t.key] : null;
+  const price = cat === 'Cars' ? vehPrice(t) : cat === 'Homes' ? inflR(t.price * placeRent(), 100) : inflR(t.price, 100), models = cat === 'Cars' ? VEH_MODELS[t.key] : null;
   const afford = state.money >= price;
   const financeable = FINANCEABLE.includes(cat);
   const down = Math.round(price * 0.2);
@@ -11216,6 +11467,7 @@ function applyHeir(h){
   state.traits = (kid.traits || []).slice();
   state.pets = (old.pets || []).map(p => Object.assign({}, p)); state.petSeq = old.petSeq || 0;
   if(old.world) state.world = old.world;
+  state.placeLog = []; settlePlace(old.place && PLACES.some(p => p.key === old.place) ? old.place : PLACE_DEFAULT, 0); state.homeTown = state.place;   // the heir grew up where the family lived
   if(old.fame && old.fame.peak >= 30){ state.fame.inherited = Math.round(old.fame.peak * 0.35); state.fame.level = Math.round(state.fame.inherited * 0.6); }
   state.health.history = Array.from(new Set((old.health ? old.health.history : []).concat(old.health ? old.health.conditions.filter(c => c.known && CONDITIONS[c.key].kind !== 'acute' && !CONDITIONS[c.key].mood && c.key !== 'addiction').map(c => c.key) : [])));
   state.will = old.will; state.trust = old.trust;
@@ -13232,8 +13484,8 @@ function businessYear(a){
   return Math.round((profit - kept) * bizShare(b));
 }
 // ---------- Where you live: with your parents, renting, or in a home you own ----------
-const parentsHome = () => state.relationships.some(r => r.type === 'Mother' || r.type === 'Father');
-const startRent = () => Math.round(13000 * state.econ.cumInflation * (LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable).rent * 0.6 / 100) * 100;
+const parentsHome = () => (!state.homeTown || !state.place || state.place === state.homeTown) && state.relationships.some(r => r.type === 'Mother' || r.type === 'Father');
+const startRent = () => Math.round(13000 * state.econ.cumInflation * (LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable).rent * 0.6 * placeRent() / 100) * 100;
 function moveOut(a, text, delta){
   if(state.movedOut) return;
   state.movedOut = true; state.homeChoice = 'out';
@@ -13271,7 +13523,7 @@ function homeYear(a){
 // What renting costs next to owning a starter house, for someone who rents today
 function rentBuyHtml(){
   const t = findCatalog('starter'); if(!t) return '';
-  const cum = state.econ.cumInflation, price = inflR(t.price, 100), down = Math.round(price * 0.2), loan = price - down;
+  const cum = state.econ.cumInflation, price = inflR(t.price * placeRent(), 100), down = Math.round(price * 0.2), loan = price - down;
   const apr = Math.max(0.03, Math.min(0.18, state.econ.rate + Math.max(0.005, (700 - state.creditScore) / 5000) + (felon() ? 0.03 : 0)));
   const pay = Math.round(loanPay(loan, apr, 30)), upkeep = Math.round(price * (t.upkeepPct || 0)), own = pay + upkeep;
   const rent = (state.flow && state.flow.housing) || startRent(), equity = Math.round(pay - loan * apr), gain = Math.round(price * (t.appreciation || 0));
@@ -13638,18 +13890,18 @@ function spouseIncome(sp){
 }
 function livingEstimate(){
   const cum = state.econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, sp = hasRel('Spouse');
-  const own = state.assets.some(x => x.category === 'Homes' && !x.rental), kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length;
+  const own = state.assets.some(x => x.category === 'Homes' && !x.rental), kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18).length, PR = placeRent(), PC = placeCol();
   const a = state.age, e = state.edu, independent = a >= 20 || !!state.job || (a >= 18 && state.movedOut);
   // not paying their own way yet (or in prison): what living on their own would cost
-  if(a < 18 || !independent || state.crime.prison) return Math.round(((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1) * (felon() ? 1.1 : 1)) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) + kids * 8000 * cum * Math.sqrt(L.mult)) * (state.world.costMult || 1) * diff('cost'));
+  if(a < 18 || !independent || state.crime.prison) return Math.round(((own ? 0 : 13000 * L.rent * (sp ? 1.3 : 1) * (felon() ? 1.1 : 1) * PR) * cum + 11000 * cum * L.mult * (sp ? 1.6 : 1) * PC + kids * 8000 * cum * Math.sqrt(L.mult) * PC) * (state.world.costMult || 1) * diff('cost'));
   // otherwise the same rules the yearly bills use
   const student = (e.program || e.gradAge === a) && !sp, fullRide = e.program ? (e.program.aid || 0) >= 1 : !!e.fullRideGrad && e.gradAge === a;
   let t, liv = 0;
-  if(!state.movedOut && !sp) t = liv = 11000 * cum * L.mult * 0.3;
-  else if(student) t = fullRide ? 0 : 9000 * cum * L.mult;
-  else { liv = 11000 * cum * L.mult * (sp ? 1.6 : 1); t = (own ? 0 : 13000 * cum * L.rent * (sp ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1)) + liv; }
+  if(!state.movedOut && !sp) t = liv = 11000 * cum * L.mult * 0.3 * PC;
+  else if(student) t = fullRide ? 0 : 9000 * cum * L.mult * (1 + PR) / 2;
+  else { liv = 11000 * cum * L.mult * (sp ? 1.6 : 1) * PC; t = (own ? 0 : 13000 * cum * L.rent * (sp ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1) * PR) + liv; }
   if(freezeOn()) t -= liv * FREEZE_CUT;
-  t += kids * 8000 * cum * Math.sqrt(L.mult);
+  t += kids * 8000 * cum * Math.sqrt(L.mult) * PC;
   if(state.insurance.health) t += 1200 * cum;
   if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) t += 900 * cum;
   if(state.insurance.home && own) t += 800 * cum;
@@ -13729,14 +13981,14 @@ function yearlyFinances(a){
     const student = (e.program || e.gradAge === a) && !spouse;
     const fullRide = e.program ? (e.program.aid || 0) >= 1 : !!e.fullRideGrad && e.gradAge === a;
     if(!state.movedOut){
-      flow.living = Math.round(11000 * cum * L.mult * 0.3);               // living at home: no rent, just chipping in for groceries and bills
+      flow.living = Math.round(11000 * cum * L.mult * 0.3 * placeCol());               // living at home: no rent, just chipping in for groceries and bills
     } else if(student){
-      flow.housing = fullRide ? 0 : Math.round(9000 * cum * L.mult);       // dorms, meal plans, shared apartments; a full ride includes room and board
+      flow.housing = fullRide ? 0 : Math.round(9000 * cum * L.mult * (1 + placeRent()) / 2);       // dorms, meal plans, shared apartments; a full ride includes room and board
     } else {
-      if(!ownsHome) flow.housing = Math.round(13000 * cum * L.rent * (spouse ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1));   // young singles share with roommates; landlords charge felons more
-      flow.living = Math.round(11000 * cum * L.mult * (spouse ? 1.6 : 1));   // food, transport, utilities and everything else
+      if(!ownsHome) flow.housing = Math.round(13000 * cum * L.rent * (spouse ? 1.3 : a < 26 && !hasRel('Partner') ? 0.6 : 1) * (felon() ? 1.1 : 1) * placeRent());   // young singles share with roommates; landlords charge felons more
+      flow.living = Math.round(11000 * cum * L.mult * (spouse ? 1.6 : 1) * placeCol());   // food, transport, utilities and everything else
     }
-    kidCost = flow.kids = Math.round(kids * 8000 * cum * Math.sqrt(L.mult));
+    kidCost = flow.kids = Math.round(kids * 8000 * cum * Math.sqrt(L.mult) * placeCol());
     if(state.insurance.health) flow.insurance += Math.round(1200 * cum);
     if(state.insurance.auto && state.assets.some(x => x.category === 'Cars')) flow.insurance += Math.round(900 * cum);
     if(state.insurance.home && ownsHome) flow.insurance += Math.round(800 * cum);
@@ -14349,7 +14601,7 @@ function startRankFor(track){
   }
   return best;
 }
-function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track) * (['Retail','Culinary','Odd Jobs'].includes(track) ? state.world.wageMult : 1) * (1 + trackFx(track).pay), 100); }
+function startingSalary(track, rankIdx){ return inflR(CAREERS[track][rankIdx || 0].salary * eduPayMult(track) * (['Retail','Culinary','Odd Jobs'].includes(track) ? state.world.wageMult : 1) * (1 + trackFx(track).pay) * placePay(track), 100); }
 function eduSummary(){
   const e = ED();
   if(e.program) return e.program.name + ' · year ' + (e.program.year + 1) + ' of ' + e.program.years + (e.program.major && e.program.major !== 'Undecided' ? ' · ' + e.program.major : '');
@@ -15113,6 +15365,7 @@ function mePanelHtml(){
   let h = '<div class="status"><b>' + state.name + "</b>, " + state.age + (state.gender && state.gender !== 'nonbinary' ? " · " + state.gender : state.gender ? " · non-binary" : "") + (state.generation > 1 ? " · generation " + state.generation : "") +
     "<br>" + fmtHeight(heightNow(state)) + " · " + BUILDS[avatarLooks(state).build].toLowerCase() + " build" +
     (traits ? "<br>Personality: " + traits : "") +
+    "<br>" + (state.age < 18 ? "Growing up in " : "Lives in ") + placeName(state.place) +
     "<br>" + (e.school && !e.program ? "Studying at " + e.school.toLowerCase() : "Education: " + eduSummary()) +
     "<br>" + (k.prison ? "In prison, " + k.prison.left + " year" + (k.prison.left > 1 ? "s" : "") + " left" : state.job ? state.job.title + ", " + fmt(state.job.salary) + " a year" : state.retired ? "Retired, pension " + fmt(state.pension) + " a year" : state.age >= 12 ? "Not working" : "Work is available from age 12") + "</div>";
   if(state.cheated || state.randomLife) h += '<div class="status">' + [state.randomLife ? '🎲 A random life: everything about ' + state.name + ' was left to chance at birth.' : '', state.cheated ? '🛠️ Cheats have been used in this life, so it earns no achievements.' : ''].filter(Boolean).join('<br>') + '</div>';
@@ -15132,6 +15385,7 @@ function mePanelHtml(){
   if(k.earned) facts.push("Made " + fmt(k.earned) + " from crime");
   if(state.fame.peak >= 10) facts.push("Fame: " + fameTier(state.fame.level).toLowerCase() + (state.fame.peak > state.fame.level + 10 ? ", once " + fameTier(state.fame.peak).toLowerCase() : "") + (state.fame.awards.length ? ", " + state.fame.awards.length + " award" + (state.fame.awards.length > 1 ? "s" : "") : ""));
   if(state.lineage.length) facts.push("Descended from " + state.lineage.map(x => x.name).join(" → "));
+  { const pl = placesLived(); facts.push(pl.length > 1 ? 'Lived in ' + pl.map(placeTitle).join(' → ') : 'Has always lived in ' + placeName(pl[0])); }
   if(facts.length) h += '<div class="plabel">Life so far</div><div class="invrow"><div class="owned">' + facts.join("<br>") + "</div></div>";
   h += lifeNumbersHtml();
   h += crossroadsHtml();
@@ -15728,7 +15982,7 @@ function promoChance(j, rank, boost){
 }
 // The chance (0-92%) that an application to this track's entry job succeeds; shown on the Career tab too.
 function hireChance(trackName){
-  return Math.max(0, Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + networkPull(trackName) + Math.min(6, fluentLangs().length * 3) + (state.interviewPrep === state.age ? 12 : 0) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1));
+  return Math.max(0, Math.min(92, 40 + state.stats.smarts*0.3 + state.stats.looks*0.1 + (relevantDegree(trackName) ? 8 : 0) + Math.min(2, ED().internships || 0) * 4 + (state.world.fx.hiring ? 10 : 0) - (state.world.fx.layoffs ? 8 : 0) + wfx().hiring + trackFx(trackName).hire + placeHire(trackName) + networkPull(trackName) + Math.min(6, fluentLangs().length * 3) + (state.interviewPrep === state.age ? 12 : 0) + (isVeteran() && ['Law Enforcement','Firefighting','Aviation','Politics'].includes(trackName) ? 12 : 0)) * (felonyCount() ? 0.55 : priorCount() ? 0.85 : 1));
 }
 function applyJob(trackName){
   if(trackName === 'Military') return enlistPrompt();
@@ -16852,7 +17106,7 @@ function r6Year(a){
     else if(sl === 8) applyDelta({health: Math.random() < 0.5 ? 1 : 0, happy: Math.random() < 0.5 ? 1 : 0});
   }
   // break-ins (the crime wave has its own); a security system cuts the odds
-  if(a >= 18 && state.movedOut && !wfx().crimeWave && Math.random() < 0.012 * (r.security ? 0.33 : 1)) breakIn(a);
+  if(a >= 18 && state.movedOut && !wfx().crimeWave && Math.random() < 0.012 * curPlace().crime * (r.security ? 0.33 : 1)) breakIn(a);
 }
 
 const SUBMENUS = {
@@ -16863,7 +17117,7 @@ const SUBMENUS = {
   soc:    [['social', 'Socialize', /needs attention|big birthdays|get together/i], ['family', 'Family', /^partner|^family|family line|in memory/i], ['friends', 'Friends', /^friends|^coworkers|professional network/i], ['pets', 'Pets', /pet/i]],
   bank:   [['overview', 'Overview', null], ['debt', 'Debt', /your debt/i], ['save', 'Saving', /emergency fund|^savings|auto-save|certificates|retirement|college fund/i], ['credit', 'Borrowing', /credit|^loans|debt relief/i], ['protect', 'Protect', /insurance|estate planning|giving|trust/i]],
   inv:    [['mine', 'My portfolio', /^the market|your performance|where this could go|your portfolio|your holdings|portfolio checkup|open orders|ready-made|^auto-invest/i], ['market', 'Buy & sell', /^sort$|world outlook|market news|^show$|investment club/i], ['angel', 'Startups', /angel/i]],
-  ast:    [['home', 'Property', /what you own|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things|car sharing|valuables cover/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
+  ast:    [['home', 'Property', /what you own|your city|where you live|real estate/i], ['license', 'License', /driver's license/i], ['mine', 'My things', /your things|car sharing|valuables cover/i], ['shop', 'Shop', /^(homes|vehicles|jewelry|collectibles)/i]],
   biz:    [['run', 'Overview', /last year/i], ['staff', 'Staff', /^staff/i], ['plan', 'Strategy', /strategy|upgrades|growth|running the place|trade shows/i], ['more', 'Name & exit', /^exit|^name$/i]],
   media:  [['fame', 'Fame', null], ['social', 'Social media', /^social media/i]],
   health: [['overview', 'Overview', /health report/i], ['care', 'Care', /care and wellness|conditions|medical history/i], ['habits', 'Habits', /^habits|daily steps/i]],
@@ -16960,7 +17214,7 @@ function renderPanel(){
   } else if(state.panel === 'ast'){
     const av = assetsValue();
     h += `<div class="status">Cash <b>${fmt(state.money)}</b> &nbsp;·&nbsp; Assets <b>${fmt(av)}</b> &nbsp;·&nbsp; Debt <b>${fmt(totalDebt())}</b><br>Net worth <b>${fmt(netWorth())}</b></div>`;
-    h += assetSummaryHtml() + homeHtml() + realEstateHtml() + licenseHtml();
+    h += assetSummaryHtml() + placeCardHtml() + homeHtml() + realEstateHtml() + licenseHtml();
     const mine = state.assets.filter(x => !x.rental);
     if(mine.length){
       h += '<div class="plabel">YOUR THINGS</div>';
@@ -18682,13 +18936,14 @@ const drift = (types, keep) => {                         // moving away: weaker 
 };
 const CROSSROADS = [
   {key:'move', min:22, max:55, cond:() => !notCareer(state.job), run(a){
-    const j = state.job, raise = Math.round(Math.max(inflR(40000, 1000), j.salary * 0.35) * newsFor('move').mult / 1000) * 1000, city = pick(['Seattle', 'Austin', 'Denver', 'Boston', 'Miami', 'Chicago', 'San Francisco', 'Atlanta', 'Phoenix', 'New York']);
+    const j = state.job, raise = Math.round(Math.max(inflR(40000, 1000), j.salary * 0.35) * newsFor('move').mult / 1000) * 1000, dest = pick(PLACES.filter(p => p.key !== state.place && p.kind !== 'town' && p.kind !== 'rural')).key, city = placeTitle(dest);
     const friends = state.relationships.filter(r => ['Friend', 'Coworker', 'Contact'].includes(r.type)).length;
     return presentCrossroads('The job across the country', `${state.name} is offered a ${j.title} job in ${city}, across the country, for ${fmt(j.salary + raise)} a year.`, [
       {label:'Accept and move', pros:[`+${fmt(raise)} a year`, 'a fresh start in a new city'], cons:[friends ? 'some friendships will fade' : 'leaving everyone behind', 'far from family'], run:() => {
         j.salary += raise; j.years = 0; j.remote = false;
         const lost = drift(['Friend', 'Coworker', 'Contact'], 60); bondDelta(['Mother', 'Father', 'Sibling'], -12);
-        pushEntry(a, `${state.name} packs up and moves to ${city}, starting at ${fmt(j.salary)}.${lost.length ? ' Over time they lose touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy:4});
+        const moved = relocate(dest, {silent:true, noDrift:true}).filter(b => !/remote|transfer|leaves the job/.test(b));
+        pushEntry(a, `${state.name} packs up and moves to ${city}, starting at ${fmt(j.salary)}${moved.length ? '; ' + andList(moved) : ''}.${lost.length ? ' Over time they lose touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy:4});
         seedThread('move', {}, `Moved to ${city} for a ${fmt(raise)} raise`, rint(1, 2), 'settle');
       }},
       {label:'Decline and stay home', pros:['keep every relationship', 'family stays close'], cons:['miss the opportunity', 'wonder what might have been'], run:() => {
@@ -18978,13 +19233,14 @@ const CROSSROADS = [
       {label:'Pass', pros:['no risk'], cons:['someone else gets rich'], run:() => pushEntry(a, `${state.name} watches the green rush from the sidelines.`, {})},
     ]);
   }},
-  {key:'countryside', news:true, min:25, max:70, cond:() => worldHas('pandemic'), run(a){
+  {key:'countryside', news:true, min:25, max:70, cond:() => worldHas('pandemic') && state.place !== 'country' && !moveBlock(), run(a){
     const remote = !state.job || ['Technology', 'Business', 'Finance', 'Science', 'Law'].includes(state.job.track);
     return presentCrossroads('Leave the city?', `The pandemic has emptied the city. ${state.name} could move to a quiet farmhouse in the countryside${remote ? ' and work remotely' : ''}.`, [
       {label:'Move to the countryside', pros:['fresh air and space', 'a slower, healthier life'], cons:['friends far away', remote ? 'isolation' : 'leave your job'], run:() => {
         if(!remote && state.job){ leaveRoleFor('country'); convertCoworkersToFriends(); state.job = null; }
         drift(['Friend', 'Coworker', 'Contact'], 45);
-        pushEntry(a, `${state.name} trades city life for a farmhouse in the countryside.`, {happy:8, health:5});
+        const moved = relocate('country', {silent:true, noDrift:true});
+        pushEntry(a, `${state.name} trades city life in ${placeName(state.placeLog[state.placeLog.length - 2].key)} for a farmhouse in the countryside${moved.length ? '; ' + andList(moved) : ''}.`, {happy:8, health:5});
       }},
       {label:'Ride it out in the city', pros:['keep your life intact'], cons:['months cooped up in a small apartment'], run:() => pushEntry(a, `${state.name} rides out the pandemic in the city.`, {happy:-3})},
     ]);
@@ -19930,6 +20186,9 @@ const ACHIEVEMENTS = [
   {k:'old90', cat:'Life', icon:'🎂', tier:'silver', name:'Ninety Candles', desc:'Live to 90', test:() => state.age >= 90},
   {k:'highmiles', cat:'Life', icon:'🛣️', tier:'bronze', name:'High Mileage', desc:'Keep a car on the road for 200,000 miles', on:/rolls past \d+,000 miles/},
   {k:'resolute', cat:'Life', icon:'🎆', tier:'silver', name:'Resolute', desc:'Keep five New Year\'s resolutions', test:() => (state.resKept || 0) >= 5},
+  {k:'nomad', cat:'Life', icon:'🧳', tier:'silver', name:'Nomad', desc:'Live in five different cities', test:() => new Set(placesLived()).size >= 5},
+  {k:'coast', cat:'Life', icon:'🗺️', tier:'bronze', name:'Coast to Coast', desc:'Live in New York and in Los Angeles or San Francisco', test:() => { const L = placesLived(); return L.includes('newyork') && (L.includes('losangeles') || L.includes('sanfrancisco')); }},
+  {k:'rooted', cat:'Life', icon:'🌳', tier:'silver', name:'Deep Roots', desc:'Reach 70 without ever leaving your hometown', test:() => state.age >= 70 && new Set(placesLived()).size === 1},
   {k:'old100', cat:'Life', icon:'💯', tier:'gold', name:'Centenarian', desc:'Live to 100', test:() => state.age >= 100},
   {k:'joy', cat:'Life', icon:'😄', tier:'silver', name:'Happy Ever After', desc:'Have 100 happiness at 65 or older', test:() => state.age >= 65 && state.stats.happy >= 100},
   {k:'young', cat:'Life', icon:'🥀', tier:'bronze', name:'Gone Too Soon', desc:'Die before 30', secret:true},
