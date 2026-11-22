@@ -767,7 +767,7 @@ function freshState(name){
     housing:{idx:1, trend:0}, listings:[], listingSeq:0, pets:[], petSeq:0, travel:{trips:0, places:[]}, world:freshWorld(),
     namesFixed:true, watch:[], drip:false, divLast:0, divTotal:0, flow:null, nwHist:[], csHist:[], missedAges:[], collegeFund:0, crossroads:[], xrUsed:[], mil:null, pol:null, boardSeat:null, threads:[], threadSeq:0, storyDone:[], lastOpener:{}, milestones:[], ach:{events:[], got:[], peakDebt:0, ms:{}},
     fame:{level:0, peak:0, image:60, awards:[], offers:[], products:[], publicist:false, security:false, offGrid:false, memoir:false, inherited:0},
-    place:null, homeTown:null, placeLog:[], lastMoveAge:null, moveOpen:false, cityFx:{}, settledAge:null
+    place:null, homeTown:null, placeLog:[], lastMoveAge:null, moveOpen:false, cityFx:{}, settledAge:null, lastOfferAge:null, honoredAge:null, headhunted:0, ldWin:false
   };
 }
 // ---- the setup screen: gender and personality ----
@@ -3357,7 +3357,8 @@ function ageUpYear(){
   const milPrompted = militaryYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted));
   const polPrompted = politicsYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted));
   if(!state.alive) return;
-  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted){ render(); return; }
+  const offerPrompted = placeOfferYear(a, !(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted));
+  if(prompted || relPrompted || legalPrompted || bizPrompted || propPrompted || vehPrompted || famePrompted || pets.asked || consPrompted || netPrompted || milPrompted || polPrompted || offerPrompted){ render(); return; }
 
   if(state.crash && !state.crime.prison){ crashChoice(a); render(); return; }
   // some years carry a second, smaller moment alongside the main one
@@ -4343,6 +4344,8 @@ function placeCardHtml(){
   const btns = [];
   if(state.age >= 14) btns.push(`<button onclick="exploreCity()" ${state.done.explore || state.crime.prison || (state.movedOut && !canPay(exploreCost())) ? 'disabled' : ''}>${state.done.explore ? 'Explored this year' : 'Explore the city' + (state.movedOut ? ' (' + fmt(exploreCost()) + ')' : '')}</button>`);
   if(state.age >= 18 && state.place !== state.homeTown && homeFolks().length) btns.push(`<button onclick="visitFamily()" ${state.done.visitHome || state.crime.prison || !canPay(visitCost()) ? 'disabled' : ''}>${state.done.visitHome ? 'Visited family this year' : 'Visit family in ' + placeName(state.homeTown) + ' (' + fmt(visitCost()) + ')'}</button>`);
+  const ldp = ldPartner();
+  if(ldp) btns.push(`<button onclick="visitPartner()" ${state.done.visitLD || state.crime.prison || !canPay(ldVisitCost()) ? 'disabled' : ''}>${state.done.visitLD ? 'Saw ' + ldp.name + ' this year' : 'Visit ' + ldp.name + ' in ' + placeName(ldp.longDistance) + ' (' + fmt(ldVisitCost()) + ')'}</button>`);
   if(btns.length) h += '<div class="btnrow-social">' + btns.join('') + '</div>';
   const lived = placesLived();
   if(lived.length > 1) h += `<div class="owned">Places lived: ${lived.map(placeTitle).join(' → ')}.</div>`;
@@ -4405,6 +4408,7 @@ function relocate(key, o){
     const ratio = placePay(j.track, p) / placePay(j.track, placeOf(from));
     if(o.job === 'remote'){ j.remote = true; j.salary = Math.round(j.salary * Math.min(1, Math.max(0.85, ratio)) / 100) * 100; bits.push(`keeps working remotely as ${j.title.toLowerCase()}`); }
     else if(o.job === 'transfer'){ j.salary = Math.round(j.salary * ratio / 100) * 100; j.remote = false; bits.push(`transfers with work at ${fmt(j.salary)} a year`); state.peakSalary = Math.max(state.peakSalary, j.salary); }
+    else if(o.job === 'offer'){ j.salary = o.salary; j.remote = false; j.years = 0; bits.push(`starts a new job there at ${fmt(j.salary)} a year`); state.peakSalary = Math.max(state.peakSalary, j.salary); }
     else if(o.job === 'quit'){ bits.push(`leaves the job as ${j.title.toLowerCase()}`); leaveRoleFor('move'); convertCoworkersToFriends(); state.job = null; }
   }
   if(state.business){ const b = state.business; if(!b.city) b.city = from; if(b.city === key) bits.push(`is back near ${bizName(b)}`); else if(b.city === from) bits.push(`leaves ${bizName(b)} in ${placeName(from)}${b.upgrades && b.upgrades.manager ? ' with its manager' : ', to run from afar'}`); }
@@ -4412,14 +4416,18 @@ function relocate(key, o){
   if(own && o.home === 'sell'){ const got = sellAssetFor(own.id, own.value); bits.push(`sells the ${own.name} for ${fmt(got)} after the mortgage and fees`); }
   else if(own && (o.home === 'rent' || o.home === undefined)){ rentOutHome(own.id, true); if(own.rental) own.rental.manager = true; bits.push(`rents out the ${own.name} through a property manager`); }
   // people: a partner may not follow, friends fade, family is farther or closer
-  const partner = state.relationships.find(r => r.type === 'Partner');
+  const partner = state.relationships.find(r => r.type === 'Partner' && !r.longDistance);
+  const ld = state.relationships.find(r => r.longDistance === key);
+  if(ld){ ld.longDistance = null; ld.ldYears = 0; state.ldWin = true; bits.push(`is back with ${ld.name} at last`); }
   if(partner && !o.keepPartner){
     if(Math.random() < 0.25 + partner.closeness / 140) bits.push(`${partner.name} comes along`);
+    else if(partner.closeness >= 40 && Math.random() < 0.6){ partner.longDistance = from; partner.ldYears = 0; partner.livingTogether = false; bits.push(`${partner.name} stays in ${placeName(from)}, and they try long distance`); applyDelta({happy:-3}); }
     else { state.relationships = state.relationships.filter(r => r.id !== partner.id); bits.push(`${partner.name} won't leave, and they break up`); applyDelta({happy:-8}); }
   }
   const sp = state.relationships.find(r => r.type === 'Spouse'); if(sp) bits.push(`${sp.name} comes too`);
   const kids = state.relationships.filter(r => r.type === 'Child' && r.age < 18);
-  if(kids.length){ kids.forEach(k => { if(k.age >= 12) k.closeness = Math.max(10, k.closeness - 6); }); bits.push(kids.length > 1 ? 'the kids change schools' : kids[0].name + ' changes schools'); }
+  if(kids.length){ kids.forEach(k => { if(k.age >= 12) k.closeness = Math.max(10, k.closeness - 6); }); bits.push(kids.length > 1 ? 'the kids change schools' : kids[0].name + ' changes schools');
+    const teen = kids.find(k => k.age >= 13); if(teen){ teen.closeness = Math.max(10, teen.closeness - 4); bits.push(`${teen.name} is furious about leaving their friends`); } }
   const lost = o.noDrift ? [] : drift(['Friend', 'Coworker', 'Contact'], 55);
   if(key === state.homeTown) bondDelta(['Mother', 'Father', 'Sibling'], 10);
   else if(from === state.homeTown) bondDelta(['Mother', 'Father', 'Sibling'], -8);
@@ -4427,14 +4435,14 @@ function relocate(key, o){
   settlePlace(key, a);
   state.lastMoveAge = a; state.moveOpen = false;
   makeListings();                                           // the local property market
-  if(!o.silent) pushEntry(a, `${n} moves from ${placeName(from)} to ${placeName(key)}${key === state.homeTown ? ', back home' : ''}${o.cost ? ' (' + fmt(o.cost) + ' for the move)' : ''}${bits.length ? (bits.length > 1 ? ', ' : ' and ') + andList(bits) : ''}.${lost.length ? ' Over time ' + n + ' loses touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy: hasMyTrait('Adventurous') ? 8 : 3});
+  if(!o.silent) pushEntry(a, `${n} moves from ${placeName(from)} to ${placeName(key)}${o.why ? ' ' + o.why : ''}${key === state.homeTown ? ', back home' : ''}${o.cost ? ' (' + fmt(o.cost) + ' for the move)' : o.job === 'offer' || o.why ? ' (the new employer pays for the move)' : ''}${bits.length ? (bits.length > 1 ? ', ' : ' and ') + andList(bits) : ''}.${lost.length ? ' Over time ' + n + ' loses touch with ' + lost.slice(0, 3).join(', ') + (lost.length > 3 ? ' and others' : '') + '.' : ''}`, {happy: hasMyTrait('Adventurous') ? 8 : 3});
   addMilestone(p.icon, 'Moved to ' + placeName(key));
   return bits;
 }
 // each year: weather, crime and the feel of the place
 function placeYear(a){
   if(!state.place) settlePlace(PLACE_DEFAULT, 0);
-  cityFxYear(a); settleYear(a);
+  cityFxYear(a); settleYear(a); ldYear(a); honorYear(a);
   const p = curPlace(), n = state.name;
   if(p.mood && Math.random() < 0.35) applyDelta({happy: p.mood});
   if(p.retire && state.retired && Math.random() < 0.4) applyDelta({happy:1, health: Math.random() < 0.3 ? 1 : 0});
@@ -4551,7 +4559,123 @@ function jobPlaceHtml(){
 }
 function placeLifeText(){
   const L = placesLived().filter((k, i, a) => a.indexOf(k) === i).map(placeTitle);
-  return L.length > 1 ? ` Home was ${L[0]}, then ${andList(L.slice(1))}.` : ` They spent their life in ${L[0]}.`;
+  return (L.length > 1 ? ` Home was ${L[0]}, then ${andList(L.slice(1))}.` : ` They spent their life in ${L[0]}.`) + (state.honoredAge != null ? ` ${placeTitle(state.homeTown)} honored them at ${state.honoredAge}.` : '');
+}
+// ---- Places, part three: job offers from other cities, a spouse's offer, long distance, and hometown honors ----
+const placeScore = (track, p) => placeHire(track, p) + (placePay(track, p) - 1) * 40;
+// a city that wants you: weighted toward places that are good for your field
+function offerCity(track){
+  const cur = curPlace(), base = placeScore(track, cur);
+  const C = PLACES.filter(p => p.key !== cur.key).map(p => ({p, s: placeScore(track, p) - base})).filter(x => x.s > -6).sort((x, y) => y.s - x.s).slice(0, 5);
+  if(!C.length) return null;
+  const tot = C.reduce((t, x) => t + Math.max(1, x.s + 8), 0); let r = Math.random() * tot;
+  for(const x of C){ r -= Math.max(1, x.s + 8); if(r <= 0) return x.p; }
+  return C[0].p;
+}
+const offerOk = a => state.alive && !state.crime.prison && !state.retired && a >= 22 && a <= 62 && !moveBlock() && (state.lastOfferAge == null || a - state.lastOfferAge >= 4);
+// the year's place decision, when nothing bigger is going on
+function placeOfferYear(a, free){
+  if(!free || !offerOk(a)) return false;
+  const j = state.job, sp = state.relationships.find(r => r.type === 'Spouse' && !r.longDistance);
+  if(j && !notCareer(j) && j.years >= 1){
+    const weak = placeHire(j.track) <= -5;
+    if(Math.random() < 0.03 + (weak ? 0.03 : 0) + (j.rank >= 2 ? 0.015 : 0)) return jobOffer(a);
+  }
+  if(sp && sp.age < 63 && Math.random() < 0.02) return spouseOffer(a, sp);
+  return false;
+}
+function jobOffer(a){
+  const j = state.job, p = offerCity(j.track); if(!p) return false;
+  const ratio = placePay(j.track, p) / placePay(j.track), sal = Math.round(j.salary * Math.max(0.95, ratio) * (1.06 + Math.random() * 0.12) / 100) * 100;
+  if(sal < j.salary * 1.04) return false;
+  state.lastOfferAge = a;
+  const n = state.name, own = homeHere(), rentNow = rentThere(curPlace()), rentNew = rentThere(p);
+  const opts = [
+    {label:`Take it and move <span class="sub-meta">${fmt(sal)} a year; they pay for the move; rent there about ${fmt(rentNew)}/yr vs ${fmt(rentNow)} here</span>`, run:() => takeOffer(p.key, sal, own)},
+    {label:`Use it to ask for a raise here <span class="sub-meta">your boss may match it, or may not</span>`, run:() => {
+      const odds = 0.45 + (j.perf ? (j.perf - 50) / 200 : 0) + (j.years >= 4 ? 0.1 : 0);
+      if(Math.random() < odds){ const was = j.salary; j.salary = Math.round(Math.min(sal, j.salary * (1.05 + Math.random() * 0.05)) / 100) * 100; state.peakSalary = Math.max(state.peakSalary, j.salary); pushEntry(a, `${n} shows the boss an offer from ${placeName(p.key)}. They match part of it, and ${n}'s pay goes from ${fmt(was)} to ${fmt(j.salary)}.`, {happy:5}); }
+      else pushEntry(a, `${n} brings an offer from ${placeName(p.key)} to the boss, who doesn't budge. Things are a little awkward at work for a while.`, {happy:-3});
+    }},
+    {label:'Turn it down', run:() => pushEntry(a, `${n} turns down a job offer in ${placeName(p.key)} and stays in ${placeName(state.place)}.`, {happy:1})},
+  ];
+  presentCustom(`<b>A company in ${placeTitle(p.key)} wants ${n}.</b> They offer ${fmt(sal)} a year to do ${j.title.toLowerCase()} work there, ${Math.round((sal / j.salary - 1) * 100)}% more than now, and will pay for the move.`, opts, 'job offer letter city');
+  return true;
+}
+function takeOffer(key, sal, own){
+  if(own){
+    return presentCustom(`<b>Moving to ${placeTitle(key)}.</b> What should ${state.name} do with the ${own.name}?`, [
+      {label:'Sell it', run:() => takeOffer2(key, sal, 'sell')},
+      {label:'Keep it and rent it out', run:() => takeOffer2(key, sal, 'rent')},
+    ], 'moving house sale');
+  }
+  takeOffer2(key, sal);
+}
+function takeOffer2(key, sal, home){
+  relocate(key, {job:'offer', salary:sal, home});
+  state.headhunted = (state.headhunted || 0) + 1;
+  render();
+}
+function spouseOffer(a, sp){
+  const p = pick(PLACES.filter(x => x.key !== state.place && x.pay >= curPlace().pay - 0.05)); if(!p) return false;
+  state.lastOfferAge = a;
+  const n = state.name, j = state.job, raise = 1.15 + Math.random() * 0.15;
+  const mine = !j || notCareer(j) ? null : REMOTE_TRACKS.includes(j.track) ? 'remote' : NO_TRANSFER.includes(j.track) ? 'quit' : 'transfer';
+  const jobTxt = !j || notCareer(j) ? '' : mine === 'remote' ? 'you keep your job remotely' : mine === 'transfer' ? 'you ask for a transfer' : 'you leave your job';
+  const opts = [
+    {label:`Move to ${placeTitle(p.key)} together <span class="sub-meta">${sp.name}'s pay rises about ${Math.round((raise - 1) * 100)}%${jobTxt ? '; ' + jobTxt : ''}; their company pays for the move</span>`, run:() => {
+      const own = homeHere();
+      const go = home => { sp.baseSalary = Math.round(((sp.baseSalary === undefined ? (sp.baseSalary = rint(15, 85) * 1000) : sp.baseSalary)) * raise / 100) * 100; bump(sp, 10); relocate(p.key, {job: mine || undefined, home, why:`for ${sp.name}'s new job`}); render(); };
+      if(own) return presentCustom(`<b>Moving to ${placeTitle(p.key)}.</b> What should ${n} do with the ${own.name}?`, [{label:'Sell it', run:() => go('sell')}, {label:'Keep it and rent it out', run:() => go('rent')}], 'moving house sale');
+      go();
+    }},
+    {label:`Ask ${sp.name} to turn it down <span class="sub-meta">you stay; they may resent it</span>`, run:() => {
+      bump(sp, -rint(6, 12));
+      pushEntry(a, `${sp.name} turns down a big job in ${placeName(p.key)} so the family can stay in ${placeName(state.place)}. ${sp.closeness < 45 ? 'It hangs over the marriage for a long time.' : 'They tell ' + n + ' it was the right call, mostly.'}`, {happy:-2});
+    }},
+  ];
+  presentCustom(`<b>${sp.name} is offered a job in ${placeTitle(p.key)}.</b> It is a step up, and they really want it, but it means moving.`, opts, 'job offer letter city');
+  return true;
+}
+// a partner who stayed behind: visits, strain, and sometimes a happy ending
+const ldPartner = () => state.relationships.find(r => r.type === 'Partner' && r.longDistance);
+function ldVisitCost(){ return inflR(450, 50); }
+function visitPartner(){
+  const r = ldPartner(); if(!r || state.done.visitLD || state.crime.prison) return;
+  const c = ldVisitCost(); if(!canPay(c)) return;
+  pay(c); state.done.visitLD = true; bump(r, 10);
+  pushEntry(state.age, `${state.name} flies to ${placeName(r.longDistance)} to see ${r.name} for a long weekend (${fmt(c)}).`, {happy:5});
+  render();
+}
+function ldYear(a){
+  state.relationships.filter(r => r.longDistance).forEach(r => {
+    const n = state.name, there = placeName(r.longDistance);
+    if(r.type !== 'Partner' || r.livingTogether || r.longDistance === state.place){
+      const why = r.longDistance === state.place ? `${n} and ${r.name} finally live in the same city again` : `${r.name} moves from ${there} to ${placeName(state.place)} to be with ${n}`;
+      r.longDistance = null; r.ldYears = 0; state.ldWin = true;
+      pushEntry(a, `${why}. The long-distance years are over.`, {happy:8});
+      return;
+    }
+    r.ldYears = (r.ldYears || 0) + 1;
+    if(!state.lastDone.visitLD) r.closeness = Math.max(5, r.closeness - rint(2, 6));
+    const seen = !!state.lastDone.visitLD, end = 0.03 + Math.max(0, (40 - r.closeness) / 80) + r.ldYears * 0.025 - (seen ? 0.02 : 0);
+    if(Math.random() < end){
+      state.relationships = state.relationships.filter(x => x.id !== r.id);
+      pushEntry(a, `The distance is too much: ${n} and ${r.name} break up after ${r.ldYears} year${r.ldYears > 1 ? 's' : ''} apart.`, {happy:-7});
+    } else if(r.closeness >= 45 && Math.random() < 0.05 + (r.closeness - 45) / 250 + (seen ? 0.05 : 0)){
+      r.longDistance = null; r.ldYears = 0; r.livingTogether = true; state.ldWin = true;
+      pushEntry(a, `${r.name} packs up and moves from ${there} to ${placeName(state.place)}, and they move in together.`, {happy:9});
+    } else if(Math.random() < 0.3) pushEntry(a, pick([`${n} and ${r.name} keep a standing video call every night.`, `${n} counts the days until seeing ${r.name} again.`, `${n} and ${r.name} watch the same movie at the same time, three time zones apart.`]), {happy: r.closeness >= 50 ? 1 : -1});
+  });
+}
+// the hometown remembers its famous kids
+function honorYear(a){
+  if(state.honoredAge != null || a < 21 || !state.homeTown || (state.fame.level || 0) < 60 || Math.random() > 0.15) return;
+  state.honoredAge = a;
+  const town = placeName(state.homeTown), away = state.place !== state.homeTown, what = pick(['names a day after', 'puts up a mural of', 'gives the key to the city to', 'names a street after']);
+  pushEntry(a, `${placeTitle(state.homeTown)} ${what} ${state.name}, its most famous ${state.homeTown === 'country' || state.homeTown === 'smalltown' ? 'kid' : 'native'}. ${away ? state.name + ' flies back for the ceremony, and half of ' + town + ' turns out.' : 'The whole town turns out.'}`, {happy:8});
+  addMilestone('🗝️', 'Honored by ' + town);
+  bondDelta(['Mother', 'Father', 'Sibling'], 5);
 }
 const RENT_MULT = {low:0.9, market:1, high:1.15};
 const rentals = () => state.assets.filter(x => x.rental);
@@ -11691,7 +11815,7 @@ function relRow(r){
   }
   if(r.type === "Child" && r.age < 18) more += '<button onclick="renameChild(\'' + r.id + '\')">Change name</button>';
   const tr = (r.traits || []).map(t => t.toLowerCase()).join(" · ");
-  const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.runsBiz ? "runs " + r.runsBiz : "", r.reconciled != null ? "made peace at " + r.reconciled : "", r.taught ? "you taught them " + ((HOBBY_LIST.find(h => h.key === r.taught) || {}).name || 'a hobby').toLowerCase() : "", r.best ? "your best friend" : "", r.lifelong ? "a lifelong friend since age " + r.met : "", r.livingTogether ? "living together" : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
+  const meta = [tr, r.origin ? (FAMILY_TYPES.includes(r.type) ? r.origin : "met " + r.origin) : "", r.runsBiz ? "runs " + r.runsBiz : "", r.reconciled != null ? "made peace at " + r.reconciled : "", r.taught ? "you taught them " + ((HOBBY_LIST.find(h => h.key === r.taught) || {}).name || 'a hobby').toLowerCase() : "", r.best ? "your best friend" : "", r.lifelong ? "a lifelong friend since age " + r.met : "", r.livingTogether ? "living together" : "", r.longDistance ? "long distance, in " + placeName(r.longDistance) : ""].concat(lifeBits(r)).filter(Boolean).join(" · ");
   return '<div class="invrow"><div class="itop"><span><b>' + r.name + '</b>' + (r.pro ? ' — ' + proTitle(r) : '') + ' <span class="tick">' + relLabel(r).toUpperCase() + " · age " + r.age + '</span></span><span class="price">' + bondLabel(r) + "</span></div>" +
     (meta ? '<div class="owned">' + meta + "</div>" : "") +
     '<div class="bondrow"><div class="stat-track" style="margin:5px 0 2px;flex:1"><div class="stat-fill" style="width:' + r.closeness + '%;background:var(--pink)"></div></div>' + ((r.bh || []).length >= 3 ? '<span title="Bond over the last ' + r.bh.length + ' years">' + sparkline(r.bh, 54, 16, 'pink') + '</span>' : '') + '</div>' +
@@ -13986,7 +14110,7 @@ function setLifestyle(k){ state.lifestyle = k; renderPanel(); }
 function spouseIncome(sp){
   if(sp.age >= 65) return Math.round(inflR(14000, 100) * 0.92);
   if(sp.baseSalary === undefined) sp.baseSalary = rint(15, 85) * 1000;
-  return Math.round(sp.baseSalary * state.econ.cumInflation * 0.78);
+  return Math.round(sp.baseSalary * state.econ.cumInflation * 0.78 * (sp.longDistance ? 1 : curPlace().pay));
 }
 function livingEstimate(){
   const cum = state.econ.cumInflation, L = LIFESTYLES[state.lifestyle] || LIFESTYLES.comfortable, sp = hasRel('Spouse');
@@ -20288,6 +20412,9 @@ const ACHIEVEMENTS = [
   {k:'resolute', cat:'Life', icon:'🎆', tier:'silver', name:'Resolute', desc:'Keep five New Year\'s resolutions', test:() => (state.resKept || 0) >= 5},
   {k:'nomad', cat:'Life', icon:'🧳', tier:'silver', name:'Nomad', desc:'Live in five different cities', test:() => new Set(placesLived()).size >= 5},
   {k:'coast', cat:'Life', icon:'🗺️', tier:'bronze', name:'Coast to Coast', desc:'Live in New York and in Los Angeles or San Francisco', test:() => { const L = placesLived(); return L.includes('newyork') && (L.includes('losangeles') || L.includes('sanfrancisco')); }},
+  {k:'headhunted', cat:'Career', icon:'📨', tier:'bronze', name:'Headhunted', desc:'Take a job offer from another city', test:() => (state.headhunted || 0) >= 1},
+  {k:'ldlove', cat:'Family', icon:'💌', tier:'silver', name:'Worth the Miles', desc:'Make a long-distance relationship work', test:() => !!state.ldWin},
+  {k:'hometownhero', cat:'Fame', icon:'🗝️', tier:'gold', name:'Hometown Hero', desc:'Be honored by your hometown', test:() => state.honoredAge != null},
   {k:'rooted', cat:'Life', icon:'🌳', tier:'silver', name:'Deep Roots', desc:'Reach 70 without ever leaving your hometown', test:() => state.age >= 70 && new Set(placesLived()).size === 1},
   {k:'old100', cat:'Life', icon:'💯', tier:'gold', name:'Centenarian', desc:'Live to 100', test:() => state.age >= 100},
   {k:'joy', cat:'Life', icon:'😄', tier:'silver', name:'Happy Ever After', desc:'Have 100 happiness at 65 or older', test:() => state.age >= 65 && state.stats.happy >= 100},
