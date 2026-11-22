@@ -4590,7 +4590,8 @@ function placeOfferYear(a, free){
 }
 function jobOffer(a){
   const j = state.job, p = offerCity(j.track); if(!p) return false;
-  const ratio = placePay(j.track, p) / placePay(j.track), sal = Math.round(j.salary * Math.max(0.95, ratio) * (1.06 + Math.random() * 0.12) / 100) * 100;
+  // the city's pay gap counts, up to 45%, plus a sweetener to make you move; no single offer pays more than about 60% over now
+  const ratio = placePay(j.track, p) / placePay(j.track), sal = Math.round(j.salary * Math.min(1.45, Math.max(0.95, ratio)) * (1.03 + Math.random() * 0.09) / 100) * 100;
   if(sal < j.salary * 1.04) return false;
   state.lastOfferAge = a;
   const n = state.name, own = homeHere(), rentNow = rentThere(curPlace()), rentNew = rentThere(p);
