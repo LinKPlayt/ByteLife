@@ -1321,7 +1321,10 @@ function renderSetup(){
   const fb = document.getElementById('familyBox');
   if(fb){
     const f = setupFam(), parentMin = Math.min(...[f.mother, f.father].filter(x => x.on).map(x => x.age), 60);
-    let h = '<span class="mini-label">Hometown <span style="text-transform:none;letter-spacing:0">· sets rent, pay and the local job market</span></span><div class="sortrow" style="margin:0">' + pill(setup.place === 'random', "setupSet('place','random')", 'Random') + PLACES.map(p => pill(setup.place === p.key, `setupSet('place','${p.key}')`, p.icon + ' ' + placeTitle(p.key))).join('') + '</div>' + (setup.place !== 'random' ? `<div class="set-note">${placeOf(setup.place).vibe}.</div>` : '');
+    let h = '<span class="mini-label">Hometown <span style="text-transform:none;letter-spacing:0">· sets rent, pay and the local job market</span></span><div class="sortrow" style="margin:0">' + pill(setup.place === 'random', "setupSet('place','random')", 'Random') + PLACES.filter(p => !p.st).map(p => pill(setup.place === p.key, `setupSet('place','${p.key}')`, p.icon + ' ' + placeTitle(p.key))).join('') + '</div>' +
+      `<select class="veh-select" id="setupCity" aria-label="Hometown city" onchange="setupSet('place', this.value || 'random')"><option value="" ${PLACES.some(p => p.st && p.key === setup.place) ? '' : 'selected'}>Or pick a city in any of the 50 states…</option>` +
+      PLACES.filter(p => p.st).sort((a, b) => a.st.localeCompare(b.st) || a.name.localeCompare(b.name)).map(p => `<option value="${p.key}" ${setup.place === p.key ? 'selected' : ''}>${p.st} · ${placeCity(p.key)}</option>`).join('') + '</select>' +
+      (setup.place !== 'random' ? `<div class="set-note">${placeOf(setup.place).icon} ${placeFull(setup.place)}: ${placeOf(setup.place).vibe}.</div>` : '');
     h += '<span class="mini-label">Family fortune</span><div class="sortrow" style="margin:0">' + pill(setup.wealth === 'random', "setupSet('wealth','random')", 'Random') + Object.keys(WEALTH).map(k => pill(setup.wealth === k, `setupSet('wealth','${k}')`, WEALTH[k][0])).join('') + '</div>';
     const who = [f.mother.on ? 'mother ' + f.mother.name : '', f.father.on ? 'father ' + f.father.name : ''].filter(Boolean);
     const older = f.siblings.filter(s => s.age > 0).length, twins = f.siblings.length - older;
@@ -5047,6 +5050,167 @@ const PLACES = [
     tracks:{'Green Energy':{hire:10, pay:0.06}, Aviation:{hire:5}, Sports:{hire:3}},
     risk:{kind:'wildfire', p:0.012, text:'Wildfire smoke drifts over Denver', dmg:0.02}, mood:0, health:1,
     events:['{n} spends a weekend skiing in the mountains', '{n} hikes a fourteen-thousand-foot peak', '{n} gets winded walking up the stairs, at first']},
+  // ---- at least one major city in every state ----
+  {key:'birmingham', name:'Birmingham', icon:'🏗️', kind:'city', vibe:'An old steel city rebuilt around a huge university medical center', col:0.92, rent:0.78, pay:0.93, crime:1.2,
+    tracks:{Medicine:{hire:10, pay:0.05}, Finance:{hire:4}, Trades:{hire:4}},
+    risk:{kind:'tornado', p:0.02, text:'A tornado outbreak tears across central Alabama', dmg:0.06}, mood:0, health:0,
+    events:['{n} eats at a meat-and-three where everyone calls them "baby"', '{n} watches the giant iron statue on the hill light up at night', '{n} walks the civil rights district and reads every marker']},
+  {key:'anchorage', name:'Anchorage', icon:'🐻', kind:'city', vibe:'Mountains, moose and the midnight sun, with oil money and long, dark winters', col:1.15, rent:1.05, pay:1.08, crime:1.1,
+    tracks:{Military:{hire:8}, Aviation:{hire:8, pay:0.06}, Trades:{hire:6, pay:0.06}, Technology:{hire:-6}, Acting:{hire:-12}},
+    risk:{kind:'earthquake', p:0.01, text:'A strong earthquake shakes Anchorage', dmg:0.05}, mood:-1, health:1,
+    events:['{n} spots a moose wandering down the bike path', '{n} stays up past midnight in broad daylight', '{n} goes weeks in winter without seeing the sun']},
+  {key:'phoenix', name:'Phoenix', icon:'🌵', kind:'big', vibe:'A sprawling desert metro with sunshine all year and brutal summers', col:1, rent:1.1, pay:1.02, crime:1.05,
+    tracks:{'Green Energy':{hire:8, pay:0.04}, Trades:{hire:6}, Technology:{hire:5, pay:0.03}, Medicine:{hire:4}},
+    risk:{kind:'heat', p:0.04, text:'A record heat wave bakes Phoenix for weeks', dmg:0}, mood:1, health:0,
+    events:['{n} burns their hand on a seatbelt buckle in July', '{n} watches a monsoon dust storm roll in like a wall', '{n} hikes a desert mountain before sunrise to beat the heat']},
+  {key:'littlerock', name:'Little Rock', icon:'🪨', kind:'city', vibe:'A friendly state capital on the river, with low costs and a slower pace', col:0.88, rent:0.72, pay:0.88, crime:1.2, hire:-2,
+    tracks:{Politics:{hire:5}, Medicine:{hire:4}, Technology:{hire:-4}},
+    risk:{kind:'tornado', p:0.02, text:'A tornado rips through Little Rock', dmg:0.06}, mood:0, health:0,
+    events:['{n} walks across the old railroad bridge over the river', '{n} spends a summer weekend floating a lazy river', '{n} buys a fried pie at a roadside stand']},
+  {key:'hartford', name:'Hartford', icon:'☂️', kind:'city', vibe:'The old insurance capital: steady office jobs, old money and snowy winters', col:1.08, rent:1.05, pay:1.1, crime:1.1,
+    tracks:{Finance:{hire:8, pay:0.06}, Business:{hire:4}, Aviation:{hire:4}},
+    risk:{kind:'blizzard', p:0.025, text:'A nor\'easter buries Hartford in snow', dmg:0.01}, mood:0, health:0,
+    events:['{n} ends up at a party in a mansion built by an insurance fortune', '{n} rides an antique carousel in the park', '{n} spends a fall Saturday picking apples outside the city']},
+  {key:'wilmington', name:'Wilmington', icon:'🏢', kind:'small', vibe:'A small city where half the country\'s big companies are legally based', col:1.02, rent:1, pay:1.04, crime:1.15,
+    tracks:{Law:{hire:10, pay:0.08}, Finance:{hire:8, pay:0.04}, Business:{hire:6}},
+    risk:{kind:'flood', p:0.012, text:'A coastal storm floods the riverfront in Wilmington', dmg:0.02}, mood:0, health:0,
+    events:['{n} spends a summer day at the Delaware beaches', '{n} wanders the gardens of an old family estate', '{n} watches the fireworks over the riverfront']},
+  {key:'atlanta', name:'Atlanta', icon:'🍑', kind:'big', vibe:'A booming Southern capital of film sets, hip-hop and the world\'s busiest airport', col:1.02, rent:1.15, pay:1.06, crime:1.15,
+    tracks:{Acting:{hire:8, pay:0.06}, Music:{hire:8, pay:0.05}, Aviation:{hire:8, pay:0.05}, Business:{hire:5}, Science:{hire:5}},
+    risk:{kind:'storm', p:0.015, text:'An ice storm turns Atlanta\'s highways into parking lots', dmg:0.01}, mood:0, health:0,
+    events:['{n} spends an hour on the interstate going nowhere', '{n} spots a film crew shooting on their street', '{n} gets a peach cobbler recipe from a neighbor']},
+  {key:'honolulu', name:'Honolulu', icon:'🌺', kind:'city', vibe:'Island life: beaches, warm water and some of the highest prices in the country', col:1.35, rent:1.7, pay:1.05, crime:0.9,
+    tracks:{Military:{hire:10, pay:0.04}, Culinary:{hire:8}, Science:{hire:4}, Technology:{hire:-6}, Finance:{hire:-4}},
+    risk:{kind:'hurricane', p:0.008, text:'A hurricane churns toward Oahu', dmg:0.05}, mood:1, health:1,
+    events:['{n} watches surfers at sunrise before work', '{n} pays twelve dollars for a gallon of milk', '{n} learns to make poke from a neighbor']},
+  {key:'boise', name:'Boise', icon:'🥔', kind:'city', vibe:'A fast-growing, outdoorsy small city with a river running through downtown', col:1, rent:1.1, pay:0.97, crime:0.65,
+    tracks:{Technology:{hire:5, pay:0.03}, Trades:{hire:5}, Retail:{hire:4}},
+    risk:{kind:'wildfire', p:0.015, text:'Wildfire smoke fills the valley around Boise', dmg:0.01}, mood:0, health:1,
+    events:['{n} floats the river through town on an inner tube', '{n} skis in the morning and golfs in the afternoon', '{n} meets three people who just moved here from California']},
+  {key:'indianapolis', name:'Indianapolis', icon:'🏁', kind:'city', vibe:'The racing capital: affordable, friendly and crazy about sports', col:0.92, rent:0.85, pay:0.98, crime:1.1,
+    tracks:{Sports:{hire:8, pay:0.04}, Science:{hire:6}, Medicine:{hire:5}, Trades:{hire:4}},
+    risk:{kind:'tornado', p:0.012, text:'A tornado touches down near Indianapolis', dmg:0.05}, mood:0, health:0,
+    events:['{n} hears the roar of the big race from miles away', '{n} eats a pork tenderloin sandwich bigger than their head', '{n} cheers at a high school basketball game in a packed gym']},
+  {key:'desmoines', name:'Des Moines', icon:'🌽', kind:'city', vibe:'A low-key insurance hub with cheap homes and a huge state fair', col:0.9, rent:0.8, pay:0.96, crime:0.85,
+    tracks:{Finance:{hire:8, pay:0.04}, Politics:{hire:4}, Business:{hire:3}},
+    risk:{kind:'storm', p:0.015, text:'A derecho rips across Iowa and knocks down trees all over Des Moines', dmg:0.04}, mood:0, health:0,
+    events:['{n} eats something deep-fried on a stick at the state fair', '{n} shakes hands with a presidential candidate at a diner', '{n} bikes a trail through miles of cornfields']},
+  {key:'wichita', name:'Wichita', icon:'✈️', kind:'city', vibe:'The Air Capital: an aircraft-building city on the open plains', col:0.86, rent:0.7, pay:0.92, crime:1.1,
+    tracks:{Aviation:{hire:12, pay:0.06}, Trades:{hire:6}, Technology:{hire:-4}},
+    risk:{kind:'tornado', p:0.03, text:'A tornado roars across the plains outside Wichita', dmg:0.06}, mood:0, health:0,
+    events:['{n} watches a brand-new plane take its first flight', '{n} watches a storm build over the prairie for an hour', '{n} finds a favorite hole-in-the-wall pizza place']},
+  {key:'louisville', name:'Louisville', icon:'🐎', kind:'city', vibe:'Bourbon, horse racing and a big river city with cheap living', col:0.9, rent:0.8, pay:0.95, crime:1.1,
+    tracks:{Aviation:{hire:6}, Trades:{hire:6}, Medicine:{hire:5}, Culinary:{hire:5}},
+    risk:{kind:'flood', p:0.015, text:'The Ohio River floods low parts of Louisville', dmg:0.04}, mood:0, health:0,
+    events:['{n} wears a ridiculous hat to the big horse race', '{n} tries a hot brown sandwich and naps all afternoon', '{n} watches the biggest fireworks show of the year over the river']},
+  {key:'neworleans', name:'New Orleans', icon:'🎺', kind:'city', vibe:'Jazz, food and festivals in a city that never stops celebrating', col:0.97, rent:0.95, pay:0.92, crime:1.3,
+    tracks:{Culinary:{hire:12, pay:0.05}, Music:{hire:10, pay:0.04}, Acting:{hire:4}, Technology:{hire:-4}},
+    risk:{kind:'hurricane', p:0.045, text:'A hurricane slams into New Orleans', dmg:0.09}, mood:1, health:-1,
+    events:['{n} catches beads from a parade float', '{n} follows a brass band down the street for six blocks', '{n} eats beignets and gets powdered sugar everywhere']},
+  {key:'portlandme', name:'Portland, Maine', icon:'🦞', kind:'small', vibe:'A small harbor city of lobster boats, lighthouses and great restaurants', col:1.05, rent:1.15, pay:0.97, crime:0.6, hire:-2,
+    tracks:{Culinary:{hire:6}, Trades:{hire:4}, Technology:{hire:-4}},
+    risk:{kind:'blizzard', p:0.03, text:'A nor\'easter buries the coast of Maine', dmg:0.01}, mood:0, health:0,
+    events:['{n} eats a lobster roll on the wharf', '{n} watches the fog roll in over the lighthouse', '{n} shovels snow in April']},
+  {key:'baltimore', name:'Baltimore', icon:'🦀', kind:'city', vibe:'A gritty, proud port city with world-class hospitals and crab feasts', col:1.02, rent:0.95, pay:1.06, crime:1.35,
+    tracks:{Medicine:{hire:10, pay:0.06}, Science:{hire:6}, Trades:{hire:3}},
+    risk:{kind:'blizzard', p:0.015, text:'A snowstorm shuts Baltimore down', dmg:0.01}, mood:0, health:0,
+    events:['{n} spends an afternoon cracking crabs with a wooden mallet', '{n} hears a stranger call them "hon"', '{n} walks the harbor at sunset']},
+  {key:'detroit', name:'Detroit', icon:'🚗', kind:'big', vibe:'The Motor City: car plants, Motown roots and a comeback in progress', col:0.92, rent:0.7, pay:1, crime:1.35,
+    tracks:{Trades:{hire:10, pay:0.06}, 'Green Energy':{hire:6, pay:0.04}, Music:{hire:5}, Business:{hire:3}},
+    risk:{kind:'flood', p:0.012, text:'Flash floods fill basements across Detroit', dmg:0.03}, mood:0, health:0,
+    events:['{n} watches a classic car cruise roll down the avenue', '{n} sees an old movie palace full again after years of being empty', '{n} eats a hot dog smothered in chili at midnight']},
+  {key:'minneapolis', name:'Minneapolis', icon:'🛶', kind:'big', vibe:'A city of lakes and big employers, with bitter winters and warm people', col:1.03, rent:1, pay:1.07, crime:1.05,
+    tracks:{Medicine:{hire:8, pay:0.05}, Business:{hire:6, pay:0.04}, Retail:{hire:6}},
+    risk:{kind:'blizzard', p:0.035, text:'A blizzard buries the Twin Cities', dmg:0.01}, mood:0, health:0,
+    events:['{n} walks to work through the skyways without ever going outside', '{n} jumps into a frozen lake for charity', '{n} spends a summer evening paddling around the lakes']},
+  {key:'jackson', name:'Jackson', icon:'🌸', kind:'small', vibe:'A small Southern capital with deep blues roots and very low costs', col:0.84, rent:0.65, pay:0.85, crime:1.35, hire:-3,
+    tracks:{Medicine:{hire:5}, Politics:{hire:4}, Music:{hire:4}, Technology:{hire:-6}, Finance:{hire:-4}},
+    risk:{kind:'tornado', p:0.025, text:'A tornado cuts across central Mississippi', dmg:0.06}, mood:0, health:0,
+    events:['{n} hears an old blues player on a back porch', '{n} sweats through a church picnic in August', '{n} eats the best fried catfish of their life']},
+  {key:'kansascity', name:'Kansas City', icon:'🍖', kind:'city', vibe:'Barbecue, jazz and fountains in an affordable, sports-crazy city', col:0.94, rent:0.88, pay:0.99, crime:1.2,
+    tracks:{Culinary:{hire:6}, Music:{hire:4}, Technology:{hire:4}, Trades:{hire:3}},
+    risk:{kind:'tornado', p:0.02, text:'A tornado tears through the Kansas City suburbs', dmg:0.05}, mood:0, health:0,
+    events:['{n} gets into a heated argument about the best barbecue in town', '{n} counts fountains on a walk downtown', '{n} wears red to a football game in the freezing cold']},
+  {key:'billings', name:'Billings', icon:'🏞️', kind:'small', vibe:'Big-sky ranch country, oil refineries and wide open space', col:0.95, rent:0.92, pay:0.92, crime:0.85, hire:-4,
+    tracks:{Trades:{hire:8, pay:0.05}, 'Odd Jobs':{hire:4}, Technology:{hire:-8}, Finance:{hire:-4}, Acting:{hire:-12}},
+    risk:{kind:'storm', p:0.02, text:'A hailstorm pounds Billings', dmg:0.03}, mood:0, health:1,
+    events:['{n} watches a rodeo from the bleachers', '{n} drives an hour without seeing another car', '{n} watches a thunderstorm roll across the sandstone cliffs']},
+  {key:'omaha', name:'Omaha', icon:'🥩', kind:'city', vibe:'A steady, affordable river city of insurance firms and steakhouses', col:0.92, rent:0.85, pay:0.98, crime:0.9,
+    tracks:{Finance:{hire:8, pay:0.04}, Business:{hire:4}, Military:{hire:4}},
+    risk:{kind:'tornado', p:0.02, text:'A tornado sweeps past Omaha', dmg:0.05}, mood:0, health:0,
+    events:['{n} orders a steak the size of a hubcap', '{n} cheers at the college baseball championship', '{n} walks across the footbridge into Iowa and back']},
+  {key:'lasvegas', name:'Las Vegas', icon:'🎰', kind:'big', vibe:'Neon, casinos and shows all night, with no state income tax', col:1, rent:1.05, pay:0.95, crime:1.15,
+    tracks:{Culinary:{hire:12, pay:0.05}, Acting:{hire:6}, Music:{hire:6}, Sports:{hire:4}, 'Odd Jobs':{hire:4}},
+    risk:{kind:'heat', p:0.04, text:'A blistering heat wave hits Las Vegas', dmg:0}, mood:1, health:0,
+    events:['{n} wins forty dollars on a slot machine and loses it ten minutes later', '{n} sees a magic show on the Strip', '{n} drives out to the red rock canyon at sunset']},
+  {key:'manchester', name:'Manchester', icon:'🏭', kind:'small', vibe:'An old mill city with no income or sales tax and a big say in elections', col:1.05, rent:1.05, pay:1.02, crime:0.85,
+    tracks:{Politics:{hire:6}, Technology:{hire:4}, Trades:{hire:4}},
+    risk:{kind:'blizzard', p:0.03, text:'A nor\'easter dumps two feet of snow on Manchester', dmg:0.01}, mood:0, health:0,
+    events:['{n} meets a presidential candidate at a pancake breakfast', '{n} drives up to the mountains to see the fall leaves', '{n} walks through the old brick mills by the river']},
+  {key:'newark', name:'Newark', icon:'🚆', kind:'city', vibe:'A busy transit hub across the river from New York, for a lot less money', col:1.15, rent:1.3, pay:1.12, crime:1.3,
+    tracks:{Finance:{hire:6, pay:0.06}, Science:{hire:6, pay:0.04}, Aviation:{hire:6}, Trades:{hire:5}},
+    risk:{kind:'flood', p:0.015, text:'A tropical storm floods streets across Newark', dmg:0.03}, mood:0, health:0,
+    events:['{n} takes the train into Manhattan for the day', '{n} eats a Portuguese feast in the Ironbound', '{n} spends a summer weekend down the shore']},
+  {key:'albuquerque', name:'Albuquerque', icon:'🎈', kind:'city', vibe:'High-desert sunshine, green chile and national science labs', col:0.93, rent:0.85, pay:0.93, crime:1.35,
+    tracks:{Science:{hire:10, pay:0.06}, Acting:{hire:6}, Military:{hire:3}},
+    risk:{kind:'wildfire', p:0.012, text:'Wildfire smoke drifts over Albuquerque', dmg:0.01}, mood:1, health:0,
+    events:['{n} smells green chile roasting in a barrel outside the grocery store', '{n} watches hundreds of hot-air balloons rise at dawn', '{n} watches the mountains turn pink at sunset']},
+  {key:'charlotte', name:'Charlotte', icon:'🏦', kind:'big', vibe:'A fast-growing banking city with racing roots and newer everything', col:0.98, rent:1, pay:1.05, crime:1.05,
+    tracks:{Finance:{hire:12, pay:0.08}, Business:{hire:4}, Sports:{hire:4}},
+    risk:{kind:'hurricane', p:0.012, text:'The remains of a hurricane batter Charlotte', dmg:0.03}, mood:0, health:0,
+    events:['{n} watches stock cars scream around the track', '{n} gets lost in a neighborhood that was a cow pasture last year', '{n} drives up to the mountains for a long weekend']},
+  {key:'fargo', name:'Fargo', icon:'⛄', kind:'small', vibe:'A friendly, frozen prairie city with cheap living and plenty of jobs', col:0.92, rent:0.8, pay:0.95, crime:0.8,
+    tracks:{Trades:{hire:6}, Education:{hire:4}, Technology:{hire:3}, Acting:{hire:-12}},
+    risk:{kind:'flood', p:0.03, text:'The Red River floods, and Fargo fills sandbags for days', dmg:0.05}, mood:0, health:0,
+    events:['{n} plugs in the car so the engine won\'t freeze overnight', '{n} helps a stranger push their car out of a snowbank', '{n} goes ice fishing on a frozen lake']},
+  {key:'oklahomacity', name:'Oklahoma City', icon:'🛢️', kind:'city', vibe:'An oil and cattle town grown into a cheap, sprawling city', col:0.88, rent:0.78, pay:0.94, crime:1.1,
+    tracks:{Trades:{hire:8, pay:0.06}, Aviation:{hire:6}, Military:{hire:4}, 'Green Energy':{hire:4}},
+    risk:{kind:'tornado', p:0.04, text:'A monster tornado tears through the Oklahoma City suburbs', dmg:0.07}, mood:0, health:0,
+    events:['{n} hears the tornado sirens and heads for the storm shelter', '{n} watches cowboys move cattle at the old stockyards', '{n} drinks a sweet tea the size of a bucket']},
+  {key:'portland', name:'Portland', icon:'🌹', kind:'city', vibe:'Rainy, green and a little weird, with great food and bike lanes everywhere', col:1.12, rent:1.35, pay:1.08, crime:1.15,
+    tracks:{Technology:{hire:6, pay:0.05}, Culinary:{hire:6}, 'Green Energy':{hire:6}, Business:{hire:3}},
+    risk:{kind:'wildfire', p:0.015, text:'Wildfire smoke turns Portland\'s sky orange', dmg:0.01}, mood:0, health:0,
+    events:['{n} waits in line for a doughnut covered in breakfast cereal', '{n} bikes to work in the rain like everyone else', '{n} loses a whole afternoon in a giant bookstore']},
+  {key:'philadelphia', name:'Philadelphia', icon:'🔔', kind:'big', vibe:'A historic, tough-loving city of hospitals and universities, cheaper than New York', col:1.05, rent:1.15, pay:1.08, crime:1.3,
+    tracks:{Medicine:{hire:10, pay:0.06}, Education:{hire:6}, Science:{hire:4}, Law:{hire:4}},
+    risk:{kind:'storm', p:0.012, text:'Severe storms flood parts of Philadelphia', dmg:0.02}, mood:0, health:0,
+    events:['{n} argues with a stranger about where to get the best cheesesteak', '{n} runs up the museum steps and throws their arms in the air', '{n} sees the cracked bell with a busload of tourists']},
+  {key:'providence', name:'Providence', icon:'🎨', kind:'small', vibe:'A small, artsy college city with bonfires on the river and great Italian food', col:1.06, rent:1.1, pay:1, crime:1,
+    tracks:{Education:{hire:8}, Culinary:{hire:5}, Medicine:{hire:4}},
+    risk:{kind:'blizzard', p:0.025, text:'A nor\'easter buries Providence in snow', dmg:0.01}, mood:0, health:0,
+    events:['{n} watches bonfires burn on the river at night', '{n} eats at an old-school Italian place on the hill', '{n} tries coffee milk and decides it is fine']},
+  {key:'charleston', name:'Charleston', icon:'🌅', kind:'city', vibe:'A historic harbor city of pastel houses, great food and summer storms', col:1.03, rent:1.15, pay:0.96, crime:0.95,
+    tracks:{Culinary:{hire:8}, Aviation:{hire:6}, Military:{hire:4}, Trades:{hire:4}},
+    risk:{kind:'hurricane', p:0.035, text:'A hurricane floods the streets of Charleston', dmg:0.07}, mood:1, health:0,
+    events:['{n} walks past the row of pastel houses by the harbor', '{n} eats shrimp and grits on a porch', '{n} waits out a summer downpour under a balcony']},
+  {key:'siouxfalls', name:'Sioux Falls', icon:'💧', kind:'small', vibe:'A booming, low-tax prairie city built around its waterfalls', col:0.92, rent:0.85, pay:0.95, crime:0.8,
+    tracks:{Finance:{hire:8, pay:0.03}, Medicine:{hire:6}, Technology:{hire:-3}, Acting:{hire:-12}},
+    risk:{kind:'blizzard', p:0.03, text:'A blizzard shuts down Sioux Falls', dmg:0.01}, mood:0, health:0,
+    events:['{n} walks along the falls on a summer evening', '{n} drives out to see the presidents carved into the mountain', '{n} shovels a neighbor\'s driveway without being asked']},
+  {key:'saltlakecity', name:'Salt Lake City', icon:'⛰️', kind:'city', vibe:'A clean, fast-growing city of tech startups, with ski slopes half an hour away', col:1.02, rent:1.15, pay:1.04, crime:1.1,
+    tracks:{Technology:{hire:8, pay:0.04}, Science:{hire:3}, Sports:{hire:3}},
+    risk:{kind:'earthquake', p:0.008, text:'An earthquake shakes the Salt Lake valley', dmg:0.05}, mood:0, health:1,
+    events:['{n} floats in the great salty lake', '{n} skis fresh powder and is back at a desk by lunch', '{n} hikes up a canyon right from the edge of town']},
+  {key:'burlington', name:'Burlington', icon:'🍁', kind:'small', vibe:'A lakeside college town of maple syrup, ski hills and farmers markets', col:1.1, rent:1.15, pay:0.97, crime:0.7, hire:-3,
+    tracks:{Education:{hire:6}, Culinary:{hire:4}, Technology:{hire:-6}, Finance:{hire:-6}, Acting:{hire:-12}},
+    risk:{kind:'blizzard', p:0.03, text:'A blizzard buries Burlington', dmg:0.01}, mood:0, health:1,
+    events:['{n} pours real maple syrup on everything', '{n} watches the sun set over the lake and the mountains', '{n} buys too many vegetables at the farmers market']},
+  {key:'virginiabeach', name:'Virginia Beach', icon:'⚓', kind:'city', vibe:'A laid-back beach city next to the biggest navy base in the world', col:1, rent:1.05, pay:0.98, crime:0.6,
+    tracks:{Military:{hire:12, pay:0.04}, Trades:{hire:5}, Aviation:{hire:4}},
+    risk:{kind:'hurricane', p:0.025, text:'A hurricane pounds the Virginia coast', dmg:0.06}, mood:1, health:1,
+    events:['{n} watches an aircraft carrier head out to sea', '{n} spends a whole summer day on the boardwalk', '{n} watches jets fly low over the beach']},
+  {key:'charlestonwv', name:'Charleston, West Virginia', icon:'⛏️', kind:'small', vibe:'A small river capital in the mountains, with very cheap homes and few big employers', col:0.85, rent:0.62, pay:0.85, crime:1.05, hire:-3,
+    tracks:{Trades:{hire:6}, Politics:{hire:5}, Medicine:{hire:4}, Technology:{hire:-8}, Acting:{hire:-12}},
+    risk:{kind:'flood', p:0.025, text:'Flash floods tear through the valleys around Charleston', dmg:0.05}, mood:0, health:0,
+    events:['{n} drives a winding mountain road to a swimming hole', '{n} eats a hot dog with chili and slaw', '{n} hears bluegrass at a Saturday night jam']},
+  {key:'milwaukee', name:'Milwaukee', icon:'🧀', kind:'city', vibe:'A brewing and manufacturing city on the lake, with a festival every summer weekend', col:0.95, rent:0.85, pay:0.98, crime:1.25,
+    tracks:{Trades:{hire:8, pay:0.04}, Culinary:{hire:4}, Business:{hire:3}},
+    risk:{kind:'blizzard', p:0.025, text:'Lake-effect snow buries Milwaukee', dmg:0.01}, mood:0, health:0,
+    events:['{n} goes to a different summer festival every weekend', '{n} eats cheese curds that squeak', '{n} hears motorcycles rumble through town all summer']},
+  {key:'cheyenne', name:'Cheyenne', icon:'🤠', kind:'small', vibe:'A windy frontier town with a big rodeo, an air force base and no income tax', col:0.95, rent:0.9, pay:0.93, crime:0.75, hire:-4,
+    tracks:{Military:{hire:6}, Trades:{hire:6}, Politics:{hire:3}, Technology:{hire:-6}, Acting:{hire:-15}},
+    risk:{kind:'blizzard', p:0.035, text:'A howling blizzard closes the interstates around Cheyenne', dmg:0.01}, mood:0, health:1,
+    events:['{n} gets knocked sideways by the wind walking to the car', '{n} watches a rodeo cowboy hang on for eight seconds', '{n} drives up to the national park for a long weekend']},
   {key:'smalltown', name:'Maple Falls', icon:'🏡', kind:'town', vibe:'A small town: cheap, safe and friendly, with fewer jobs', col:0.82, rent:0.6, pay:0.82, crime:0.55, hire:-6,
     tracks:{Education:{hire:6}, Trades:{hire:6}, Retail:{hire:4}, Firefighting:{hire:4}, Technology:{hire:-8}, Finance:{hire:-8}, Acting:{hire:-15}, 'Space Industry':{hire:-15}},
     risk:{kind:'tornado', p:0.01, text:'A tornado passes near Maple Falls', dmg:0.05}, mood:1, health:0,
@@ -5073,8 +5237,38 @@ const placesLived = () => { const L = (state.placeLog || []).map(x => x.key); re
 const placeYears = () => state.age - ((state.placeLog || []).slice(-1)[0] || {age:0}).age;
 const andList = L => L.length < 3 ? L.join(' and ') : L.slice(0, -1).join(', ') + ', and ' + L[L.length - 1];
 const placePct = m => { const p = Math.round((m - 1) * 100); return p === 0 ? 'average' : (p > 0 ? '+' : '') + p + '%'; };
+// the state and census region of each place; the small town and the countryside belong to no particular state
+const PLACE_GEO = {
+  columbus:['Ohio', 'Midwest'], newyork:['New York', 'Northeast'], sanfrancisco:['California', 'West'], seattle:['Washington', 'West'],
+  boston:['Massachusetts', 'Northeast'], washington:['District of Columbia', 'South'], losangeles:['California', 'West'], miami:['Florida', 'South'],
+  chicago:['Illinois', 'Midwest'], austin:['Texas', 'South'], nashville:['Tennessee', 'South'], houston:['Texas', 'South'], denver:['Colorado', 'West'],
+  birmingham:['Alabama', 'South'], anchorage:['Alaska', 'West'], phoenix:['Arizona', 'West'], littlerock:['Arkansas', 'South'],
+  hartford:['Connecticut', 'Northeast'], wilmington:['Delaware', 'South'], atlanta:['Georgia', 'South'], honolulu:['Hawaii', 'West'],
+  boise:['Idaho', 'West'], indianapolis:['Indiana', 'Midwest'], desmoines:['Iowa', 'Midwest'], wichita:['Kansas', 'Midwest'],
+  louisville:['Kentucky', 'South'], neworleans:['Louisiana', 'South'], portlandme:['Maine', 'Northeast'], baltimore:['Maryland', 'South'],
+  detroit:['Michigan', 'Midwest'], minneapolis:['Minnesota', 'Midwest'], jackson:['Mississippi', 'South'], kansascity:['Missouri', 'Midwest'],
+  billings:['Montana', 'West'], omaha:['Nebraska', 'Midwest'], lasvegas:['Nevada', 'West'], manchester:['New Hampshire', 'Northeast'],
+  newark:['New Jersey', 'Northeast'], albuquerque:['New Mexico', 'West'], charlotte:['North Carolina', 'South'], fargo:['North Dakota', 'Midwest'],
+  oklahomacity:['Oklahoma', 'South'], portland:['Oregon', 'West'], philadelphia:['Pennsylvania', 'Northeast'], providence:['Rhode Island', 'Northeast'],
+  charleston:['South Carolina', 'South'], siouxfalls:['South Dakota', 'Midwest'], saltlakecity:['Utah', 'West'], burlington:['Vermont', 'Northeast'],
+  virginiabeach:['Virginia', 'South'], charlestonwv:['West Virginia', 'South'], milwaukee:['Wisconsin', 'Midwest'], cheyenne:['Wyoming', 'West'],
+  smalltown:['', 'Towns'], country:['', 'Towns'],
+};
+PLACES.forEach(p => { const g = PLACE_GEO[p.key] || ['', 'Towns']; p.st = g[0]; p.region = g[1]; });
+// "Columbus, Ohio"; names that already carry their state ("Washington, D.C.", "Portland, Maine") stay as they are
+const placeFull = k => { const p = placeOf(k), t = placeTitle(k); return p.st && !/,/.test(p.name) ? t + ', ' + p.st : t; };
+const placeCity = k => placeTitle(k).replace(/,.*$/, '');
+// bigger cities are likelier birthplaces and likelier destinations for job moves
+const PLACE_W = {big:3, city:2, small:1, town:2, rural:1};
+function pickPlaceW(L){
+  const tot = L.reduce((t, p) => t + (PLACE_W[p.kind] || 1), 0); let r = Math.random() * tot;
+  for(const p of L){ r -= PLACE_W[p.kind] || 1; if(r <= 0) return p; }
+  return L[L.length - 1];
+}
+// a job across the country: a city in another region when there is one
+function farCity(){ const L = PLACES.filter(p => p.key !== state.place && p.kind !== 'town' && p.kind !== 'rural'), far = L.filter(p => p.region !== curPlace().region); return pickPlaceW(far.length ? far : L); }
 // a random hometown at birth: most people start in a city, a few in a small town or the countryside
-function rollPlace(){ const r = Math.random(); return r < 0.12 ? 'smalltown' : r < 0.2 ? 'country' : pick(PLACES.filter(p => p.kind !== 'town' && p.kind !== 'rural')).key; }
+function rollPlace(){ const r = Math.random(); return r < 0.12 ? 'smalltown' : r < 0.2 ? 'country' : pickPlaceW(PLACES.filter(p => p.kind !== 'town' && p.kind !== 'rural')).key; }
 function settlePlace(key, age){
   state.place = key;
   (state.placeLog = state.placeLog || []).push({key, age});
@@ -5109,7 +5303,7 @@ function placeFacts(p){
 function placeCardHtml(){
   const p = curPlace(), f = placeFacts(p), yrs = placeYears(), born = state.homeTown === state.place;
   let h = '<div class="plabel">Your city</div><div class="invrow">';
-  h += `<div class="itop"><span><b>${p.icon} ${placeTitle(p.key)}</b></span><span class="price">${state.age < 18 ? 'growing up' : yrs > 0 ? yrs + ' year' + (yrs > 1 ? 's' : '') : 'just arrived'}</span></div>`;
+  h += `<div class="itop"><span><b>${p.icon} ${placeFull(p.key)}</b></span><span class="price">${state.age < 18 ? 'growing up' : yrs > 0 ? yrs + ' year' + (yrs > 1 ? 's' : '') : 'just arrived'}</span></div>`;
   h += `<div class="owned">${p.vibe}.${born && state.age >= 18 ? ' Your hometown, where your family is.' : ''}</div>`;
   h += '<div class="kv kv2" style="margin-top:6px">' +
     `<div><span>Cost of living</span><b>${placePct(p.col)}</b><span>food, transport, bills</span></div>` +
@@ -5143,16 +5337,28 @@ function placeCardHtml(){
   return h + '</div>';
 }
 function toggleMoveList(){ state.moveOpen = !state.moveOpen; renderPanel(); }
+const MOVE_VIEWS = [['top', 'Top picks'], ['Northeast', 'Northeast'], ['Midwest', 'Midwest'], ['South', 'South'], ['West', 'West'], ['Towns', 'Small towns']];
+function setMoveView(v){ state.moveView = v; renderPanel(); }
 function moveListHtml(){
-  const cur = curPlace(), cost = moveCost(), j = state.job, curRent = state.movedOut && !homeHere() ? rentThere(cur) : 0;
+  const cur = curPlace(), cost = moveCost(), j = state.job, curRent = state.movedOut && !homeHere() ? rentThere(cur) : 0, career = j && !notCareer(j);
+  const view = MOVE_VIEWS.some(v => v[0] === state.moveView) ? state.moveView : 'top';
   let h = `<div class="owned" style="margin-top:8px">Moving costs about <b>${fmt(cost)}</b> for movers, deposits and the trip. Friends you aren't close to will fade, and family ${state.place === state.homeTown ? 'will be farther away' : 'stays where they are'}.</div>`;
-  PLACES.filter(p => p.key !== state.place).forEach(p => {
+  h += '<div class="sortrow" style="margin:8px 0 2px">' + MOVE_VIEWS.map(([k, l]) => `<button class="sortbtn${view === k ? ' active' : ''}" onclick="setMoveView('${k}')">${l}</button>`).join('') + '</div>';
+  const others = PLACES.filter(p => p.key !== state.place);
+  let list;
+  if(view === 'top'){
+    // with a career: where the field pays and hires best; without one: where pay goes furthest against rent and living costs
+    const score = career ? (p => placeScore(j.track, p)) : (p => p.pay * (1 + cityHeat(p.key) / 2) / (0.6 * p.col + 0.4 * p.rent * (1 + cityHeat(p.key))));
+    list = others.filter(p => p.st).sort((a, b) => score(b) - score(a)).slice(0, 8);
+    h += `<div class="fnote">${career ? 'The best cities for ' + j.track.toLowerCase() + ' work, by pay and hiring.' : 'The cities where pay goes furthest against rent and living costs.'} Pick a region to see every city: there is at least one in each of the 50 states.</div>`;
+  } else list = others.filter(p => p.region === view).sort((a, b) => (a.st || '').localeCompare(b.st || '') || a.name.localeCompare(b.name));
+  list.forEach(p => {
     const f = placeFacts(p), rent = rentThere(p), dRent = curRent ? rent - curRent : 0;
     let payTxt = '';
     if(j && !notCareer(j)) payTxt = ` · your field pays ${placePct(placePay(j.track, p) / placePay(j.track, cur))} vs. here`;
     const hire = j ? placeHire(j.track, p) : 0;
     const heat = heatTxt(cityHeat(p.key)), note = [rent ? `rent about ${fmt(rent)}/yr${dRent ? ' (' + (dRent > 0 ? '+' : '−') + fmt(Math.abs(dRent)) + ')' : ''}` : '', `living costs ${placePct(p.col)}`, taxTxt(p), getTxt(p), heat ? 'economy ' + heat : '', p.retire ? 'popular with retirees' : ''].filter(Boolean).join(' · ').replace(/^./, c => c.toUpperCase());
-    h += `<button class="opt" onclick="moveTo('${p.key}')" ${canPay(cost) ? '' : 'disabled'}><span>${p.icon} ${placeTitle(p.key)}${p.key === state.homeTown ? ' <span class="tick">HOME</span>' : ''}<span class="sub-meta">${p.vibe}. ${note}${payTxt}${f.strong.length ? ' · strong in ' + f.strong.join(', ') : ''}${j && hire <= -8 ? ' · few ' + j.track.toLowerCase() + ' jobs' : ''} · crime ${f.crime}</span></span><span class="meta">${canPay(cost) ? 'Move' : 'need ' + fmt(cost)}</span></button>`;
+    h += `<button class="opt" onclick="moveTo('${p.key}')" ${canPay(cost) ? '' : 'disabled'}><span>${p.icon} ${placeFull(p.key)}${p.key === state.homeTown ? ' <span class="tick">HOME</span>' : ''}<span class="sub-meta">${p.vibe}. ${note}${payTxt}${f.strong.length ? ' · strong in ' + f.strong.join(', ') : ''}${j && hire <= -8 ? ' · few ' + j.track.toLowerCase() + ' jobs' : ''} · crime ${f.crime}</span></span><span class="meta">${canPay(cost) ? 'Move' : 'need ' + fmt(cost)}</span></button>`;
   });
   return h;
 }
@@ -5253,7 +5459,7 @@ function placeYear(a){
   }
   // children: now and then the family relocates
   if(a < 18 && a >= 3 && parentsHome() && Math.random() < 0.012){
-    const to = pick(PLACES.filter(x => x.key !== state.place)).key;
+    const to = pickPlaceW(PLACES.filter(x => x.key !== state.place)).key;
     state.homeTown = to;
     settlePlace(to, a);
     drift(['Friend'], 70);
@@ -5267,6 +5473,16 @@ const PLACE_EXTRA = {
   boston:{tax:1.08, growth:0.006}, washington:{tax:1.1, growth:0.004}, losangeles:{tax:1.15, growth:0.008}, miami:{tax:0.9, growth:0.006, retire:true},
   chicago:{tax:1.06, growth:-0.002}, austin:{tax:0.9, growth:0.01}, nashville:{tax:0.92, growth:0.008}, houston:{tax:0.9, growth:0},
   denver:{tax:1.02, growth:0.008}, smalltown:{tax:1, growth:-0.005, retire:true}, country:{tax:0.97, growth:-0.008, retire:true},
+  birmingham:{tax:0.98, growth:0}, anchorage:{tax:0.88, growth:-0.002}, phoenix:{tax:0.96, growth:0.008, retire:true}, littlerock:{tax:0.98, growth:0},
+  hartford:{tax:1.06, growth:0.002}, wilmington:{tax:1, growth:0.003}, atlanta:{tax:1, growth:0.007}, honolulu:{tax:1.12, growth:0.006},
+  boise:{tax:1, growth:0.01}, indianapolis:{tax:0.97, growth:0.003}, desmoines:{tax:0.98, growth:0.003}, wichita:{tax:0.99, growth:0},
+  louisville:{tax:1.02, growth:0.002}, neworleans:{tax:0.98, growth:0}, portlandme:{tax:1.05, growth:0.006}, baltimore:{tax:1.1, growth:-0.002},
+  detroit:{tax:1.05, growth:-0.002}, minneapolis:{tax:1.1, growth:0.002}, jackson:{tax:0.98, growth:-0.004}, kansascity:{tax:1.03, growth:0.003},
+  billings:{tax:1, growth:0.004}, omaha:{tax:1, growth:0.003}, lasvegas:{tax:0.9, growth:0.006, retire:true}, manchester:{tax:0.9, growth:0.006},
+  newark:{tax:1.1, growth:0.004}, albuquerque:{tax:0.98, growth:0.004}, charlotte:{tax:0.98, growth:0.008}, fargo:{tax:0.95, growth:0.002},
+  oklahomacity:{tax:0.98, growth:0.003}, portland:{tax:1.12, growth:0.002}, philadelphia:{tax:1.08, growth:0.003}, providence:{tax:1.03, growth:0.005},
+  charleston:{tax:1, growth:0.008, retire:true}, siouxfalls:{tax:0.9, growth:0.005}, saltlakecity:{tax:1, growth:0.008}, burlington:{tax:1.08, growth:0.004},
+  virginiabeach:{tax:1.02, growth:0.004, retire:true}, charlestonwv:{tax:1, growth:-0.004}, milwaukee:{tax:1.04, growth:0}, cheyenne:{tax:0.9, growth:0.003},
 };
 PLACES.forEach(p => Object.assign(p, PLACE_EXTRA[p.key] || {tax:1, growth:0}));
 const placeTax = () => curPlace().tax || 1;
@@ -5404,7 +5620,7 @@ function takeOffer2(key, sal, home){
   render();
 }
 function spouseOffer(a, sp){
-  const p = pick(PLACES.filter(x => x.key !== state.place && x.pay >= curPlace().pay - 0.05)); if(!p) return false;
+  const p = pickPlaceW(PLACES.filter(x => x.key !== state.place && x.pay >= curPlace().pay - 0.05)); if(!p) return false;
   state.lastOfferAge = a;
   const n = state.name, j = state.job, raise = 1.15 + Math.random() * 0.15;
   const mine = !j || notCareer(j) ? null : REMOTE_TRACKS.includes(j.track) ? 'remote' : NO_TRANSFER.includes(j.track) ? 'quit' : 'transfer';
@@ -5471,6 +5687,16 @@ const PLACE_GETTING = {
   boston:{transit:true, commute:33}, washington:{transit:true, commute:35}, losangeles:{transit:false, commute:38}, miami:{transit:false, commute:33},
   chicago:{transit:true, commute:35}, austin:{transit:false, commute:27}, nashville:{transit:false, commute:28}, houston:{transit:false, commute:31},
   denver:{transit:false, commute:27}, smalltown:{transit:false, commute:15}, country:{transit:false, commute:28},
+  birmingham:{transit:false, commute:24}, anchorage:{transit:false, commute:19}, phoenix:{transit:false, commute:26}, littlerock:{transit:false, commute:21},
+  hartford:{transit:false, commute:23}, wilmington:{transit:false, commute:26}, atlanta:{transit:false, commute:32}, honolulu:{transit:false, commute:28},
+  boise:{transit:false, commute:21}, indianapolis:{transit:false, commute:25}, desmoines:{transit:false, commute:20}, wichita:{transit:false, commute:18},
+  louisville:{transit:false, commute:24}, neworleans:{transit:false, commute:25}, portlandme:{transit:false, commute:21}, baltimore:{transit:false, commute:31},
+  detroit:{transit:false, commute:27}, minneapolis:{transit:false, commute:24}, jackson:{transit:false, commute:22}, kansascity:{transit:false, commute:23},
+  billings:{transit:false, commute:17}, omaha:{transit:false, commute:20}, lasvegas:{transit:false, commute:25}, manchester:{transit:false, commute:25},
+  newark:{transit:true, commute:34}, albuquerque:{transit:false, commute:22}, charlotte:{transit:false, commute:27}, fargo:{transit:false, commute:16},
+  oklahomacity:{transit:false, commute:22}, portland:{transit:false, commute:27}, philadelphia:{transit:true, commute:32}, providence:{transit:false, commute:25},
+  charleston:{transit:false, commute:26}, siouxfalls:{transit:false, commute:17}, saltlakecity:{transit:false, commute:22}, burlington:{transit:false, commute:19},
+  virginiabeach:{transit:false, commute:24}, charlestonwv:{transit:false, commute:21}, milwaukee:{transit:false, commute:23}, cheyenne:{transit:false, commute:15},
 };
 PLACES.forEach(p => Object.assign(p, PLACE_GETTING[p.key] || {transit:false, commute:25}));
 // two things each place is known for; once a year each
@@ -5506,6 +5732,86 @@ const LOCAL_SPOTS = {
              {key:'diner', icon:'☕', label:'Become a regular at the diner', cost:0, d:{happy:2}, friend:0.35}],
   country:[{key:'fish', icon:'🎣', label:'Fish the creek at dawn', cost:0, d:{happy:4, health:1}, hobby:'fishing'},
            {key:'stars', icon:'🌌', label:'Watch the stars from the back porch', cost:0, d:{happy:3, smarts:1}, hobby:'astronomy'}],
+  birmingham:[{key:'bhm_rights', icon:'✊', label:'Tour the civil rights institute', cost:15, d:{smarts:3, happy:2}},
+              {key:'bhm_ridge', icon:'🥾', label:'Hike the ridge above the city', cost:0, d:{health:3, happy:2}, hobby:'hiking'}],
+  anchorage:[{key:'anc_aurora', icon:'🌌', label:'Watch the northern lights', cost:0, d:{happy:5}, hobby:'astronomy'},
+             {key:'anc_glacier', icon:'🧊', label:'Hike out onto a glacier', cost:90, d:{health:4, happy:4}, hobby:'hiking'}],
+  phoenix:[{key:'phx_peak', icon:'🌄', label:'Hike a desert peak at dawn', cost:0, d:{health:4, happy:2}, hobby:'hiking'},
+           {key:'phx_golf', icon:'⛳', label:'Play a round of golf in January', cost:110, d:{happy:4}, hobby:'golf'}],
+  littlerock:[{key:'lr_river', icon:'🛶', label:'Paddle the river at sunset', cost:25, d:{health:3, happy:3}},
+              {key:'lr_springs', icon:'♨️', label:'Soak in the hot springs an hour away', cost:60, d:{happy:4, health:2}}],
+  hartford:[{key:'hfd_house', icon:'📚', label:'Tour a famous author\'s old house', cost:25, d:{smarts:3, happy:2}, hobby:'writing'},
+            {key:'hfd_apple', icon:'🍎', label:'Pick apples at an orchard', cost:20, d:{happy:4}, friend:0.2}],
+  wilmington:[{key:'wil_law', icon:'⚖️', label:'Go to a corporate law mixer', cost:40, d:{happy:1}, contact:'Law'},
+              {key:'wil_beach', icon:'🏖️', label:'Drive down to the beach towns', cost:60, d:{happy:4, health:1}, hobby:'swimming'}],
+  atlanta:[{key:'atl_extra', icon:'🎬', label:'Work as an extra on a film set', cost:0, d:{happy:2}, hobby:'acting', fame:'acting', minHobby:20},
+           {key:'atl_loop', icon:'🚲', label:'Bike the old rail loop around town', cost:0, d:{health:3, happy:2}}],
+  honolulu:[{key:'hnl_surf', icon:'🏄', label:'Take a surf lesson on the south shore', cost:80, d:{happy:4, health:2}, hobby:'surfing'},
+            {key:'hnl_crater', icon:'🌋', label:'Hike up an old volcano crater', cost:5, d:{health:4, happy:3}, hobby:'hiking'}],
+  boise:[{key:'boi_float', icon:'🛟', label:'Float the river on a hot day', cost:15, d:{happy:4, health:1}, hobby:'swimming', friend:0.25},
+         {key:'boi_ski', icon:'⛷️', label:'Ski the mountain above town', cost:120, d:{health:3, happy:4}}],
+  indianapolis:[{key:'ind_race', icon:'🏁', label:'Go to the big race in May', cost:120, d:{happy:6}, friend:0.25, hobby:'cars'},
+                {key:'ind_canal', icon:'🚣', label:'Paddle a boat down the downtown canal', cost:30, d:{happy:3}}],
+  desmoines:[{key:'dsm_fair', icon:'🎡', label:'Spend a day at the state fair', cost:30, d:{happy:5}, friend:0.25},
+             {key:'dsm_town', icon:'🗳️', label:'Go to a candidate town hall', cost:0, d:{smarts:2}, contact:'Politics'}],
+  wichita:[{key:'ict_jets', icon:'🛩️', label:'Tour a jet factory', cost:20, d:{smarts:3, happy:2}, contact:'Aviation'},
+           {key:'ict_storm', icon:'⛈️', label:'Chase a storm across the plains', cost:40, d:{happy:4}}],
+  louisville:[{key:'lou_races', icon:'🏇', label:'Go to the races at the old track', cost:60, d:{happy:5}, friend:0.25},
+              {key:'lou_bats', icon:'⚾', label:'Tour the baseball bat factory', cost:20, d:{happy:3}, hobby:'sports'}],
+  neworleans:[{key:'nola_jazz', icon:'🎺', label:'Sit in at a jazz club on Frenchmen Street', cost:0, d:{happy:3}, hobby:'music', fame:'music', minHobby:20},
+              {key:'nola_boil', icon:'🦐', label:'Share a crawfish boil with strangers', cost:40, d:{happy:5}, friend:0.3, hobby:'cooking'}],
+  portlandme:[{key:'pme_light', icon:'🌊', label:'Bike out to the lighthouse', cost:0, d:{health:3, happy:3}},
+              {key:'pme_boat', icon:'🦞', label:'Ride along on a lobster boat', cost:60, d:{happy:4, smarts:1}, hobby:'fishing'}],
+  baltimore:[{key:'bal_crab', icon:'🦀', label:'Go to a crab feast', cost:50, d:{happy:5}, friend:0.3},
+             {key:'bal_med', icon:'🏥', label:'Go to a medical research talk', cost:0, d:{smarts:3}, contact:'Medicine'}],
+  detroit:[{key:'det_auto', icon:'🚗', label:'Go to the auto show', cost:25, d:{happy:4}, hobby:'cars', contact:'Trades'},
+           {key:'det_studio', icon:'🎙️', label:'Tour the old hit-record studio', cost:25, d:{happy:3, smarts:1}, hobby:'music'}],
+  minneapolis:[{key:'msp_lakes', icon:'🛶', label:'Canoe around the chain of lakes', cost:20, d:{health:3, happy:3}},
+               {key:'msp_mall', icon:'🛍️', label:'Spend a day at the giant mall', cost:80, d:{happy:3}}],
+  jackson:[{key:'jan_blues', icon:'🎸', label:'Play a blues jam at a juke joint', cost:0, d:{happy:3}, hobby:'music', fame:'music', minHobby:20},
+           {key:'jan_cat', icon:'🐟', label:'Fish for catfish on the reservoir', cost:0, d:{happy:4}, hobby:'fishing'}],
+  kansascity:[{key:'kc_bbq', icon:'🍖', label:'Judge a barbecue contest', cost:30, d:{happy:4}, hobby:'cooking', friend:0.2},
+              {key:'kc_jazz', icon:'🎷', label:'Catch a late set in the old jazz district', cost:30, d:{happy:4}, hobby:'music'}],
+  billings:[{key:'bil_rodeo', icon:'🐂', label:'Go to a rodeo', cost:30, d:{happy:4}, friend:0.25},
+            {key:'bil_fly', icon:'🎣', label:'Fly-fish a mountain river', cost:20, d:{happy:4, health:1}, hobby:'fishing'}],
+  omaha:[{key:'oma_zoo', icon:'🦒', label:'Spend a day at the famous zoo', cost:30, d:{happy:4, smarts:1}},
+         {key:'oma_cws', icon:'⚾', label:'Watch the college baseball finals', cost:60, d:{happy:5}, friend:0.25, hobby:'sports'}],
+  lasvegas:[{key:'lv_show', icon:'🎭', label:'See a big show on the Strip', cost:150, d:{happy:6}, hobby:'acting'},
+            {key:'lv_canyon', icon:'🏜️', label:'Hike the red rock canyon', cost:15, d:{health:4, happy:3}, hobby:'hiking'}],
+  manchester:[{key:'mht_leaves', icon:'🍂', label:'Drive the mountain road at peak foliage', cost:40, d:{happy:5}},
+              {key:'mht_rally', icon:'🗳️', label:'Go to a primary campaign rally', cost:0, d:{happy:2}, contact:'Politics'}],
+  newark:[{key:'ewr_shore', icon:'🏖️', label:'Spend a weekend down the shore', cost:150, d:{happy:5, health:1}, hobby:'swimming', friend:0.2},
+          {key:'ewr_feast', icon:'🍤', label:'Eat your way through the Ironbound', cost:50, d:{happy:4}, hobby:'cooking'}],
+  albuquerque:[{key:'abq_balloon', icon:'🎈', label:'Ride in a hot-air balloon at dawn', cost:250, d:{happy:7}},
+               {key:'abq_lab', icon:'🔬', label:'Go to a public lecture at a national lab', cost:0, d:{smarts:3}, contact:'Science'}],
+  charlotte:[{key:'clt_race', icon:'🏎️', label:'Go to a stock car race', cost:90, d:{happy:5}, friend:0.25, hobby:'cars'},
+             {key:'clt_bank', icon:'🏦', label:'Go to a banking happy hour uptown', cost:40, d:{happy:1}, contact:'Finance'}],
+  fargo:[{key:'far_ice', icon:'🎣', label:'Go ice fishing', cost:20, d:{happy:3}, hobby:'fishing', friend:0.2},
+         {key:'far_sand', icon:'🧱', label:'Volunteer to fill sandbags in flood season', cost:0, d:{happy:4, health:1}, friend:0.3}],
+  oklahomacity:[{key:'okc_cattle', icon:'🐄', label:'Watch a cattle auction at the stockyards', cost:0, d:{happy:3, smarts:1}},
+                {key:'okc_raft', icon:'🚣', label:'Go rafting on the river course', cost:60, d:{health:3, happy:4}}],
+  portland:[{key:'pdx_carts', icon:'🚚', label:'Eat lunch at a food cart pod', cost:20, d:{happy:3}, hobby:'cooking'},
+            {key:'pdx_falls', icon:'🌲', label:'Hike to the waterfalls in the gorge', cost:5, d:{health:4, happy:3}, hobby:'hiking'}],
+  philadelphia:[{key:'phl_steps', icon:'🏃', label:'Run up the art museum steps', cost:0, d:{health:3, happy:3}, hobby:'running'},
+                {key:'phl_market', icon:'🥨', label:'Eat lunch at the old terminal market', cost:30, d:{happy:4}, hobby:'cooking'}],
+  providence:[{key:'pvd_fire', icon:'🔥', label:'Watch the bonfires on the river', cost:0, d:{happy:4}, friend:0.2},
+              {key:'pvd_art', icon:'🎨', label:'Take a class at the design school', cost:120, d:{happy:3, smarts:2}, hobby:'art'}],
+  charleston:[{key:'chs_ghost', icon:'👻', label:'Take a ghost tour of the old city', cost:30, d:{happy:4}},
+              {key:'chs_sail', icon:'⛵', label:'Sail around the harbor', cost:70, d:{happy:4, health:1}}],
+  siouxfalls:[{key:'fsd_falls', icon:'💧', label:'Picnic by the falls', cost:10, d:{happy:4}, friend:0.2},
+              {key:'fsd_trip', icon:'🗿', label:'Road-trip to the mountain carvings', cost:150, d:{happy:5, smarts:1}, hobby:'traveling'}],
+  saltlakecity:[{key:'slc_ski', icon:'🏂', label:'Ski fresh powder in the canyons', cost:150, d:{health:3, happy:5}},
+                {key:'slc_pitch', icon:'💻', label:'Go to a startup pitch night', cost:20, d:{smarts:2}, contact:'Technology', hobby:'coding'}],
+  burlington:[{key:'btv_sugar', icon:'🍁', label:'Visit a sugarhouse in maple season', cost:15, d:{happy:4}},
+              {key:'btv_lake', icon:'🚴', label:'Bike the causeway out into the lake', cost:0, d:{health:3, happy:3}}],
+  virginiabeach:[{key:'vab_board', icon:'🏖️', label:'Spend a day on the boardwalk', cost:20, d:{happy:4, health:1}, hobby:'swimming'},
+                 {key:'vab_surf', icon:'🏄', label:'Surf the morning waves', cost:30, d:{health:3, happy:3}, hobby:'surfing'}],
+  charlestonwv:[{key:'crw_raft', icon:'🛶', label:'Raft the whitewater in the gorge', cost:120, d:{health:3, happy:6}},
+                {key:'crw_jam', icon:'🪕', label:'Play at a bluegrass jam', cost:0, d:{happy:3}, hobby:'music', friend:0.25}],
+  milwaukee:[{key:'mke_fest', icon:'🎪', label:'Go to the big lakefront music festival', cost:30, d:{happy:5}, hobby:'music', friend:0.25},
+             {key:'mke_cheese', icon:'🧀', label:'Tour a cheese maker', cost:15, d:{happy:3, smarts:1}, hobby:'cooking'}],
+  cheyenne:[{key:'cys_rodeo', icon:'🤠', label:'Go to the frontier days rodeo', cost:60, d:{happy:5}, friend:0.25},
+            {key:'cys_park', icon:'🦬', label:'Road-trip to the geyser park', cost:200, d:{happy:6, smarts:1}, hobby:'traveling'}],
 };
 const localSpots = (k) => LOCAL_SPOTS[k || state.place] || [];
 const spotCost = s => s.cost ? inflR(s.cost * (state.movedOut ? curPlace().col : 1), 5) : 0;
@@ -20240,7 +20546,7 @@ const drift = (types, keep) => {                         // moving away: weaker 
 };
 const CROSSROADS = [
   {key:'move', min:22, max:55, cond:() => !notCareer(state.job), run(a){
-    const j = state.job, raise = Math.round(Math.max(inflR(40000, 1000), j.salary * 0.35) * newsFor('move').mult / 1000) * 1000, dest = pick(PLACES.filter(p => p.key !== state.place && p.kind !== 'town' && p.kind !== 'rural')).key, city = placeTitle(dest);
+    const j = state.job, raise = Math.round(Math.max(inflR(40000, 1000), j.salary * 0.35) * newsFor('move').mult / 1000) * 1000, dest = farCity().key, city = placeFull(dest);
     const friends = state.relationships.filter(r => ['Friend', 'Coworker', 'Contact'].includes(r.type)).length;
     return presentCrossroads('The job across the country', `${state.name} is offered a ${j.title} job in ${city}, across the country, for ${fmt(j.salary + raise)} a year.`, [
       {label:'Accept and move', pros:[`+${fmt(raise)} a year`, 'a fresh start in a new city'], cons:[friends ? 'some friendships will fade' : 'leaving everyone behind', 'far from family'], run:() => {
