@@ -1,5 +1,5 @@
 // Bump this when you update the game so players get the new version.
-const CACHE = "bytelife-v121";
+const CACHE = "bytelife-v122";
 const SHELL = [
   "./",
   "./index.html",
