@@ -1,4 +1,4 @@
-# ByteLife — Ledger: A Life
+# BYTELIFE
 
 A life simulation game that runs in the browser and installs as an app.
 
